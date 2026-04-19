@@ -27,10 +27,16 @@ type env = {
   values : unit SMap.t list; (* stack of scopes, head = innermost *)
   types : type_info SMap.t; (* global type namespace *)
   fns : unit SMap.t; (* global function namespace *)
+  traits : unit SMap.t; (* global trait namespace *)
 }
 
 let empty_env =
-  { values = [ SMap.empty ]; types = SMap.empty; fns = SMap.empty }
+  {
+    values = [ SMap.empty ];
+    types = SMap.empty;
+    fns = SMap.empty;
+    traits = SMap.empty;
+  }
 
 let push_scope env = { env with values = SMap.empty :: env.values }
 
@@ -54,6 +60,11 @@ let add_fn (name : ident located) env =
 
 let lookup_type (name : string) env = SMap.find_opt name env.types
 let lookup_fn (name : string) env = SMap.mem name env.fns
+
+let add_trait (name : ident located) env =
+  { env with traits = SMap.add name.node () env.traits }
+
+let lookup_trait (name : string) env = SMap.mem name env.traits
 
 (* ---------- built-in names ---------- *)
 
@@ -97,6 +108,21 @@ let init_env () =
       env builtin_fns
   in
   env
+
+(* ---------- trait bound resolution ---------- *)
+
+let resolve_bounds env (type_params : type_param list) =
+  List.iter
+    (fun tp ->
+      match tp.tp_bound with
+      | None -> ()
+      | Some bounds ->
+          List.iter
+            (fun (bound : ident located) ->
+              if not (lookup_trait bound.node env) then
+                error_at bound.span "undefined trait '%s'" bound.node)
+            bounds)
+    type_params
 
 (* ---------- type resolution ---------- *)
 
@@ -281,6 +307,8 @@ let resolve_fn_decl env (fd : fn_decl) =
         })
       inner fd.fn_generics
   in
+  (* Resolve trait bounds on type parameters *)
+  resolve_bounds inner fd.fn_generics;
   (* Resolve parameter types and add params as values *)
   let inner =
     List.fold_left
@@ -307,7 +335,8 @@ let collect_globals env (items : item list) =
             List.map (fun (v : variant) -> v.var_name.node) e_variants
           in
           add_type e_name { ti_variants = variants; ti_fields = [] } e
-      | ItemImpl _ | ItemTraitImpl _ | ItemTrait _ -> e)
+      | ItemImpl _ | ItemTraitImpl _ -> e
+      | ItemTrait { t_name; _ } -> add_trait t_name e)
     env items
 
 let resolve_item env (item : item) =
@@ -327,6 +356,7 @@ let resolve_item env (item : item) =
             })
           env s_generics
       in
+      resolve_bounds inner s_generics;
       List.iter (fun (f : field) -> resolve_ty inner f.fd_ty) s_fields
   | ItemEnum { e_variants; e_generics; _ } ->
       let inner =
@@ -341,6 +371,7 @@ let resolve_item env (item : item) =
             })
           env e_generics
       in
+      resolve_bounds inner e_generics;
       List.iter
         (fun (v : variant) ->
           match v.var_fields with
@@ -362,6 +393,7 @@ let resolve_item env (item : item) =
             })
           env i_generics
       in
+      resolve_bounds inner i_generics;
       resolve_ty inner i_ty;
       (* Add self as a value in method scopes *)
       List.iter
@@ -373,7 +405,7 @@ let resolve_item env (item : item) =
           in
           resolve_fn_decl method_env fd)
         i_items
-  | ItemTraitImpl { ti_generics; ti_ty; ti_items; _ } ->
+  | ItemTraitImpl { ti_generics; ti_trait; ti_ty; ti_items } ->
       let inner =
         List.fold_left
           (fun e tp ->
@@ -386,6 +418,9 @@ let resolve_item env (item : item) =
             })
           env ti_generics
       in
+      resolve_bounds inner ti_generics;
+      if not (lookup_trait ti_trait.node env) then
+        error_at ti_trait.span "undefined trait '%s'" ti_trait.node;
       resolve_ty inner ti_ty;
       List.iter
         (fun fd ->
@@ -409,6 +444,7 @@ let resolve_item env (item : item) =
             })
           env t_generics
       in
+      resolve_bounds inner t_generics;
       List.iter
         (fun ti ->
           match ti with

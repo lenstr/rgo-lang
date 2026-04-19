@@ -161,6 +161,32 @@ fn main() {
 }
 |}
 
+let valid_trait_impl =
+  {|
+trait Greet {
+    fn greet(&self) -> str;
+}
+struct Person { name: str }
+impl Greet for Person {
+    fn greet(&self) -> str {
+        "hello"
+    }
+}
+fn main() {
+    let p = Person { name: "Alice" };
+}
+|}
+
+let valid_generic_trait_bound =
+  {|
+trait Display {
+    fn show(&self) -> str;
+}
+fn print_it<T: Display>(val: T) -> i32 {
+    42
+}
+|}
+
 let valid_for_loop_binding =
   {|
 fn main() {
@@ -229,6 +255,23 @@ enum Color { Red }
 enum Color { Blue }
 |}
 
+let undef_trait_in_impl =
+  {|
+struct Foo { x: i32 }
+impl Display for Foo {
+    fn show(&self) -> str {
+        "foo"
+    }
+}
+|}
+
+let undef_trait_in_generic_bound =
+  {|
+fn print_it<T: Display>(val: T) -> i32 {
+    42
+}
+|}
+
 let undef_struct_in_constructor =
   {|
 fn main() {
@@ -259,6 +302,8 @@ let positive_tests =
     ("valid impl block", `Quick, pass_resolve valid_impl_block);
     ("valid nested scopes", `Quick, pass_resolve valid_nested_scopes);
     ("valid for loop binding", `Quick, pass_resolve valid_for_loop_binding);
+    ("valid trait impl", `Quick, pass_resolve valid_trait_impl);
+    ("valid generic trait bound", `Quick, pass_resolve valid_generic_trait_bound);
   ]
 
 let negative_tests =
@@ -280,6 +325,13 @@ let negative_tests =
     ("duplicate function", `Quick, fail_resolve ~expect:"duplicate" dup_fn);
     ("duplicate struct", `Quick, fail_resolve ~expect:"duplicate" dup_struct);
     ("duplicate enum", `Quick, fail_resolve ~expect:"duplicate" dup_enum);
+    ( "undefined trait in impl",
+      `Quick,
+      fail_resolve ~expect:"undefined trait 'Display'" undef_trait_in_impl );
+    ( "undefined trait in generic bound",
+      `Quick,
+      fail_resolve ~expect:"undefined trait 'Display'"
+        undef_trait_in_generic_bound );
     ( "undefined struct in constructor",
       `Quick,
       fail_resolve ~expect:"undefined" undef_struct_in_constructor );
