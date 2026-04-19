@@ -1,0 +1,15 @@
+{
+  "featureId": "phase-1-fix-malformed-prefixed-integers",
+  "reviewedAt": "2026-04-19T20:25:00Z",
+  "commitId": "f567fdc330f380499200cc2720a0a18000b47cac",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix addresses the prior lexer bug by adding explicit malformed-prefix rejection before decimal fallback, tightening valid hex/binary patterns to require at least one real digit, and covering both malformed and preserved-valid underscore cases in the lexer suite. I did not find correctness or regression issues in the scoped change.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/phase-1-lexer/scrutiny/reviews/phase-1-lexer-with-positions-and-errors.json",
+  "summary": "Reviewed commit f567fdc330f380499200cc2720a0a18000b47cac for phase-1-fix-malformed-prefixed-integers. The implementation resolves the reported malformed prefixed integer bug and adds focused regression coverage without introducing reviewable issues."
+}
