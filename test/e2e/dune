@@ -1,0 +1,5 @@
+(test
+ (name test_e2e)
+ (modules test_e2e)
+ (libraries rgo alcotest)
+ (deps ../../examples/hello.rg ../../bin/main.exe))
