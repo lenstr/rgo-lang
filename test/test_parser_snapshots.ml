@@ -955,12 +955,13 @@ let%expect_test "question mark" =
             fn_body =
             { Ast.stmts =
               [Ast.StmtLet {is_mut = false;
-                 name =
-                 { Ast.node = "n";
-                   span =
-                   { Ast.start = { Ast.line = 2; col = 9 };
-                     stop = { Ast.line = 2; col = 10 } }
-                   };
+                 pat =
+                 (Ast.PatBind
+                    { Ast.node = "n";
+                      span =
+                      { Ast.start = { Ast.line = 2; col = 9 };
+                        stop = { Ast.line = 2; col = 10 } }
+                      });
                  ty = None;
                  init =
                  (Ast.ExprQuestion
@@ -1026,12 +1027,13 @@ let%expect_test "array literals and repeat" =
             fn_body =
             { Ast.stmts =
               [Ast.StmtLet {is_mut = false;
-                 name =
-                 { Ast.node = "xs";
-                   span =
-                   { Ast.start = { Ast.line = 2; col = 9 };
-                     stop = { Ast.line = 2; col = 11 } }
-                   };
+                 pat =
+                 (Ast.PatBind
+                    { Ast.node = "xs";
+                      span =
+                      { Ast.start = { Ast.line = 2; col = 9 };
+                        stop = { Ast.line = 2; col = 11 } }
+                      });
                  ty = None;
                  init =
                  (Ast.ExprArray
@@ -1039,12 +1041,13 @@ let%expect_test "array literals and repeat" =
                       (Ast.ExprLit (Ast.LitInt "2"));
                       (Ast.ExprLit (Ast.LitInt "3"))])};
                 Ast.StmtLet {is_mut = false;
-                  name =
-                  { Ast.node = "ys";
-                    span =
-                    { Ast.start = { Ast.line = 3; col = 9 };
-                      stop = { Ast.line = 3; col = 11 } }
-                    };
+                  pat =
+                  (Ast.PatBind
+                     { Ast.node = "ys";
+                       span =
+                       { Ast.start = { Ast.line = 3; col = 9 };
+                         stop = { Ast.line = 3; col = 11 } }
+                       });
                   ty =
                   (Some (Ast.TyGeneric (
                            { Ast.node = "Vec";
@@ -1062,12 +1065,13 @@ let%expect_test "array literals and repeat" =
                            )));
                   init = (Ast.ExprArray [])};
                 Ast.StmtLet {is_mut = false;
-                  name =
-                  { Ast.node = "zs";
-                    span =
-                    { Ast.start = { Ast.line = 4; col = 9 };
-                      stop = { Ast.line = 4; col = 11 } }
-                    };
+                  pat =
+                  (Ast.PatBind
+                     { Ast.node = "zs";
+                       span =
+                       { Ast.start = { Ast.line = 4; col = 9 };
+                         stop = { Ast.line = 4; col = 11 } }
+                       });
                   ty = None;
                   init =
                   (Ast.ExprRepeat ((Ast.ExprLit (Ast.LitInt "0")),
@@ -1202,12 +1206,13 @@ let%expect_test "struct literal" =
             fn_body =
             { Ast.stmts =
               [Ast.StmtLet {is_mut = false;
-                 name =
-                 { Ast.node = "p";
-                   span =
-                   { Ast.start = { Ast.line = 2; col = 9 };
-                     stop = { Ast.line = 2; col = 10 } }
-                   };
+                 pat =
+                 (Ast.PatBind
+                    { Ast.node = "p";
+                      span =
+                      { Ast.start = { Ast.line = 2; col = 9 };
+                        stop = { Ast.line = 2; col = 10 } }
+                      });
                  ty = None;
                  init =
                  (Ast.ExprStruct (
@@ -1262,12 +1267,13 @@ let%expect_test "method call and field access" =
             fn_body =
             { Ast.stmts =
               [Ast.StmtLet {is_mut = false;
-                 name =
-                 { Ast.node = "n";
-                   span =
-                   { Ast.start = { Ast.line = 2; col = 9 };
-                     stop = { Ast.line = 2; col = 10 } }
-                   };
+                 pat =
+                 (Ast.PatBind
+                    { Ast.node = "n";
+                      span =
+                      { Ast.start = { Ast.line = 2; col = 9 };
+                        stop = { Ast.line = 2; col = 10 } }
+                      });
                  ty = None;
                  init =
                  (Ast.ExprMethodCall (
@@ -1284,12 +1290,13 @@ let%expect_test "method call and field access" =
                       },
                     []))};
                 Ast.StmtLet {is_mut = false;
-                  name =
-                  { Ast.node = "x";
-                    span =
-                    { Ast.start = { Ast.line = 3; col = 9 };
-                      stop = { Ast.line = 3; col = 10 } }
-                    };
+                  pat =
+                  (Ast.PatBind
+                     { Ast.node = "x";
+                       span =
+                       { Ast.start = { Ast.line = 3; col = 9 };
+                         stop = { Ast.line = 3; col = 10 } }
+                       });
                   ty = None;
                   init =
                   (Ast.ExprFieldAccess (
@@ -1343,12 +1350,13 @@ let%expect_test "index expression" =
             fn_body =
             { Ast.stmts =
               [Ast.StmtLet {is_mut = false;
-                 name =
-                 { Ast.node = "x";
-                   span =
-                   { Ast.start = { Ast.line = 1; col = 17 };
-                     stop = { Ast.line = 1; col = 18 } }
-                   };
+                 pat =
+                 (Ast.PatBind
+                    { Ast.node = "x";
+                      span =
+                      { Ast.start = { Ast.line = 1; col = 17 };
+                        stop = { Ast.line = 1; col = 18 } }
+                      });
                  ty = None;
                  init =
                  (Ast.ExprIndex (
@@ -1412,6 +1420,39 @@ let%expect_test "return and break" =
 let%expect_test "error: missing closing brace" =
   parse_and_print "fn main() {\n  let x = 1;\n";
   [%expect {| Parse error at line 3, col 1: syntax error |}]
+
+let%expect_test "let wildcard" =
+  parse_and_print "fn main() { let _ = foo(); }";
+  [%expect
+    {|
+    { Ast.items =
+      [(Ast.ItemFn
+          { Ast.fn_pub = false;
+            fn_name =
+            { Ast.node = "main";
+              span =
+              { Ast.start = { Ast.line = 1; col = 4 };
+                stop = { Ast.line = 1; col = 8 } }
+              };
+            fn_generics = []; fn_self = None; fn_params = []; fn_ret = None;
+            fn_body =
+            { Ast.stmts =
+              [Ast.StmtLet {is_mut = false; pat = Ast.PatWild; ty = None;
+                 init =
+                 (Ast.ExprCall (
+                    (Ast.ExprIdent
+                       { Ast.node = "foo";
+                         span =
+                         { Ast.start = { Ast.line = 1; col = 21 };
+                           stop = { Ast.line = 1; col = 24 } }
+                         }),
+                    []))}
+                ];
+              final_expr = None }
+            })
+        ]
+      }
+    |}]
 
 let%expect_test "error: missing semicolon" =
   parse_and_print "fn main() { let x = 1 }";

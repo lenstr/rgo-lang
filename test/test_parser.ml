@@ -211,6 +211,14 @@ let test_nested_generics () =
   in
   ()
 
+let test_let_wildcard () =
+  let _prog = parse "fn main() { let _ = foo(); }" in
+  ()
+
+let test_let_wildcard_typed () =
+  let _prog = parse "fn main() { let _: i64 = 42; }" in
+  ()
+
 let test_block_expr () =
   let _prog = parse "fn main() {\n    let x = { let a = 1; a + 2 };\n}" in
   ()
@@ -330,6 +338,8 @@ let positive_tests =
       test_case "ref types" `Quick test_ref_types;
       test_case "tuple type" `Quick test_tuple_type;
       test_case "nested generics" `Quick test_nested_generics;
+      test_case "let wildcard" `Quick test_let_wildcard;
+      test_case "let wildcard typed" `Quick test_let_wildcard_typed;
       test_case "block expr" `Quick test_block_expr;
       test_case "enum impl" `Quick test_enum_impl;
       test_case "struct literal" `Quick test_struct_literal;

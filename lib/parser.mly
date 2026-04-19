@@ -234,7 +234,10 @@ block_body:
 stmt_semi:
   | LET; m = boption(MUT); name = located_ident;
     t = option(preceded(COLON, ty)); EQ; e = expr; SEMI
-    { StmtLet { is_mut = m; name; ty = t; init = e } }
+    { StmtLet { is_mut = m; pat = PatBind name; ty = t; init = e } }
+  | LET; UNDERSCORE;
+    t = option(preceded(COLON, ty)); EQ; e = expr; SEMI
+    { StmtLet { is_mut = false; pat = PatWild; ty = t; init = e } }
   | e = expr; SEMI
     { StmtExpr e }
   ;

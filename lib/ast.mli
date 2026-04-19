@@ -90,12 +90,7 @@ and block = { stmts : stmt list; final_expr : expr option } [@@deriving show]
 
 (* ---------- statements ---------- *)
 and stmt =
-  | StmtLet of {
-      is_mut : bool;
-      name : ident located;
-      ty : ty option;
-      init : expr;
-    }
+  | StmtLet of { is_mut : bool; pat : pat; ty : ty option; init : expr }
   | StmtExpr of expr
 [@@deriving show]
 

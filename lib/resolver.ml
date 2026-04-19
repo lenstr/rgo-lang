@@ -256,10 +256,10 @@ and resolve_block env (blk : block) =
 
 and resolve_stmt env (s : stmt) =
   match s with
-  | StmtLet { name; ty; init; _ } ->
+  | StmtLet { pat; ty; init; _ } ->
       Option.iter (resolve_ty env) ty;
       resolve_expr env init;
-      add_value name env
+      resolve_pat env pat
   | StmtExpr e ->
       resolve_expr env e;
       env
