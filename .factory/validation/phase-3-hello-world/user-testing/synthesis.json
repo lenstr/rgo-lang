@@ -1,0 +1,23 @@
+{
+  "milestone": "phase-3-hello-world",
+  "round": 1,
+  "status": "pass",
+  "assertionsSummary": {
+    "total": 6,
+    "passed": 6,
+    "failed": 0,
+    "blocked": 0
+  },
+  "passedAssertions": [
+    "VAL-CLI-001",
+    "VAL-CLI-002",
+    "VAL-CLI-003",
+    "VAL-CLI-004",
+    "VAL-CLI-005",
+    "VAL-CROSS-006"
+  ],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "appliedUpdates": [],
+  "previousRound": null
+}

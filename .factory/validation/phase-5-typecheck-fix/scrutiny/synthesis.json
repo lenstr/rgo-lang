@@ -1,0 +1,33 @@
+{
+  "milestone": "phase-5-typecheck-fix",
+  "round": 1,
+  "status": "pass",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "nix develop -c dune runtest",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "nix develop -c dune build",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "nix develop -c dune build @fmt",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "failedFeatures": []
+  },
+  "blockingIssues": [],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [],
+  "rejectedObservations": [],
+  "previousRound": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/phase-5-typecheck/scrutiny/synthesis.json"
+}

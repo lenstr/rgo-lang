@@ -1,0 +1,38 @@
+{
+  "surface": "CLI/compiler validation via Nix + dune test entrypoints",
+  "assertions": [
+    {
+      "id": "VAL-SEM-016",
+      "status": "passed",
+      "reason": "The resolver negative test for an undefined trait in an impl passes through the real dune test executable, confirming the compiler surface rejects the case.",
+      "evidence": [
+        "nix develop -c dune runtest",
+        "/home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-4-name-resolution-fix/semantic-name-resolution/resolver_undefined_trait_in_impl.txt",
+        "/home/lenstr/workspace/personal/hack/rgo-lang/test/test_resolver.ml:328-330",
+        "/home/lenstr/workspace/personal/hack/rgo-lang/lib/resolver.ml:423"
+      ]
+    },
+    {
+      "id": "VAL-SEM-017",
+      "status": "passed",
+      "reason": "The resolver negative test for an undefined trait in a generic bound passes through the real dune test executable, confirming the compiler surface rejects the case.",
+      "evidence": [
+        "nix develop -c dune runtest",
+        "/home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-4-name-resolution-fix/semantic-name-resolution/resolver_undefined_trait_in_generic_bound.txt",
+        "/home/lenstr/workspace/personal/hack/rgo-lang/test/test_resolver.ml:331-333",
+        "/home/lenstr/workspace/personal/hack/rgo-lang/lib/resolver.ml:123"
+      ]
+    }
+  ],
+  "toolsUsed": [
+    "Read",
+    "Grep",
+    "LS",
+    "Execute"
+  ],
+  "frictions": [
+    "dune runtest does not forward Alcotest selector flags like --test-case; targeted validation required using dune exec test/test_resolver.exe -- test <suite> <index>."
+  ],
+  "blockers": [],
+  "summary": "Both phase-4 assertions validated successfully on the compiler test surface. The full repository test entrypoint passed, and targeted resolver tests for undefined trait names in impls and generic bounds each passed when executed via dune exec."
+}

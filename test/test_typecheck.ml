@@ -467,6 +467,92 @@ impl Greet for Bob {
 fn main() {}
 |}
 
+(* --- Regression: trait impl receiver-kind mismatch --- *)
+let trait_recv_ref_vs_value =
+  {|
+trait Greet {
+    fn hello(&self) -> str;
+}
+struct Bob {}
+impl Greet for Bob {
+    fn hello(self) -> str {
+        "hello"
+    }
+}
+fn main() {}
+|}
+
+let trait_recv_ref_vs_mutref =
+  {|
+trait Greet {
+    fn hello(&self) -> str;
+}
+struct Bob {}
+impl Greet for Bob {
+    fn hello(&mut self) -> str {
+        "hello"
+    }
+}
+fn main() {}
+|}
+
+let trait_recv_mutref_vs_ref =
+  {|
+trait Counter {
+    fn inc(&mut self);
+}
+struct Cnt { val: i32 }
+impl Counter for Cnt {
+    fn inc(&self) {
+        println("noop");
+    }
+}
+fn main() {}
+|}
+
+let trait_recv_value_vs_ref =
+  {|
+trait Consume {
+    fn consume(self) -> str;
+}
+struct Item {}
+impl Consume for Item {
+    fn consume(&self) -> str {
+        "consumed"
+    }
+}
+fn main() {}
+|}
+
+(* Positive: all receiver kinds match *)
+let valid_trait_recv_value =
+  {|
+trait Consume {
+    fn consume(self) -> str;
+}
+struct Item {}
+impl Consume for Item {
+    fn consume(self) -> str {
+        "consumed"
+    }
+}
+fn main() {}
+|}
+
+let valid_trait_recv_mutref =
+  {|
+trait Counter {
+    fn inc(&mut self);
+}
+struct Cnt { val: i32 }
+impl Counter for Cnt {
+    fn inc(&mut self) {
+        self.val = self.val + 1;
+    }
+}
+fn main() {}
+|}
+
 (* Arithmetic on non-numeric *)
 let arithmetic_on_bool = {|
 fn main() {
@@ -506,6 +592,8 @@ let positive_tests =
     ("string concat", `Quick, pass valid_string_concat);
     ("empty Vec with annotation", `Quick, pass valid_vec_typed_empty);
     ("valid trait impl", `Quick, pass valid_trait_impl);
+    ("valid trait recv value", `Quick, pass valid_trait_recv_value);
+    ("valid trait recv &mut self", `Quick, pass valid_trait_recv_mutref);
   ]
 
 let negative_tests =
@@ -567,6 +655,18 @@ let negative_tests =
     ( "trait impl return type mismatch",
       `Quick,
       fail ~expect:"signature mismatch" trait_impl_return_mismatch );
+    ( "trait recv &self vs self mismatch",
+      `Quick,
+      fail ~expect:"receiver mismatch" trait_recv_ref_vs_value );
+    ( "trait recv &self vs &mut self mismatch",
+      `Quick,
+      fail ~expect:"receiver mismatch" trait_recv_ref_vs_mutref );
+    ( "trait recv &mut self vs &self mismatch",
+      `Quick,
+      fail ~expect:"receiver mismatch" trait_recv_mutref_vs_ref );
+    ( "trait recv self vs &self mismatch",
+      `Quick,
+      fail ~expect:"receiver mismatch" trait_recv_value_vs_ref );
   ]
 
 let () =

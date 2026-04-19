@@ -1,0 +1,72 @@
+{
+  "milestone": "phase-5-typecheck-fix",
+  "groupId": "cli-regressions",
+  "surface": "CLI/compiler validation",
+  "status": "pass",
+  "assertionsTested": [
+    {
+      "id": "phase5fix-question-result-error-type-mismatch",
+      "assertion": "Incompatible Result error types with `?` are rejected.",
+      "evidence": "Focused negative test 15 `? Result error type mismatch` passed."
+    },
+    {
+      "id": "phase5fix-question-option-in-result-fn",
+      "assertion": "Using `?` on Option inside a Result-returning function is rejected.",
+      "evidence": "Focused negative test 16 `? Option in Result-returning fn` passed."
+    },
+    {
+      "id": "phase5fix-question-result-in-option-fn",
+      "assertion": "Using `?` on Result inside an Option-returning function is rejected.",
+      "evidence": "Focused negative test 17 `? Result in Option-returning fn` passed."
+    },
+    {
+      "id": "phase5fix-trait-impl-missing-required-method",
+      "assertion": "Trait impls missing required methods are rejected.",
+      "evidence": "Focused negative test 18 `trait impl missing required method` passed."
+    },
+    {
+      "id": "phase5fix-trait-impl-param-count-mismatch",
+      "assertion": "Trait impls with parameter-count/signature mismatch are rejected.",
+      "evidence": "Focused negative test 19 `trait impl param count mismatch` passed."
+    },
+    {
+      "id": "phase5fix-trait-impl-return-type-mismatch",
+      "assertion": "Trait impls with return-type/signature mismatch are rejected.",
+      "evidence": "Focused negative test 20 `trait impl return type mismatch` passed."
+    },
+    {
+      "id": "phase5fix-valid-result-question-mark",
+      "assertion": "Compatible Result `?` propagation still succeeds.",
+      "evidence": "Full suite positive test 13 `Result ? propagation` passed."
+    },
+    {
+      "id": "phase5fix-valid-option-question-mark",
+      "assertion": "Compatible Option `?` propagation still succeeds.",
+      "evidence": "Full suite positive test 14 `Option ? propagation` passed."
+    },
+    {
+      "id": "phase5fix-valid-trait-impl",
+      "assertion": "A valid trait impl still succeeds.",
+      "evidence": "Full suite positive test 18 `valid trait impl` passed."
+    }
+  ],
+  "commandsRun": [
+    {
+      "command": "nix develop -c dune exec ./test/test_typecheck.exe",
+      "exitCode": 0,
+      "observation": "All 40 Alcotest cases passed, including positive cases 13-14 and 18 plus negative cases 15-20 covering the repaired behaviors."
+    },
+    {
+      "command": "nix develop -c dune exec ./test/test_typecheck.exe -- test negative 15-20",
+      "exitCode": 0,
+      "observation": "Only the six regression-focused negative cases ran; all passed and the other 34 tests were skipped."
+    }
+  ],
+  "toolsUsed": [
+    "nix develop -c dune exec ./test/test_typecheck.exe"
+  ],
+  "frictions": [
+    "The Alcotest CLI output shows case names and pass/fail state but not the underlying diagnostic strings, so expected failure substrings were confirmed from test/test_typecheck.ml."
+  ],
+  "blockers": []
+}

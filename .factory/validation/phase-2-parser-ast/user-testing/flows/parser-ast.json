@@ -1,0 +1,65 @@
+{
+  "milestone": "phase-2-parser-ast",
+  "group": "parser-ast",
+  "status": "pass",
+  "assertions": [
+    {
+      "id": "VAL-PARSE-005",
+      "status": "pass",
+      "reason": "The parser corpus test iterates over every .rg file in examples/ and dune runtest passed in the flake environment.",
+      "evidence": [
+        "test/test_parser.ml:286-307 defines test_example_corpus, reading each .rg file from examples/ and failing on any parse or lexer error.",
+        "examples/hello.rg, generics.rg, impl_methods.rg, loops.rg, result_option.rg, shapes.rg, and traits.rg are present under examples/.",
+        "`nix develop -c dune runtest --no-buffer` exited 0."
+      ]
+    },
+    {
+      "id": "VAL-PARSE-006",
+      "status": "pass",
+      "reason": "Expect snapshot tests exercise AST rendering for the milestone's major grammar forms and they passed in the flake test run.",
+      "evidence": [
+        "test/test_parser_snapshots.ml contains expect tests for fn declaration, pub struct, enum with variants, match with patterns, if-else, impl with self methods, trait with default method, trait impl for struct, generic struct and impl, generic bounds, question mark, array literals and repeat, loops, struct literal, method call and field access, index expression, and return and break.",
+        "The snapshots explicitly cover functions, structs, enums, blocks, calls, if, match, tuple variant patterns, and struct variant patterns.",
+        "`nix develop -c dune runtest --no-buffer` exited 0."
+      ]
+    },
+    {
+      "id": "VAL-PARSE-007",
+      "status": "pass",
+      "reason": "Negative parser tests assert line-bearing diagnostics for malformed input, including multiline failures, and the suite passed.",
+      "evidence": [
+        "test/test_parser.ml:243-274 checks Parse_error line values for missing brace, missing semicolon, missing fn body, and multiline syntax errors; lexer bad-token coverage also checks line metadata.",
+        "test/test_parser_snapshots.ml includes expect outputs such as `Parse error at line 3, col 1: syntax error` and `Parse error at line 1, col 23: syntax error`.",
+        "`nix develop -c dune runtest --no-buffer` exited 0."
+      ]
+    }
+  ],
+  "toolsUsed": [
+    "Read",
+    "Glob",
+    "Grep",
+    "LS",
+    "Execute"
+  ],
+  "frictions": [
+    "A narrower `dune runtest --no-buffer test/test_parser.exe test/test_parser_snapshots.exe` invocation was invalid because dune did not recognize those test names, so validation used the authoritative full test entrypoint instead."
+  ],
+  "blockers": [],
+  "commandsRun": [
+    {
+      "command": "nix develop -c dune exec rgoc -- --version",
+      "exitCode": 0,
+      "observation": "Printed `rgoc v0.0.1`, confirming the CLI surface is available in the flake environment."
+    },
+    {
+      "command": "nix develop -c dune runtest --no-buffer test/test_parser.exe test/test_parser_snapshots.exe",
+      "exitCode": 1,
+      "observation": "Dune reported `does not match any known test`; this narrower invocation was not valid for the repo."
+    },
+    {
+      "command": "nix develop -c dune runtest --no-buffer",
+      "exitCode": 0,
+      "observation": "The repository test entrypoint passed in the flake environment, covering parser unit tests and expect snapshots."
+    }
+  ]
+}

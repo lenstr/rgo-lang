@@ -30,6 +30,7 @@ type impl_info = {
 }
 
 type trait_method_sig = {
+  tms_self : Ast.self_param option;
   tms_params : ty list;
   tms_ret : ty;
   tms_has_default : bool; (* has a default body *)
@@ -895,6 +896,7 @@ let rec collect_type_info env (items : item list) : env =
                     in
                     let tms =
                       {
+                        tms_self = sig_.sig_self;
                         tms_params = params;
                         tms_ret = ret;
                         tms_has_default = false;
@@ -915,6 +917,7 @@ let rec collect_type_info env (items : item list) : env =
                     in
                     let tms =
                       {
+                        tms_self = fd.fn_self;
                         tms_params = params;
                         tms_ret = ret;
                         tms_has_default = true;
@@ -1082,6 +1085,19 @@ let check_item env (item : item) =
               match SMap.find_opt fd.fn_name.node tr_info.tr_methods with
               | None -> () (* extra methods are allowed in impls *)
               | Some tms ->
+                  (* Check receiver kind matches *)
+                  (if tms.tms_self <> fd.fn_self then
+                     let show_recv = function
+                       | None -> "no receiver"
+                       | Some SelfValue -> "self"
+                       | Some SelfRef -> "&self"
+                       | Some SelfMutRef -> "&mut self"
+                     in
+                     error_at fd.fn_name.span
+                       "receiver mismatch for method '%s' in impl %s: trait \
+                        declares %s, impl provides %s"
+                       fd.fn_name.node ti_trait.node (show_recv tms.tms_self)
+                       (show_recv fd.fn_self));
                   let impl_params =
                     List.map
                       (fun (p : param) -> resolve_ast_ty impl_env p.p_ty)

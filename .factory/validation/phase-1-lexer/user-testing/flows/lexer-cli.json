@@ -1,0 +1,32 @@
+{
+  "milestone": "phase-1-lexer",
+  "groupId": "lexer-cli",
+  "surface": "CLI/compiler validation",
+  "assertions": [
+    {
+      "id": "VAL-PARSE-001",
+      "status": "pass",
+      "evidence": "Lexer test suite covers keywords, identifiers, literals, operators, punctuation, comments, and compound syntax token fixtures."
+    },
+    {
+      "id": "VAL-PARSE-002",
+      "status": "pass",
+      "evidence": "Lexer test suite asserts token line/column/offset metadata and span end positions."
+    },
+    {
+      "id": "VAL-PARSE-003",
+      "status": "pass",
+      "evidence": "Lexer test suite passes Unicode identifier cases and nested/deeply nested block comment fixtures."
+    },
+    {
+      "id": "VAL-PARSE-004",
+      "status": "pass",
+      "evidence": "Negative lexer tests assert Lexer_error positions for unexpected characters, unterminated inputs, multiline errors, and malformed prefixed literals."
+    }
+  ],
+  "toolsUsed": ["nix develop -c dune exec ./test/test_lexer.exe", "nix develop -c dune runtest"],
+  "frictions": [
+    "Feature verificationSteps listed dune runtest --no-buffer test/test_lexer.exe, but the runnable command in this repo is dune exec ./test/test_lexer.exe."
+  ],
+  "blockers": []
+}

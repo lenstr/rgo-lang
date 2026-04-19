@@ -1,0 +1,71 @@
+{
+  "milestone": "phase-3-hello-world",
+  "groupId": "cli-generated-go",
+  "surface": "CLI/compiler validation",
+  "status": "pass",
+  "assertions": [
+    {
+      "id": "VAL-CLI-001",
+      "status": "pass",
+      "reason": "The end-to-end CLI test entrypoint passed in the flake environment.",
+      "evidence": [
+        "`nix develop -c dune runtest --no-buffer test/e2e` exited 0."
+      ]
+    },
+    {
+      "id": "VAL-CLI-002",
+      "status": "pass",
+      "reason": "A manual CLI compile wrote the requested Go output file successfully.",
+      "evidence": [
+        "Manual `rgoc` invocation against the hello-world source succeeded.",
+        "The requested output file was created in a temporary location."
+      ]
+    },
+    {
+      "id": "VAL-CLI-003",
+      "status": "pass",
+      "reason": "The generated Go was readable, formatted, and executable.",
+      "evidence": [
+        "Generated Go content was printed for inspection.",
+        "`gofmt -d` produced no diff.",
+        "`go run` on the generated hello.go printed `Hello, world!`."
+      ]
+    },
+    {
+      "id": "VAL-CLI-004",
+      "status": "pass",
+      "reason": "Invalid CLI invocation without required arguments failed with usage guidance.",
+      "evidence": [
+        "Invocation without args returned exit code 1.",
+        "Usage text was printed."
+      ]
+    },
+    {
+      "id": "VAL-CLI-005",
+      "status": "pass",
+      "reason": "Invalid source input failed cleanly and did not emit an output file.",
+      "evidence": [
+        "Compiling invalid source returned exit code 1.",
+        "A syntax error was reported.",
+        "No output file was created."
+      ]
+    },
+    {
+      "id": "VAL-CROSS-006",
+      "status": "pass",
+      "reason": "The generated hello-world Go source compiled with the Go toolchain.",
+      "evidence": [
+        "`go build` on the generated hello.go succeeded."
+      ]
+    }
+  ],
+  "toolsUsed": [
+    "Read",
+    "LS",
+    "Glob",
+    "Execute"
+  ],
+  "evidenceSummary": "Previously observed validation evidence shows the phase-3 hello-world pipeline passes automated e2e coverage, successfully compiles to a generated Go file, emits formatted Go accepted by gofmt, runs to print Hello, world!, rejects invalid invocations and malformed input with exit code 1, and produces Go that also passes go build.",
+  "frictions": [],
+  "blockers": []
+}

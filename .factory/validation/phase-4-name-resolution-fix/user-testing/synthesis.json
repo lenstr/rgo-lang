@@ -1,0 +1,19 @@
+{
+  "milestone": "phase-4-name-resolution-fix",
+  "round": 1,
+  "status": "pass",
+  "assertionsSummary": {
+    "total": 2,
+    "passed": 2,
+    "failed": 0,
+    "blocked": 0
+  },
+  "passedAssertions": [
+    "VAL-SEM-016",
+    "VAL-SEM-017"
+  ],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "appliedUpdates": [],
+  "previousRound": null
+}

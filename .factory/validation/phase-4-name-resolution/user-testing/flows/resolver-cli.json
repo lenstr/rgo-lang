@@ -1,0 +1,37 @@
+{
+  "milestone": "phase-4-name-resolution",
+  "groupId": "resolver-cli",
+  "surface": "CLI/compiler validation",
+  "tool": "nix develop -c dune exec ./test/test_resolver.exe",
+  "assertions": [
+    {
+      "id": "VAL-SEM-001",
+      "status": "pass",
+      "evidence": "Positive resolver fixtures passed, including declared functions, local bindings, enum variants, fields, impl blocks, and trait-bound forms."
+    },
+    {
+      "id": "VAL-SEM-002",
+      "status": "pass",
+      "evidence": "Negative resolver fixtures rejected undefined variables and functions with diagnostics containing undefined-name information."
+    },
+    {
+      "id": "VAL-SEM-003",
+      "status": "pass",
+      "evidence": "Negative resolver fixtures rejected unknown type names in return positions and let annotations with undefined-type diagnostics."
+    },
+    {
+      "id": "VAL-SEM-004",
+      "status": "pass",
+      "evidence": "Negative resolver fixtures rejected duplicate function, struct, and enum definitions with duplicate diagnostics."
+    }
+  ],
+  "status": "pass",
+  "frictions": [
+    "Initial attempt used an incorrect dune runtest target name; direct dune exec of test/test_resolver.exe is the working resolver-focused command."
+  ],
+  "blockers": [],
+  "toolsUsed": [
+    "nix develop -c dune exec ./test/test_resolver.exe",
+    "nix develop -c dune runtest"
+  ]
+}
