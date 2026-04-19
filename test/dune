@@ -37,3 +37,8 @@
  (name test_exhaust)
  (modules test_exhaust)
  (libraries rgo alcotest))
+
+(test
+ (name test_codegen)
+ (modules test_codegen)
+ (libraries rgo alcotest))
