@@ -22,3 +22,8 @@
  (libraries rgo)
  (preprocess
   (pps ppx_expect)))
+
+(test
+ (name test_resolver)
+ (modules test_resolver)
+ (libraries rgo alcotest))

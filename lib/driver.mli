@@ -1,6 +1,7 @@
 type compile_error =
   | Lex_error of { msg : string; line : int; col : int }
   | Parse_error of { msg : string; line : int; col : int }
+  | Resolve_error of { msg : string; line : int; col : int }
   | Codegen_error of string
 
 val compile_string :

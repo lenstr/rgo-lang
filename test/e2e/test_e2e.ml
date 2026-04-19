@@ -118,6 +118,7 @@ let test_invalid_source_fails () =
         match e with
         | Rgo.Driver.Lex_error { msg; _ } -> msg
         | Rgo.Driver.Parse_error { msg; _ } -> msg
+        | Rgo.Driver.Resolve_error { msg; _ } -> msg
         | Rgo.Driver.Codegen_error msg -> msg
       in
       Alcotest.(check bool)
