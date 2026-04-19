@@ -1,0 +1,21 @@
+{
+  "featureId": "phase-1-fix-malformed-prefixed-integers",
+  "reviewedAt": "2026-04-19T17:32:01Z",
+  "commitId": "f567fdc330f380499200cc2720a0a18000b47cac",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix fully addresses the prior blocking lexer bug by rejecting underscore-only prefixed literals before decimal fallback, requiring at least one real hex/binary digit in valid prefixed literals, and adding focused regression coverage for both malformed and preserved-valid cases.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The compiler-worker transcript says tests should fail before implementation, but this fix was implemented and test-registered before the first failing regression run. The skill guidance may be too rigid for tightly coupled lexer-pattern fixes where adding the rule and regression cases together is the practical workflow.",
+      "evidence": "Worker session 97e3be31-41e7-4523-99fb-644df759d54f transcript shows `lib/lexer.ml` and `test/test_lexer.ml` edits were applied before the first `nix develop -c dune runtest`, and the handoff.skillFeedback explicitly notes the fix and tests were written together despite `.factory/skills/compiler-worker/SKILL.md` step 3 requiring a fail-first cycle."
+    }
+  ],
+  "addressesFailureFrom": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/phase-1-lexer/scrutiny/reviews/phase-1-lexer-with-positions-and-errors.json",
+  "summary": "Pass: the fix resolves the previously reported malformed prefixed integer bug in `lib/lexer.ml`, preserves valid hex/binary literals with underscores, and adds regression tests for `0x_`, `0X_`, `0b_`, and `0B_` with positional lexer errors."
+}
