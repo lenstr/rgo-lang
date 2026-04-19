@@ -1,0 +1,16 @@
+{
+  "milestone": "misc-followups-1",
+  "round": 2,
+  "status": "pass",
+  "assertionsSummary": {
+    "total": 0,
+    "passed": 0,
+    "failed": 0,
+    "blocked": 0
+  },
+  "passedAssertions": [],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "appliedUpdates": [],
+  "previousRound": ".factory/validation/misc-followups-1/user-testing/synthesis.json#round-1"
+}
