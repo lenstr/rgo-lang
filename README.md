@@ -1,30 +1,30 @@
 # rgo
 
-`rgo` — экспериментальный язык с синтаксисом в духе Rust и таргетом в Go.
+`rgo` is an experimental language with Rust-like syntax that targets Go.
 
-Идея проекта: писать код в более выразительном, современном синтаксисе, а на выходе получать читаемый Go-код, который потом компилируется обычным `go build`.
+The idea is simple: write code in a more expressive, modern syntax and compile it into readable Go code that can then be built with ordinary `go build`.
 
-- **Расширение файлов:** `.rg`
-- **Имя CLI:** `rgoc`
-- **Реализация компилятора:** OCaml 5.x
-- **Таргет:** Go 1.26+
+- **File extension:** `.rg`
+- **CLI name:** `rgoc`
+- **Compiler implementation:** OCaml 5.x
+- **Target:** Go 1.26+
 
-## Статус проекта
+## Project status
 
-Сейчас репозиторий находится на стадии раннего прототипа.
+This repository is currently in the early prototype stage.
 
-На текущий момент уже есть:
+What already exists:
 
-- каркас проекта на `dune`
-- CLI с `--version`
-- Unicode-aware lexer на `sedlex`
-- тесты на ключевые токены и позиции
+- a `dune`-based project skeleton
+- a CLI with `--version`
+- a Unicode-aware lexer built with `sedlex`
+- tests for core tokens and position tracking
 
-Ниже в README приведён **целевой синтаксис языка**, то есть примеры того, как должен выглядеть `rgo` по мере развития компилятора.
+The README below shows the **intended language syntax**, meaning examples of what `rgo` is expected to look like as the compiler grows.
 
-## Быстрый старт
+## Quick start
 
-Все команды в репозитории нужно запускать через Nix flake:
+All project commands should be run through the Nix flake:
 
 ```bash
 nix develop -c dune build
@@ -32,34 +32,34 @@ nix develop -c dune runtest
 nix develop -c dune exec rgoc -- --version
 ```
 
-Ожидаемый вывод:
+Expected output:
 
 ```text
 rgoc v0.0.1
 ```
 
-## Зачем нужен rgo
+## Why rgo
 
-`rgo` пытается совместить:
+`rgo` aims to combine:
 
-- Rust-подобный синтаксис
-- алгебраические типы (`enum`)
+- Rust-like syntax
+- algebraic data types (`enum`)
 - `Option<T>` / `Result<T, E>`
 - `match`
-- `impl`, `trait`, generics
-- оператор `?`
+- `impl`, `trait`, and generics
+- the `?` operator
 
-с практичным рантаймом Go:
+with the practical Go runtime:
 
 - goroutines
 - GC
-- зрелая стандартная библиотека
-- быстрый `go build`
-- простая поставка бинарников
+- a mature standard library
+- fast `go build`
+- simple binary distribution
 
-## Примеры синтаксиса
+## Syntax examples
 
-> Ниже — примеры целевого языка. Они описывают intended syntax проекта, даже если конкретная конструкция ещё не реализована в компиляторе.
+> The examples below describe the target language design, even if some constructs are not implemented in the compiler yet.
 
 ### Hello world
 
@@ -69,7 +69,7 @@ fn main() {
 }
 ```
 
-### Функции и `let`
+### Functions and `let`
 
 ```rust
 fn add(a: i64, b: i64) -> i64 {
@@ -82,7 +82,7 @@ fn main() {
 }
 ```
 
-### Изменяемые переменные
+### Mutable variables
 
 ```rust
 fn main() {
@@ -92,7 +92,7 @@ fn main() {
 }
 ```
 
-### Условные выражения
+### Conditional expressions
 
 ```rust
 fn abs(x: i64) -> i64 {
@@ -119,7 +119,7 @@ fn distance_squared(a: Point, b: Point) -> f64 {
 }
 ```
 
-### Enum и `match`
+### Enum and `match`
 
 ```rust
 enum Shape {
@@ -149,11 +149,11 @@ fn first(v: Vec<i64>) -> Option<i64> {
 }
 ```
 
-### `Result<T, E>` и оператор `?`
+### `Result<T, E>` and the `?` operator
 
 ```rust
 fn parse_int(s: str) -> Result<i64, str> {
-    // позже здесь будет биндинг к strconv.ParseInt
+    // later this will bind to strconv.ParseInt
 }
 
 fn double(s: str) -> Result<i64, str> {
@@ -162,7 +162,7 @@ fn double(s: str) -> Result<i64, str> {
 }
 ```
 
-### Методы через `impl`
+### Methods with `impl`
 
 ```rust
 struct Counter {
@@ -184,7 +184,7 @@ impl Counter {
 }
 ```
 
-### Ассоциированные функции
+### Associated functions
 
 ```rust
 struct Point {
@@ -204,7 +204,7 @@ fn main() {
 }
 ```
 
-### Trait и generic bounds
+### Trait and generic bounds
 
 ```rust
 trait Display {
@@ -226,7 +226,7 @@ fn print_one<T: Display>(value: T) {
 }
 ```
 
-### Коллекции
+### Collections
 
 ```rust
 fn main() {
@@ -240,7 +240,7 @@ fn main() {
 }
 ```
 
-### Циклы
+### Loops
 
 ```rust
 fn sum(xs: Vec<i64>) -> i64 {
@@ -254,7 +254,7 @@ fn sum(xs: Vec<i64>) -> i64 {
 }
 ```
 
-### `while` и `loop`
+### `while` and `loop`
 
 ```rust
 fn countdown(mut n: i64) {
@@ -269,9 +269,9 @@ fn countdown(mut n: i64) {
 }
 ```
 
-## Пример будущего пайплайна
+## Example of the planned pipeline
 
-В целевом виде компилятор должен уметь делать примерно так:
+In the target form, the compiler should support a workflow roughly like this:
 
 ```bash
 rgoc examples/hello.rg -o hello.go
@@ -279,38 +279,38 @@ gofmt -w hello.go
 go run hello.go
 ```
 
-## Что уже проверяется тестами
+## What tests cover today
 
-Сейчас тесты покрывают в первую очередь lexer:
+Right now, tests mainly cover the lexer:
 
-- ключевые слова (`fn`, `let`, `match`, `impl`, `trait` и т.д.)
-- встроенные типы (`i64`, `String`, `Option`, `Result`, `Vec`, `HashMap`)
-- строки, числа, операторы
+- keywords (`fn`, `let`, `match`, `impl`, `trait`, etc.)
+- built-in types (`i64`, `String`, `Option`, `Result`, `Vec`, `HashMap`)
+- strings, numbers, and operators
 - nested block comments
 - Unicode identifiers
-- позиции токенов
+- token positions
 
-Запуск:
+Run them with:
 
 ```bash
 nix develop -c dune runtest
 ```
 
-## Ближайшие шаги
+## Next steps
 
-Следующие крупные этапы проекта:
+The next major milestones are:
 
 1. AST
-2. parser на Menhir
+2. parser with Menhir
 3. name resolution
 4. type checking
-5. exhaustiveness check для `match`
-6. codegen в Go
+5. exhaustiveness checking for `match`
+6. Go code generation
 
-## Документация
+## Documentation
 
-Подробный продуктовый и технический план лежит здесь:
+The detailed product and technical plan lives here:
 
 - `docs/PRD_rust_syntax_go_target_5.md`
 
-Если хочешь быстро понять направление проекта — начни с этого README, а затем переходи к PRD.
+If you want a quick overview of the project direction, start with this README and then move on to the PRD.
