@@ -88,13 +88,28 @@ let match_position (scrutinee : expr) (arms : match_arm list) : int * int =
           (id.span.start.line, id.span.start.col)
       | _ -> (0, 0))
 
+(* Infer the type name of an expression from the init expression.
+   Follows block expressions, if-expressions, and match expressions
+   to find the underlying enum type produced by complex forms. *)
+let rec expr_type_name tenv fn_ret_types (e : expr) : string option =
+  match e with
+  | ExprIdent id -> SMap.find_opt id.node tenv
+  | ExprPath (type_name, _) -> Some type_name.node
+  | ExprCall (ExprIdent fn_name, _) -> List.assoc_opt fn_name.node fn_ret_types
+  | ExprBlock { final_expr = Some fe; _ } -> expr_type_name tenv fn_ret_types fe
+  | ExprIf (_, { final_expr = Some te; _ }, _) ->
+      expr_type_name tenv fn_ret_types te
+  | ExprMatch (_, { arm_expr; _ } :: _) ->
+      expr_type_name tenv fn_ret_types arm_expr
+  | _ -> None
+
 (* Resolve the scrutinee expression to an enum name using the type env *)
 let scrutinee_enum_name tenv fn_ret_types (scrutinee : expr) : string option =
   match scrutinee with
   | ExprIdent id -> SMap.find_opt id.node tenv
   | ExprCall (ExprIdent fn_name, _) -> List.assoc_opt fn_name.node fn_ret_types
   | ExprPath (type_name, _) -> Some type_name.node
-  | _ -> None
+  | _ -> expr_type_name tenv fn_ret_types scrutinee
 
 (* Check a single match expression for exhaustiveness.
    Uses the scrutinee's type (from tenv) to determine which enum is matched,
@@ -137,14 +152,6 @@ let check_match_expr enums tenv fn_ret_types scrutinee (arms : match_arm list) :
               in
               error_at line col "non-exhaustive match: missing pattern(s) %s"
                 missing_list)
-
-(* Infer the type name of an expression from the init expression *)
-let expr_type_name tenv fn_ret_types (e : expr) : string option =
-  match e with
-  | ExprIdent id -> SMap.find_opt id.node tenv
-  | ExprPath (type_name, _) -> Some type_name.node
-  | ExprCall (ExprIdent fn_name, _) -> List.assoc_opt fn_name.node fn_ret_types
-  | _ -> None
 
 (* Walk all expressions in the AST looking for match expressions *)
 let rec walk_expr enums tenv fn_ret_types (e : expr) : unit =

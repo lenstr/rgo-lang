@@ -340,6 +340,73 @@ fn main() {
 }
 |}
 
+(* ======== Regression: block-produced enum scrutinees ======== *)
+
+(* Non-exhaustive match on a let-bound enum produced by a block expression.
+   The arm patterns alone reveal the enum name, but the scrutinee type must
+   be resolved through the block's final expression to detect missing variants. *)
+let block_scrutinee_non_exhaustive =
+  {|
+enum Traffic {
+    Red,
+    Yellow,
+    Green,
+}
+fn test() -> i32 {
+    let light = {
+        let _x = 1;
+        Traffic::Red
+    };
+    match light {
+        Traffic::Red => 1,
+    }
+}
+fn main() {
+    let r = test();
+}
+|}
+
+(* Positive: exhaustive match on a block-produced enum scrutinee *)
+let block_scrutinee_exhaustive =
+  {|
+enum Traffic {
+    Red,
+    Yellow,
+    Green,
+}
+fn test() -> i32 {
+    let light = {
+        let _x = 1;
+        Traffic::Red
+    };
+    match light {
+        Traffic::Red => 1,
+        Traffic::Yellow => 2,
+        Traffic::Green => 3,
+    }
+}
+fn main() {
+    let r = test();
+}
+|}
+
+(* Non-exhaustive match where the scrutinee is directly a block expression *)
+let direct_block_scrutinee_non_exhaustive =
+  {|
+enum AB {
+    A,
+    B,
+}
+fn test() -> i32 {
+    match { AB::A } {
+        AB::A => 1,
+    }
+}
+fn main() {
+    let r = test();
+}
+|}
+
 (* ======== Test registration ======== *)
 
 let positive_tests =
@@ -377,6 +444,9 @@ let regression_positive =
     ( "exhaustive param match (scrutinee-type)",
       `Quick,
       pass exhaustive_param_match );
+    ( "exhaustive block-produced scrutinee",
+      `Quick,
+      pass block_scrutinee_exhaustive );
   ]
 
 let regression_negative =
@@ -390,6 +460,12 @@ let regression_negative =
     ( "fn param enum missing variants",
       `Quick,
       fail ~expect:"Light::Green" fn_return_enum_missing );
+    ( "block-produced scrutinee non-exhaustive",
+      `Quick,
+      fail ~expect:"Traffic::Yellow" block_scrutinee_non_exhaustive );
+    ( "direct block scrutinee non-exhaustive",
+      `Quick,
+      fail ~expect:"AB::B" direct_block_scrutinee_non_exhaustive );
   ]
 
 let () =
