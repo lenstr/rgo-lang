@@ -246,6 +246,85 @@ fn main() {
 }
 |}
 
+(* Regression: chained method call on Self-returning constructor result *)
+let valid_chained_constructor_method =
+  {|
+struct Counter {
+    count: i32,
+}
+impl Counter {
+    fn new() -> Self {
+        Counter { count: 0 }
+    }
+    fn get(&self) -> i32 {
+        self.count
+    }
+    fn inc(&mut self) {
+        self.count = self.count + 1;
+    }
+}
+fn main() {
+    let v = Counter::new().get();
+}
+|}
+
+let valid_chained_constructor_field =
+  {|
+struct Point {
+    pub x: f64,
+    pub y: f64,
+}
+impl Point {
+    fn origin() -> Self {
+        Point { x: 0.0, y: 0.0 }
+    }
+}
+fn main() {
+    let x = Point::origin().x;
+}
+|}
+
+let valid_chained_constructor_multi =
+  {|
+struct Builder {
+    val: i32,
+}
+impl Builder {
+    fn new() -> Self {
+        Builder { val: 0 }
+    }
+    fn build(&self) -> i32 {
+        self.val
+    }
+}
+fn use_builder() -> i32 {
+    Builder::new().build()
+}
+fn main() {
+    let r = use_builder();
+}
+|}
+
+(* Enum constructor returning Self with chained method call *)
+let valid_enum_self_constructor_method =
+  {|
+enum Status {
+    Active,
+    Inactive,
+}
+impl Status {
+    fn default() -> Self {
+        Status::Active
+    }
+    fn is_active(&self) -> bool {
+        true
+    }
+}
+fn main() {
+    let a = Status::default().is_active();
+}
+|}
+
 let valid_string_concat =
   {|
 fn main() {
@@ -553,6 +632,18 @@ impl Counter for Cnt {
 fn main() {}
 |}
 
+(* Undefined variant on enum path *)
+let undef_variant_enum_path =
+  {|
+enum Color {
+    Red,
+    Green,
+}
+fn main() {
+    let c = Color::Blue;
+}
+|}
+
 (* Arithmetic on non-numeric *)
 let arithmetic_on_bool = {|
 fn main() {
@@ -589,6 +680,12 @@ let positive_tests =
     ("Result ? propagation", `Quick, pass valid_result_question_mark);
     ("Option ? propagation", `Quick, pass valid_option_question_mark);
     ("Self in impl", `Quick, pass valid_self_in_impl);
+    ("chained constructor method", `Quick, pass valid_chained_constructor_method);
+    ("chained constructor field", `Quick, pass valid_chained_constructor_field);
+    ("chained constructor multi", `Quick, pass valid_chained_constructor_multi);
+    ( "enum Self constructor method",
+      `Quick,
+      pass valid_enum_self_constructor_method );
     ("string concat", `Quick, pass valid_string_concat);
     ("empty Vec with annotation", `Quick, pass valid_vec_typed_empty);
     ("valid trait impl", `Quick, pass valid_trait_impl);
@@ -633,6 +730,9 @@ let negative_tests =
     ( "empty array no type context",
       `Quick,
       fail ~expect:"cannot infer element type" empty_array_no_context );
+    ( "undefined variant in enum path",
+      `Quick,
+      fail ~expect:"undefined variant" undef_variant_enum_path );
     ("arithmetic on bool", `Quick, fail ~expect:"non-numeric" arithmetic_on_bool);
     ( "index with non-integer",
       `Quick,

@@ -229,17 +229,6 @@ fn main() {
 }
 |}
 
-let undef_variant =
-  {|
-enum Color {
-    Red,
-    Green,
-}
-fn main() {
-    let c = Color::Blue;
-}
-|}
-
 let dup_fn = {|
 fn foo() {}
 fn foo() {}
@@ -319,9 +308,8 @@ let negative_tests =
     ( "undefined enum in path",
       `Quick,
       fail_resolve ~expect:"undefined" undef_enum_path );
-    ( "undefined variant in enum",
-      `Quick,
-      fail_resolve ~expect:"undefined" undef_variant );
+    (* undefined variant now detected in typechecking, not resolver,
+       because enum members can also be associated functions *)
     ("duplicate function", `Quick, fail_resolve ~expect:"duplicate" dup_fn);
     ("duplicate struct", `Quick, fail_resolve ~expect:"duplicate" dup_struct);
     ("duplicate enum", `Quick, fail_resolve ~expect:"duplicate" dup_enum);

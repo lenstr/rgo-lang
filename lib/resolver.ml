@@ -169,23 +169,14 @@ and resolve_enum_variant_ref env enum_name variant_name =
         error_at variant_name.span "undefined variant '%s' in '%s'"
           variant_name.node enum_name.node
 
-and resolve_path_ref env type_name member_name =
+and resolve_path_ref env type_name _member_name =
   (* Type::Member can be either an enum variant or an associated function.
      At the resolution phase we only check that the type exists.
-     For enums, we also verify the variant exists.
-     For structs (and other types), member_name is an associated function
-     that will be validated in the type-checking phase. *)
+     Member validation (variant or associated function) is deferred to
+     the type-checking phase where impl blocks are available. *)
   match lookup_type type_name.node env with
   | None -> error_at type_name.span "undefined type '%s'" type_name.node
-  | Some ti ->
-      (* If it's an enum with variants, check that the variant exists *)
-      if ti.ti_variants <> [] then
-        begin if not (List.mem member_name.node ti.ti_variants) then
-          error_at member_name.span "undefined variant '%s' in '%s'"
-            member_name.node type_name.node
-        end
-(* For structs or types without variants, member_name is an
-         associated function - defer to typechecking *)
+  | Some _ti -> ()
 
 (* ---------- expression resolution ---------- *)
 

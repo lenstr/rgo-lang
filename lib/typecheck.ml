@@ -390,6 +390,11 @@ and check_assoc_fn_call env type_name fn_name arg_types =
       | None -> check_impl_assoc_fn env type_name fn_name arg_types)
   | None -> check_impl_assoc_fn env type_name fn_name arg_types
 
+and concrete_type_for_name env name =
+  if SMap.mem name env.structs then TStruct (name, [])
+  else if SMap.mem name env.enums then TEnum (name, [])
+  else TVoid (* fallback; should not happen for valid programs *)
+
 and check_impl_assoc_fn env type_name fn_name arg_types =
   match SMap.find_opt type_name.node env.impls with
   | Some ii -> (
@@ -397,8 +402,11 @@ and check_impl_assoc_fn env type_name fn_name arg_types =
       | Some fi ->
           check_fn_args ~span:fn_name.span ~name:fn_name.node fi.fi_params
             arg_types;
-          let ret = maybe_subst_self env fi.fi_ret in
-          ret
+          (* Substitute Self with the concrete type from the call site.
+             We derive the concrete type from type_name so this works
+             even outside impl blocks (e.g. Type::new().method()). *)
+          let concrete_self = concrete_type_for_name env type_name.node in
+          subst_self concrete_self fi.fi_ret
       | None ->
           error_at fn_name.span "no associated function '%s' on type '%s'"
             fn_name.node type_name.node)
@@ -451,8 +459,14 @@ and check_method_call env receiver method_name args =
       | _ -> error_at method_name.span "remove expects exactly 1 argument")
   | TString, "len" -> TInt 64
   | _ -> (
+      (* Resolve TSelf to concrete type before looking up impls *)
+      let resolved_recv =
+        match recv_ty with
+        | TSelf -> ( match env.self_ty with Some st -> st | None -> recv_ty)
+        | other -> other
+      in
       (* Look up in impls *)
-      let type_name = ty_name recv_ty in
+      let type_name = ty_name resolved_recv in
       match SMap.find_opt type_name env.impls with
       | Some ii -> (
           match SMap.find_opt method_name.node ii.ii_methods with
@@ -463,10 +477,10 @@ and check_method_call env receiver method_name args =
               maybe_subst_self env mi.mi_ret
           | None ->
               error_at method_name.span "no method '%s' on type %s"
-                method_name.node (show_ty recv_ty))
+                method_name.node (show_ty resolved_recv))
       | None ->
           error_at method_name.span "no method '%s' on type %s" method_name.node
-            (show_ty recv_ty))
+            (show_ty resolved_recv))
 
 and ty_name t =
   match t with TStruct (n, _) -> n | TEnum (n, _) -> n | _ -> show_ty t
