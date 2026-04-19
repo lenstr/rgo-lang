@@ -1,0 +1,15 @@
+{
+  "featureId": "misc-fix-associated-function-self-substitution",
+  "reviewedAt": "2026-04-19T22:06:56.881963+00:00",
+  "commitId": "cd745be62484ddcd1e94904a1ff5d080c764c24d",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix addresses the prior failure by substituting Self to the concrete type when associated functions are referenced as values in check_path, and by allowing enum type paths to fall through to associated-function lookup when the member is not a variant. Regression tests now cover both struct and enum stored associated-function values followed by method calls on the returned instance.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/misc-followups-2/scrutiny/reviews/phase-5-fix-self-returning-constructor-method-resolution.json",
+  "summary": "Reviewed the fix feature handoff, transcript skeleton, compiler-worker skill, and both commit diffs. The new check_path logic now materializes concrete Self types for stored associated-function values and handles enum associated-function paths, so the previously failing pattern let make = Status::default; make().is_active() is covered and the original scrutiny failure is resolved."
+}
