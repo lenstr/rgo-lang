@@ -43,6 +43,9 @@ let compile input_path output_path =
   | Error (Resolve_error { msg; line; col }) ->
       if Sys.file_exists output_path then Sys.remove output_path;
       error "%s:%d:%d: %s" input_path line col msg
+  | Error (Typecheck_error { msg; line; col }) ->
+      if Sys.file_exists output_path then Sys.remove output_path;
+      error "%s:%d:%d: %s" input_path line col msg
   | Error (Codegen_error msg) ->
       if Sys.file_exists output_path then Sys.remove output_path;
       error "%s" msg

@@ -89,7 +89,10 @@ let builtin_types =
     "HashMap";
   ]
 
-let builtin_fns = [ "println"; "print"; "len"; "to_string"; "panic" ]
+let builtin_fns =
+  [
+    "println"; "print"; "len"; "to_string"; "panic"; "Some"; "Ok"; "Err"; "None";
+  ]
 
 let init_env () =
   let env = empty_env in

@@ -27,3 +27,8 @@
  (name test_resolver)
  (modules test_resolver)
  (libraries rgo alcotest))
+
+(test
+ (name test_typecheck)
+ (modules test_typecheck)
+ (libraries rgo alcotest))

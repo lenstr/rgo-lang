@@ -2,6 +2,7 @@ type compile_error =
   | Lex_error of { msg : string; line : int; col : int }
   | Parse_error of { msg : string; line : int; col : int }
   | Resolve_error of { msg : string; line : int; col : int }
+  | Typecheck_error of { msg : string; line : int; col : int }
   | Codegen_error of string
 
 let compile_string ?(filename = "<input>") (source : string) :
@@ -9,6 +10,7 @@ let compile_string ?(filename = "<input>") (source : string) :
   try
     let ast = Parse_driver.parse_string ~filename source in
     let ast = Resolver.resolve_exn ast in
+    let ast = Typecheck.typecheck_exn ast in
     let go_src = Codegen.generate ast in
     Ok go_src
   with
@@ -18,4 +20,6 @@ let compile_string ?(filename = "<input>") (source : string) :
       Error (Parse_error { msg; line; col })
   | Resolver.Resolve_error { msg; line; col } ->
       Error (Resolve_error { msg; line; col })
+  | Typecheck.Typecheck_error { msg; line; col } ->
+      Error (Typecheck_error { msg; line; col })
   | Failure msg -> Error (Codegen_error msg)
