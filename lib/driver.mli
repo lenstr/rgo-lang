@@ -3,6 +3,7 @@ type compile_error =
   | Parse_error of { msg : string; line : int; col : int }
   | Resolve_error of { msg : string; line : int; col : int }
   | Typecheck_error of { msg : string; line : int; col : int }
+  | Exhaust_error of { msg : string; line : int; col : int }
   | Codegen_error of string
 
 val compile_string :

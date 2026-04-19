@@ -120,6 +120,7 @@ let test_invalid_source_fails () =
         | Rgo.Driver.Parse_error { msg; _ } -> msg
         | Rgo.Driver.Resolve_error { msg; _ } -> msg
         | Rgo.Driver.Typecheck_error { msg; _ } -> msg
+        | Rgo.Driver.Exhaust_error { msg; _ } -> msg
         | Rgo.Driver.Codegen_error msg -> msg
       in
       Alcotest.(check bool)
