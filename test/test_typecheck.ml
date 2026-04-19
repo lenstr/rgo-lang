@@ -373,6 +373,100 @@ fn main() {
 }
 |}
 
+(* --- Regression: incompatible ? propagation error types --- *)
+let question_result_error_mismatch =
+  {|
+fn bar() -> Result<i32, i64> {
+    Ok(42)
+}
+fn foo() -> Result<i32, str> {
+    let n = bar()?;
+    Ok(n)
+}
+|}
+
+let question_option_in_result_fn =
+  {|
+fn bar() -> Option<i32> {
+    Some(42)
+}
+fn foo() -> Result<i32, str> {
+    let n = bar()?;
+    Ok(n)
+}
+|}
+
+let question_result_in_option_fn =
+  {|
+fn bar() -> Result<i32, str> {
+    Ok(42)
+}
+fn foo() -> Option<i32> {
+    let n = bar()?;
+    Some(n)
+}
+|}
+
+(* --- Regression: trait impl missing required methods --- *)
+let trait_impl_missing_method =
+  {|
+trait Greet {
+    fn hello(&self) -> str;
+    fn goodbye(&self) -> str;
+}
+struct Bob {}
+impl Greet for Bob {
+    fn hello(&self) -> str {
+        "hello"
+    }
+}
+fn main() {}
+|}
+
+(* --- Regression: trait impl signature mismatch --- *)
+let trait_impl_sig_mismatch =
+  {|
+trait Greet {
+    fn hello(&self, name: str) -> str;
+}
+struct Bob {}
+impl Greet for Bob {
+    fn hello(&self) -> str {
+        "hello"
+    }
+}
+fn main() {}
+|}
+
+let trait_impl_return_mismatch =
+  {|
+trait Greet {
+    fn hello(&self) -> str;
+}
+struct Bob {}
+impl Greet for Bob {
+    fn hello(&self) -> i32 {
+        42
+    }
+}
+fn main() {}
+|}
+
+(* --- Positive: valid trait impl --- *)
+let valid_trait_impl =
+  {|
+trait Greet {
+    fn hello(&self) -> str;
+}
+struct Bob {}
+impl Greet for Bob {
+    fn hello(&self) -> str {
+        "hello"
+    }
+}
+fn main() {}
+|}
+
 (* Arithmetic on non-numeric *)
 let arithmetic_on_bool = {|
 fn main() {
@@ -411,6 +505,7 @@ let positive_tests =
     ("Self in impl", `Quick, pass valid_self_in_impl);
     ("string concat", `Quick, pass valid_string_concat);
     ("empty Vec with annotation", `Quick, pass valid_vec_typed_empty);
+    ("valid trait impl", `Quick, pass valid_trait_impl);
   ]
 
 let negative_tests =
@@ -454,6 +549,24 @@ let negative_tests =
     ( "index with non-integer",
       `Quick,
       fail ~expect:"index must be integer" index_non_integer );
+    ( "? Result error type mismatch",
+      `Quick,
+      fail ~expect:"error type mismatch" question_result_error_mismatch );
+    ( "? Option in Result-returning fn",
+      `Quick,
+      fail ~expect:"cannot use `?` on Option" question_option_in_result_fn );
+    ( "? Result in Option-returning fn",
+      `Quick,
+      fail ~expect:"cannot use `?` on Result" question_result_in_option_fn );
+    ( "trait impl missing required method",
+      `Quick,
+      fail ~expect:"missing required method" trait_impl_missing_method );
+    ( "trait impl param count mismatch",
+      `Quick,
+      fail ~expect:"signature mismatch" trait_impl_sig_mismatch );
+    ( "trait impl return type mismatch",
+      `Quick,
+      fail ~expect:"signature mismatch" trait_impl_return_mismatch );
   ]
 
 let () =

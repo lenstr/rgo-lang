@@ -29,12 +29,21 @@ type impl_info = {
   ii_assoc_fns : fn_info SMap.t;
 }
 
+type trait_method_sig = {
+  tms_params : ty list;
+  tms_ret : ty;
+  tms_has_default : bool; (* has a default body *)
+}
+
+type trait_info = { tr_methods : trait_method_sig SMap.t }
+
 type env = {
   values : (ty * bool (* is_mut *)) SMap.t list;
   structs : struct_info SMap.t;
   enums : enum_info SMap.t;
   fns : fn_info SMap.t;
   impls : impl_info SMap.t; (* type name -> impl info *)
+  traits : trait_info SMap.t; (* trait name -> trait info *)
   ret_ty : ty option; (* return type of current function *)
   self_ty : ty option; (* type bound to Self in current impl/trait *)
   type_params : string list; (* in-scope generic type params *)
@@ -47,6 +56,7 @@ let empty_env =
     enums = SMap.empty;
     fns = SMap.empty;
     impls = SMap.empty;
+    traits = SMap.empty;
     ret_ty = None;
     self_ty = None;
     type_params = [];
@@ -696,8 +706,13 @@ and check_question env e =
   let t = check_expr env e in
   let span = expr_span e in
   match (t, env.ret_ty) with
-  | TResult (ok, _err), Some (TResult (_, _ret_err)) ->
-      (* ? on Result<T,E> in Result-returning fn -> unwrap T *)
+  | TResult (ok, err), Some (TResult (_, ret_err)) ->
+      (* ? on Result<T,E> in Result-returning fn -> unwrap T, but error types must match *)
+      if not (types_compatible ret_err err) then
+        error_at span
+          "`?` error type mismatch: function returns Result<_, %s> but \
+           expression has error type %s"
+          (show_ty ret_err) (show_ty err);
       ok
   | TOption inner, Some (TOption _) ->
       (* ? on Option<T> in Option-returning fn -> unwrap T *)
@@ -855,7 +870,61 @@ let rec collect_type_info env (items : item list) : env =
           collect_impl env i_generics i_ty i_items
       | ItemTraitImpl { ti_ty; ti_items; ti_generics; _ } ->
           collect_impl env ti_generics ti_ty ti_items
-      | ItemTrait _ -> env (* trait type info handled separately *))
+      | ItemTrait { t_name; t_generics; t_items; _ } ->
+          let generics =
+            List.map (fun (tp : type_param) -> tp.tp_name.node) t_generics
+          in
+          let env_with_generics =
+            { env with type_params = generics @ env.type_params }
+          in
+          let methods =
+            List.fold_left
+              (fun acc ti ->
+                match ti with
+                | TraitFnSig sig_ ->
+                    let params =
+                      List.map
+                        (fun (p : param) ->
+                          resolve_ast_ty env_with_generics p.p_ty)
+                        sig_.sig_params
+                    in
+                    let ret =
+                      match sig_.sig_ret with
+                      | Some t -> resolve_ast_ty env_with_generics t
+                      | None -> TVoid
+                    in
+                    let tms =
+                      {
+                        tms_params = params;
+                        tms_ret = ret;
+                        tms_has_default = false;
+                      }
+                    in
+                    SMap.add sig_.sig_name.node tms acc
+                | TraitFnDecl fd ->
+                    let params =
+                      List.map
+                        (fun (p : param) ->
+                          resolve_ast_ty env_with_generics p.p_ty)
+                        fd.fn_params
+                    in
+                    let ret =
+                      match fd.fn_ret with
+                      | Some t -> resolve_ast_ty env_with_generics t
+                      | None -> TVoid
+                    in
+                    let tms =
+                      {
+                        tms_params = params;
+                        tms_ret = ret;
+                        tms_has_default = true;
+                      }
+                    in
+                    SMap.add fd.fn_name.node tms acc)
+              SMap.empty t_items
+          in
+          let ti = { tr_methods = methods } in
+          { env with traits = SMap.add t_name.node ti env.traits })
     env items
 
 and collect_impl env impl_generics i_ty impl_items =
@@ -968,13 +1037,14 @@ let check_item env (item : item) =
           in
           check_fn_decl method_env fd)
         i_items
-  | ItemTraitImpl { ti_ty; ti_items; ti_generics; _ } ->
+  | ItemTraitImpl { ti_trait; ti_ty; ti_items; ti_generics } -> (
       let generics =
         List.map (fun (tp : type_param) -> tp.tp_name.node) ti_generics
       in
       let impl_env = { env with type_params = generics @ env.type_params } in
       let self_ty = resolve_ast_ty impl_env ti_ty in
       let impl_env = { impl_env with self_ty = Some self_ty } in
+      (* Type-check method bodies *)
       List.iter
         (fun fd ->
           let method_env =
@@ -987,8 +1057,66 @@ let check_item env (item : item) =
             | None -> impl_env
           in
           check_fn_decl method_env fd)
-        ti_items
-  | ItemTrait _ -> () (* trait checking deferred to phase 8 *)
+        ti_items;
+      (* Validate impl against trait contract *)
+      match SMap.find_opt ti_trait.node env.traits with
+      | None -> () (* trait not found: resolver handles this *)
+      | Some tr_info ->
+          (* Check for missing required methods *)
+          SMap.iter
+            (fun mname tms ->
+              if
+                (not tms.tms_has_default)
+                && not
+                     (List.exists
+                        (fun (fd : fn_decl) -> fd.fn_name.node = mname)
+                        ti_items)
+              then
+                error_at ti_trait.span
+                  "missing required method '%s' in impl %s for %s" mname
+                  ti_trait.node (show_ty self_ty))
+            tr_info.tr_methods;
+          (* Check signature compatibility for provided methods *)
+          List.iter
+            (fun (fd : fn_decl) ->
+              match SMap.find_opt fd.fn_name.node tr_info.tr_methods with
+              | None -> () (* extra methods are allowed in impls *)
+              | Some tms ->
+                  let impl_params =
+                    List.map
+                      (fun (p : param) -> resolve_ast_ty impl_env p.p_ty)
+                      fd.fn_params
+                  in
+                  let impl_ret =
+                    match fd.fn_ret with
+                    | Some t -> resolve_ast_ty impl_env t
+                    | None -> TVoid
+                  in
+                  let expected_len = List.length tms.tms_params in
+                  let actual_len = List.length impl_params in
+                  if expected_len <> actual_len then
+                    error_at fd.fn_name.span
+                      "signature mismatch for method '%s' in impl %s: expected \
+                       %d parameter(s), got %d"
+                      fd.fn_name.node ti_trait.node expected_len actual_len
+                  else (
+                    List.iter2
+                      (fun exp act ->
+                        if not (types_compatible exp act) then
+                          error_at fd.fn_name.span
+                            "signature mismatch for method '%s' in impl %s: \
+                             parameter type mismatch, expected %s, got %s"
+                            fd.fn_name.node ti_trait.node (show_ty exp)
+                            (show_ty act))
+                      tms.tms_params impl_params;
+                    if not (types_compatible tms.tms_ret impl_ret) then
+                      error_at fd.fn_name.span
+                        "signature mismatch for method '%s' in impl %s: return \
+                         type mismatch, expected %s, got %s"
+                        fd.fn_name.node ti_trait.node (show_ty tms.tms_ret)
+                        (show_ty impl_ret)))
+            ti_items)
+  | ItemTrait _ -> ()
 
 (* ---------- main entry points ---------- *)
 
