@@ -1,0 +1,48 @@
+{
+  "milestone": "phase-6-exhaustiveness",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "nix develop -c dune runtest",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "nix develop -c dune build",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "nix develop -c dune build @fmt",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "failedFeatures": [
+      "phase-6-exhaustiveness-checker"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "phase-6-exhaustiveness-checker",
+      "severity": "blocking",
+      "description": "lib/exhaust.ml only checked exhaustiveness when the enum name could be recovered from the scrutinee or a qualified arm pattern, so some non-exhaustive enum matches were silently skipped instead of reporting missing variants."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "skills",
+      "suggestion": "Reinforce in compiler-worker guidance that semantic features must add at least one negative regression exercising the feature through authoritative typed information rather than only surface-syntax-positive cases.",
+      "evidence": "The original phase-6 feature added only positive/qualified-pattern coverage; later fix features were required to catch scrutinee-type-driven and whole-expression enum cases that the initial implementation skipped.",
+      "isSystemic": true
+    }
+  ],
+  "rejectedObservations": [],
+  "previousRound": null
+}

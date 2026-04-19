@@ -1,0 +1,28 @@
+{
+  "featureId": "phase-6-exhaustiveness-checker",
+  "reviewedAt": "2026-04-19T21:11:00Z",
+  "commitId": "8515a02",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The original Phase 6 implementation correctly handled matches whose enum type could be recovered from arm patterns, but it missed non-exhaustive matches over scrutinees whose enum identity was not revealed by the arms. This leaves the feature incomplete against the contract until the follow-up fixes land.",
+    "issues": [
+      {
+        "file": "lib/exhaust.ml",
+        "line": 121,
+        "severity": "blocking",
+        "description": "Exhaustiveness is only checked when the enum name can be inferred from the scrutinee or from at least one qualified arm pattern. A match like `match c { _ => ... }` is fine, but a non-exhaustive match over an enum using only binding/literal arms or unqualified patterns is silently skipped because `enum_name` becomes `None`. That violates the feature requirement to reject all non-exhaustive enum matches with missing-pattern diagnostics."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The compiler-worker skill says compiler features should add failing tests first, but the worker handoff/transcript shows only positive coverage for arm-qualified enum patterns and no regression covering scrutinee-type-driven matches until a later fix feature added them.",
+      "evidence": "Worker transcript for 8f1f30d4-879c-4856-814f-ecd09a88e411 created `test/test_exhaust.ml` only with qualified patterns in the initial commit; later follow-up commits 8acf2641/3afe3b6 add scrutinee-type/whole-expression tests. See `test/test_exhaust.ml` initial cases around lines 176-238 in commit 8515a02 and later added regression sections in the current file."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed commit 8515a02 and the worker transcript/handoff. The implementation introduced a dedicated exhaustiveness pass and tests, but the pass was incomplete: it skipped some enum matches whenever the enum type was not recoverable from arm patterns, so the feature did not fully satisfy the milestone contract at that point."
+}
