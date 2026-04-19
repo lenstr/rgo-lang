@@ -325,6 +325,48 @@ fn main() {
 }
 |}
 
+(* Regression: stored associated-function value with Self substitution *)
+let valid_stored_assoc_fn_self =
+  {|
+struct Counter {
+    count: i32,
+}
+impl Counter {
+    fn new() -> Self {
+        Counter { count: 0 }
+    }
+    fn get(&self) -> i32 {
+        self.count
+    }
+}
+fn main() {
+    let make = Counter::new;
+    let c = make();
+    let v = c.get();
+}
+|}
+
+let valid_stored_enum_assoc_fn_self =
+  {|
+enum Status {
+    Active,
+    Inactive,
+}
+impl Status {
+    fn default() -> Self {
+        Status::Active
+    }
+    fn is_active(&self) -> bool {
+        true
+    }
+}
+fn main() {
+    let make = Status::default;
+    let s = make();
+    let a = s.is_active();
+}
+|}
+
 let valid_string_concat =
   {|
 fn main() {
@@ -686,6 +728,12 @@ let positive_tests =
     ( "enum Self constructor method",
       `Quick,
       pass valid_enum_self_constructor_method );
+    ( "stored assoc fn Self substitution",
+      `Quick,
+      pass valid_stored_assoc_fn_self );
+    ( "stored enum assoc fn Self substitution",
+      `Quick,
+      pass valid_stored_enum_assoc_fn_self );
     ("string concat", `Quick, pass valid_string_concat);
     ("empty Vec with annotation", `Quick, pass valid_vec_typed_empty);
     ("valid trait impl", `Quick, pass valid_trait_impl);

@@ -523,6 +523,22 @@ and check_field_access env e field =
 
 and check_path env type_name member =
   (* Type::Variant or Type::assoc_fn (without call) *)
+  let try_assoc_fn () =
+    match SMap.find_opt type_name.node env.impls with
+    | Some ii -> (
+        match SMap.find_opt member.node ii.ii_assoc_fns with
+        | Some fi ->
+            (* Substitute Self with the concrete type so stored
+               associated-function values carry the resolved type
+               (e.g. let make = Status::default; make().is_active()). *)
+            let concrete_self = concrete_type_for_name env type_name.node in
+            Some
+              (TFn
+                 ( List.map (subst_self concrete_self) fi.fi_params,
+                   subst_self concrete_self fi.fi_ret ))
+        | None -> None)
+    | None -> None
+  in
   match SMap.find_opt type_name.node env.enums with
   | Some ei -> (
       match List.assoc_opt member.node ei.ei_variants with
@@ -530,18 +546,16 @@ and check_path env type_name member =
       | Some _ ->
           error_at member.span "variant '%s::%s' requires arguments"
             type_name.node member.node
-      | None ->
-          error_at member.span "undefined variant '%s' in '%s'" member.node
-            type_name.node)
-  | None -> (
-      (* Could be an assoc fn reference *)
-      match SMap.find_opt type_name.node env.impls with
-      | Some ii -> (
-          match SMap.find_opt member.node ii.ii_assoc_fns with
-          | Some fi -> TFn (fi.fi_params, fi.fi_ret)
+      | None -> (
+          (* Not a variant — try associated function *)
+          match try_assoc_fn () with
+          | Some t -> t
           | None ->
-              error_at member.span "no associated function '%s' on type '%s'"
-                member.node type_name.node)
+              error_at member.span "undefined variant '%s' in '%s'" member.node
+                type_name.node))
+  | None -> (
+      match try_assoc_fn () with
+      | Some t -> t
       | None -> error_at type_name.span "unknown type '%s'" type_name.node)
 
 and check_struct_literal env ty fields =
