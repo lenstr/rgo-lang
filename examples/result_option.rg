@@ -5,9 +5,9 @@ fn divide(a: i64, b: i64) -> Result<i64, str> {
     Ok(a / b)
 }
 
-fn double(s: str) -> Result<i64, str> {
-    let n = parse_int(s)?;
-    Ok(n * 2)
+fn half_divide(a: i64, b: i64) -> Result<i64, str> {
+    let n = divide(a, b)?;
+    Ok(n / 2)
 }
 
 fn first(v: Vec<i64>) -> Option<i64> {
@@ -17,7 +17,14 @@ fn first(v: Vec<i64>) -> Option<i64> {
     Some(v[0])
 }
 
+fn head_plus_one(v: Vec<i64>) -> Option<i64> {
+    let n = first(v)?;
+    Some(n + 1)
+}
+
 fn main() {
     let r = divide(10, 2);
+    let h = half_divide(100, 4);
     let o = first([1, 2, 3]);
+    let p = head_plus_one([10, 20]);
 }

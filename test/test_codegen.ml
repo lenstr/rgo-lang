@@ -585,6 +585,13 @@ fn main() {
   let _go = compile_and_check ~expected_output:"42\n" src in
   ()
 
+(* ---------- Example fixture regression ---------- *)
+
+let test_result_option_example () =
+  let src = read_file "../examples/result_option.rg" in
+  let _go = compile_and_check src in
+  ()
+
 let () =
   Alcotest.run "codegen"
     [
@@ -652,5 +659,10 @@ let () =
         [
           Alcotest.test_case "hello world" `Quick test_hello_world;
           Alcotest.test_case "println int" `Quick test_println_int;
+        ] );
+      ( "example-fixtures",
+        [
+          Alcotest.test_case "result_option.rg compiles" `Quick
+            test_result_option_example;
         ] );
     ]

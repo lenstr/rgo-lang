@@ -41,4 +41,6 @@
 (test
  (name test_codegen)
  (modules test_codegen)
- (libraries rgo alcotest))
+ (libraries rgo alcotest)
+ (deps
+  (glob_files ../examples/*.rg)))
