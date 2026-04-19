@@ -2,12 +2,81 @@
 
 `rgo` is an experimental language with Rust-like syntax that targets Go.
 
-The idea is simple: write code in a more expressive, modern syntax and compile it into readable Go code that can then be built with ordinary `go build`.
+The core idea is to let you write code in a more expressive, Rust-inspired syntax and still end up with **readable, idiomatic Go** that can be built with ordinary `go build`.
+
+The biggest practical benefit is compilation speed: `rgo` lowers to Go, so the final build step keeps the **fast edit/compile/run loop of the Go toolchain** instead of introducing a heavy custom backend or runtime.
 
 - **File extension:** `.rg`
 - **CLI name:** `rgoc`
 - **Compiler implementation:** OCaml 5.x
 - **Target:** Go 1.26+
+
+## Why this is interesting
+
+`rgo` aims to combine:
+
+- Rust-like syntax
+- algebraic data types (`enum`)
+- `Option<T>` / `Result<T, E>`
+- `match`
+- `impl`, `trait`, and generics
+- the `?` operator
+
+with practical Go advantages:
+
+- **fast compilation via the standard Go toolchain**
+- readable and idiomatic generated Go
+- goroutines and Go's runtime model
+- a mature standard library
+- simple binary distribution
+
+The goal is not to generate weird intermediate code that merely happens to compile.
+The goal is to translate Rust-like source into Go that a Go developer can still read, debug, and maintain.
+
+## Rust-like in, idiomatic Go out
+
+### Example: function translation
+
+`rgo`:
+
+```rust
+pub fn add(a: i64, b: i64) -> i64 {
+    a + b
+}
+```
+
+Generated Go:
+
+```go
+func Add(a int64, b int64) int64 {
+    return a + b
+}
+```
+
+### Example: `Result` + `?` to Go-style error handling
+
+`rgo`:
+
+```rust
+fn double(s: str) -> Result<i64, str> {
+    let n = parse_int(s)?;
+    Ok(n * 2)
+}
+```
+
+Generated Go:
+
+```go
+func Double(s string) (int64, error) {
+    n, err := parseInt(s)
+    if err != nil {
+        return 0, err
+    }
+    return n * 2, nil
+}
+```
+
+That translation style is a major part of the project vision: keep the input language modern and expressive, while keeping the output close to normal Go conventions.
 
 ## Project status
 
@@ -37,25 +106,6 @@ Expected output:
 ```text
 rgoc v0.0.1
 ```
-
-## Why rgo
-
-`rgo` aims to combine:
-
-- Rust-like syntax
-- algebraic data types (`enum`)
-- `Option<T>` / `Result<T, E>`
-- `match`
-- `impl`, `trait`, and generics
-- the `?` operator
-
-with the practical Go runtime:
-
-- goroutines
-- GC
-- a mature standard library
-- fast `go build`
-- simple binary distribution
 
 ## Syntax examples
 
