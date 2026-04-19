@@ -1,0 +1,46 @@
+{
+  "milestone": "phase-6-exhaustiveness-fix",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "nix develop -c dune runtest",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "nix develop -c dune build",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "nix develop -c dune build @fmt",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "failedFeatures": [
+      "phase-6-fix-scrutinee-type-driven-exhaustiveness"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "phase-6-fix-scrutinee-type-driven-exhaustiveness",
+      "severity": "blocking",
+      "description": "lib/exhaust.ml:142: expr_type_name only recognizes identifiers, enum paths, and direct function calls, so let-bound enums initialized from other enum-producing expressions (for example block expressions) can be omitted from the exhaustiveness type environment. Later matches on those values may still skip non-exhaustive coverage checks when arm patterns do not reveal the enum type."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [],
+  "rejectedObservations": [
+    {
+      "observation": "Clarify the canonical .factory/services.yaml path because one transcript attempted /home/lenstr/.factory/services.yaml before reading the repo-local file.",
+      "reason": "The mission and system reminders already specify the repo-root .factory/services.yaml path; this looks like a one-off tool-path mistake rather than a systemic documentation gap."
+    }
+  ],
+  "previousRound": null
+}
