@@ -1,0 +1,144 @@
+{
+  "groupId": "cli-phase0",
+  "testedAt": "2026-04-19T17:03:18.881881+00:00",
+  "isolation": {
+    "repoRoot": "/home/lenstr/workspace/personal/hack/rgo-lang",
+    "missionDir": "/home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7",
+    "surface": "CLI/compiler validation",
+    "network": false,
+    "externalServices": false
+  },
+  "toolsUsed": [
+    "Execute"
+  ],
+  "assertions": [
+    {
+      "id": "VAL-PHASE0-001",
+      "title": "Skeleton builds in flake toolchain",
+      "status": "pass",
+      "reason": "Build command exited 0 in the flake toolchain.",
+      "commandsRun": [
+        "nix develop -c dune build"
+      ],
+      "toolsUsed": [
+        "Execute"
+      ],
+      "steps": [
+        {
+          "action": "nix develop -c dune build",
+          "expected": "Command completes successfully with required assertion-specific output.",
+          "observed": "exit code 0"
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "phase-0-skeleton/cli-phase0/VAL-PHASE0-001.json"
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-PHASE0-002",
+      "title": "Version CLI is exposed through the built executable",
+      "status": "pass",
+      "reason": "CLI command exited 0 and printed the required placeholder version string.",
+      "commandsRun": [
+        "nix develop -c dune exec rgoc -- --version"
+      ],
+      "toolsUsed": [
+        "Execute"
+      ],
+      "steps": [
+        {
+          "action": "nix develop -c dune exec rgoc -- --version",
+          "expected": "Command completes successfully with required assertion-specific output.",
+          "observed": "exit code 0; stdout ended with rgoc v0.0.1"
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "phase-0-skeleton/cli-phase0/VAL-PHASE0-002.json"
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-PHASE0-003",
+      "title": "Test entrypoint passes in a clean flake shell",
+      "status": "pass",
+      "reason": "Test entrypoint exited 0 in a non-interactive flake shell.",
+      "commandsRun": [
+        "nix develop -c dune runtest"
+      ],
+      "toolsUsed": [
+        "Execute"
+      ],
+      "steps": [
+        {
+          "action": "nix develop -c dune runtest",
+          "expected": "Command completes successfully with required assertion-specific output.",
+          "observed": "exit code 0"
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "phase-0-skeleton/cli-phase0/VAL-PHASE0-003.json"
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-PHASE0-004",
+      "title": "Formatting entrypoint is wired and passes",
+      "status": "pass",
+      "reason": "Formatting target exited 0 without formatter configuration errors.",
+      "commandsRun": [
+        "nix develop -c dune build @fmt"
+      ],
+      "toolsUsed": [
+        "Execute"
+      ],
+      "steps": [
+        {
+          "action": "nix develop -c dune build @fmt",
+          "expected": "Command completes successfully with required assertion-specific output.",
+          "observed": "exit code 0"
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "phase-0-skeleton/cli-phase0/VAL-PHASE0-004.json"
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-PHASE0-005",
+      "title": "Build, test, and fmt entrypoints are CI-stable",
+      "status": "pass",
+      "reason": "Sequential build/test/fmt command exited 0 end-to-end from the repo root.",
+      "commandsRun": [
+        "nix develop -c dune build && nix develop -c dune runtest && nix develop -c dune build @fmt"
+      ],
+      "toolsUsed": [
+        "Execute"
+      ],
+      "steps": [
+        {
+          "action": "nix develop -c dune build && nix develop -c dune runtest && nix develop -c dune build @fmt",
+          "expected": "Command completes successfully with required assertion-specific output.",
+          "observed": "exit code 0"
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "phase-0-skeleton/cli-phase0/VAL-PHASE0-005.json"
+        ]
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 5 assertions: VAL-PHASE0-001=pass, VAL-PHASE0-002=pass, VAL-PHASE0-003=pass, VAL-PHASE0-004=pass, VAL-PHASE0-005=pass"
+}

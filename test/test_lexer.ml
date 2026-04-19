@@ -418,6 +418,46 @@ let test_error_position_multiline () =
       Alcotest.(check int) "error line" 3 err.pos.line;
       Alcotest.(check int) "error col" 1 err.pos.col
 
+let test_malformed_hex_underscore_only () =
+  match Lexer.tokenize "0x_" with
+  | _ -> Alcotest.fail "expected Lexer_error for 0x_"
+  | exception Lexer.Lexer_error err ->
+      Alcotest.(check int) "error line" 1 err.pos.line;
+      Alcotest.(check int) "error col" 1 err.pos.col
+
+let test_malformed_bin_underscore_only () =
+  match Lexer.tokenize "0b_" with
+  | _ -> Alcotest.fail "expected Lexer_error for 0b_"
+  | exception Lexer.Lexer_error err ->
+      Alcotest.(check int) "error line" 1 err.pos.line;
+      Alcotest.(check int) "error col" 1 err.pos.col
+
+let test_malformed_hex_upper_underscore_only () =
+  match Lexer.tokenize "0X_" with
+  | _ -> Alcotest.fail "expected Lexer_error for 0X_"
+  | exception Lexer.Lexer_error err ->
+      Alcotest.(check int) "error line" 1 err.pos.line;
+      Alcotest.(check int) "error col" 1 err.pos.col
+
+let test_malformed_bin_upper_underscore_only () =
+  match Lexer.tokenize "0B_" with
+  | _ -> Alcotest.fail "expected Lexer_error for 0B_"
+  | exception Lexer.Lexer_error err ->
+      Alcotest.(check int) "error line" 1 err.pos.line;
+      Alcotest.(check int) "error col" 1 err.pos.col
+
+let test_valid_hex_with_underscores () =
+  let src = "0xF_F 0xa_b_c" in
+  let expected = Token.[ IntLit "0xF_F"; IntLit "0xa_b_c" ] in
+  Alcotest.(check tokens_testable)
+    "valid hex with underscores" expected (lex_tokens_no_eof src)
+
+let test_valid_bin_with_underscores () =
+  let src = "0b1_0 0b1_0_1" in
+  let expected = Token.[ IntLit "0b1_0"; IntLit "0b1_0_1" ] in
+  Alcotest.(check tokens_testable)
+    "valid bin with underscores" expected (lex_tokens_no_eof src)
+
 (* ---- Empty input ---- *)
 
 let test_empty_input () =
@@ -455,6 +495,10 @@ let () =
           Alcotest.test_case "float literals" `Quick test_float_literals;
           Alcotest.test_case "string literal" `Quick test_string_literal;
           Alcotest.test_case "string escapes" `Quick test_string_escapes;
+          Alcotest.test_case "valid hex with underscores" `Quick
+            test_valid_hex_with_underscores;
+          Alcotest.test_case "valid bin with underscores" `Quick
+            test_valid_bin_with_underscores;
         ] );
       ( "operators",
         [
@@ -503,6 +547,14 @@ let () =
             test_unterminated_block_comment;
           Alcotest.test_case "error position multiline" `Quick
             test_error_position_multiline;
+          Alcotest.test_case "malformed hex 0x_" `Quick
+            test_malformed_hex_underscore_only;
+          Alcotest.test_case "malformed bin 0b_" `Quick
+            test_malformed_bin_underscore_only;
+          Alcotest.test_case "malformed hex 0X_" `Quick
+            test_malformed_hex_upper_underscore_only;
+          Alcotest.test_case "malformed bin 0B_" `Quick
+            test_malformed_bin_upper_underscore_only;
         ] );
       ( "edge_cases",
         [

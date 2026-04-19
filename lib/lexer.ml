@@ -145,18 +145,32 @@ let rec token state buf =
       let s = lex_string state buf in
       let stop = end_pos state buf in
       Token.{ token = StringLit s; span = { start; stop } }
-  (* Numeric literals - hex *)
-  | "0x", Plus ('0' .. '9' | 'a' .. 'f' | 'A' .. 'F' | '_') ->
+  (* Malformed prefixed integers - must come before valid hex/binary patterns
+     to catch e.g. 0x_ and 0b_ before they fall through as 0 + identifier *)
+  | ("0x" | "0X"), Plus '_' ->
+      raise
+        (Lexer_error
+           {
+             msg = "malformed hex literal: expected hex digit after prefix";
+             pos = current_pos state buf;
+           })
+  | ("0b" | "0B"), Plus '_' ->
+      raise
+        (Lexer_error
+           {
+             msg =
+               "malformed binary literal: expected binary digit after prefix";
+             pos = current_pos state buf;
+           })
+  (* Numeric literals - hex: allow leading underscores but require >= 1 hex digit *)
+  | ( ("0x" | "0X"),
+      Star '_',
+      ('0' .. '9' | 'a' .. 'f' | 'A' .. 'F'),
+      Star ('0' .. '9' | 'a' .. 'f' | 'A' .. 'F' | '_') ) ->
       let s = Sedlexing.Utf8.lexeme buf in
       Token.{ token = IntLit s; span = make_span state buf }
-  | "0X", Plus ('0' .. '9' | 'a' .. 'f' | 'A' .. 'F' | '_') ->
-      let s = Sedlexing.Utf8.lexeme buf in
-      Token.{ token = IntLit s; span = make_span state buf }
-  (* Numeric literals - binary *)
-  | "0b", Plus ('0' | '1' | '_') ->
-      let s = Sedlexing.Utf8.lexeme buf in
-      Token.{ token = IntLit s; span = make_span state buf }
-  | "0B", Plus ('0' | '1' | '_') ->
+  (* Numeric literals - binary: allow leading underscores but require >= 1 binary digit *)
+  | ("0b" | "0B"), Star '_', ('0' | '1'), Star ('0' | '1' | '_') ->
       let s = Sedlexing.Utf8.lexeme buf in
       Token.{ token = IntLit s; span = make_span state buf }
   (* Float literals - must come before decimal integers *)

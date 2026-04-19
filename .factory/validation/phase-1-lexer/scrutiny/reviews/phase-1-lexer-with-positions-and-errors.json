@@ -1,0 +1,22 @@
+{
+  "featureId": "phase-1-lexer-with-positions-and-errors",
+  "reviewedAt": "2026-04-19T17:20:00Z",
+  "commitId": "6cabe14",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The lexer covers most required token classes and includes solid tests, but it accepts malformed prefixed integer literals that the PRD examples imply should be rejected as invalid lexemes.",
+    "issues": [
+      {
+        "file": "lib/lexer.ml",
+        "line": 149,
+        "severity": "blocking",
+        "description": "The hex and binary lexer rules accept underscore-only payloads after the prefix because they use `Plus (...)` without requiring at least one actual digit. Inputs like `0x_` and `0b_` are currently tokenized as `IntLit` instead of raising a positional lexer error, which violates the requirement that invalid lexemes fail with positional diagnostics. Add tests for malformed prefixed literals and require at least one hexadecimal/binary digit after `0x`/`0b`."
+      }
+    ]
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": null,
+  "summary": "Fail: found one blocking lexer correctness bug. `0x_`/`0b_` are accepted as integer literals due to overly permissive prefixed-number patterns, and the current test suite does not cover malformed prefixed literals."
+}

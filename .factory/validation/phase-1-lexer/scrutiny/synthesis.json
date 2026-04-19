@@ -1,0 +1,41 @@
+{
+  "milestone": "phase-1-lexer",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "nix develop -c dune runtest",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "nix develop -c dune build",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "nix develop -c dune build @fmt",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "failedFeatures": [
+      "phase-1-lexer-with-positions-and-errors"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "phase-1-lexer-with-positions-and-errors",
+      "severity": "blocking",
+      "description": "The hex and binary lexer rules accept underscore-only payloads after the prefix, so inputs like 0x_ and 0b_ are tokenized as IntLit instead of raising positional lexer errors. Add malformed prefixed-literal tests and require at least one actual digit after 0x/0b."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [],
+  "rejectedObservations": [],
+  "previousRound": null
+}

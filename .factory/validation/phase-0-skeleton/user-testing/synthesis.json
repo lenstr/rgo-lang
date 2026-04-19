@@ -1,0 +1,22 @@
+{
+  "milestone": "phase-0-skeleton",
+  "round": 1,
+  "status": "pass",
+  "assertionsSummary": {
+    "total": 5,
+    "passed": 5,
+    "failed": 0,
+    "blocked": 0
+  },
+  "passedAssertions": [
+    "VAL-PHASE0-001",
+    "VAL-PHASE0-002",
+    "VAL-PHASE0-003",
+    "VAL-PHASE0-004",
+    "VAL-PHASE0-005"
+  ],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "appliedUpdates": [],
+  "previousRound": null
+}
