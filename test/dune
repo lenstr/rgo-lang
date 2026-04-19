@@ -1,3 +1,7 @@
 (test
  (name test_version)
  (libraries rgo alcotest))
+
+(test
+ (name test_lexer)
+ (libraries rgo alcotest))

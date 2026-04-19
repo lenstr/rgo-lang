@@ -1,3 +1,5 @@
 (library
  (name rgo)
- (libraries))
+ (libraries sedlex)
+ (preprocess
+  (pps sedlex.ppx)))
