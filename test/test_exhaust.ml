@@ -262,6 +262,84 @@ fn main() {
 }
 |}
 
+(* ======== Regression: scrutinee-type-driven exhaustiveness ======== *)
+
+(* Match with empty arms should be rejected when scrutinee is enum *)
+let empty_match_on_enum =
+  {|
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+fn test(c: Color) -> i32 {
+    match c {
+    }
+}
+fn main() {
+    let x = test(Color::Red);
+}
+|}
+
+(* Match on a let-bound enum value with missing variants *)
+let let_bound_enum_missing =
+  {|
+enum Status {
+    Active,
+    Inactive,
+    Pending,
+}
+fn check() -> i32 {
+    let s: Status = Status::Active;
+    match s {
+        Status::Active => 1,
+    }
+}
+fn main() {
+    let r = check();
+}
+|}
+
+(* Match on enum returned from function with missing variants *)
+let fn_return_enum_missing =
+  {|
+enum Light {
+    Red,
+    Yellow,
+    Green,
+}
+fn get_light() -> Light {
+    Light::Red
+}
+fn act(l: Light) -> i32 {
+    match l {
+        Light::Red => 1,
+        Light::Yellow => 2,
+    }
+}
+fn main() {
+    let r = act(get_light());
+}
+|}
+
+(* Positive: exhaustive match still passes with scrutinee type approach *)
+let exhaustive_param_match =
+  {|
+enum AB {
+    A,
+    B,
+}
+fn test(x: AB) -> i32 {
+    match x {
+        AB::A => 1,
+        AB::B => 2,
+    }
+}
+fn main() {
+    let r = test(AB::A);
+}
+|}
+
 (* ======== Test registration ======== *)
 
 let positive_tests =
@@ -294,6 +372,31 @@ let negative_tests =
       fail ~expect:"AB::B" nested_non_exhaustive );
   ]
 
+let regression_positive =
+  [
+    ( "exhaustive param match (scrutinee-type)",
+      `Quick,
+      pass exhaustive_param_match );
+  ]
+
+let regression_negative =
+  [
+    ( "empty match on enum",
+      `Quick,
+      fail ~expect:"non-exhaustive match" empty_match_on_enum );
+    ( "let-bound enum missing variants",
+      `Quick,
+      fail ~expect:"Status::Inactive" let_bound_enum_missing );
+    ( "fn param enum missing variants",
+      `Quick,
+      fail ~expect:"Light::Green" fn_return_enum_missing );
+  ]
+
 let () =
   Alcotest.run "exhaust"
-    [ ("positive", positive_tests); ("negative", negative_tests) ]
+    [
+      ("positive", positive_tests);
+      ("negative", negative_tests);
+      ("regression-positive", regression_positive);
+      ("regression-negative", regression_negative);
+    ]
