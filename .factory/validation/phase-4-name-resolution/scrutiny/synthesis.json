@@ -1,0 +1,46 @@
+{
+  "milestone": "phase-4-name-resolution",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "nix develop -c dune runtest",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "nix develop -c dune build",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "nix develop -c dune build @fmt",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "failedFeatures": [
+      "phase-4-name-resolution-and-semantic-errors"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "phase-4-name-resolution-and-semantic-errors",
+      "severity": "blocking",
+      "description": "`ItemTraitImpl` resolution ignores `ti_trait`, so `impl MissingTrait for Article { ... }` succeeds even when the trait name is undefined."
+    },
+    {
+      "featureId": "phase-4-name-resolution-and-semantic-errors",
+      "severity": "blocking",
+      "description": "Generic trait bounds in `type_param.tp_bound` are parsed but never resolved, so undefined trait names inside bounds are silently accepted."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [],
+  "rejectedObservations": [],
+  "previousRound": null
+}
