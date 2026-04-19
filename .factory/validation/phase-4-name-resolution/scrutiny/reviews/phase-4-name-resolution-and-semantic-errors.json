@@ -1,28 +1,15 @@
 {
   "featureId": "phase-4-name-resolution-and-semantic-errors",
-  "reviewedAt": "2026-04-19T18:43:34.892844+00:00",
+  "reviewedAt": "2026-04-19T19:00:20.677959+00:00",
   "commitId": "e7b64e3",
   "transcriptSkeletonReviewed": true,
   "diffReviewed": true,
-  "status": "fail",
+  "status": "pass",
   "codeReview": {
-    "summary": "The resolver covers the requested core namespaces and diagnostics for the tested happy-path/negative cases, but it leaves some parsed names unresolved. In particular, trait names in `impl Trait for Type` items and trait names used in generic bounds are never validated, so semantically invalid programs can pass name resolution even though Phase 4 is supposed to resolve type/global namespaces consistently.",
-    "issues": [
-      {
-        "file": "lib/resolver.ml",
-        "line": 376,
-        "severity": "blocking",
-        "description": "`ItemTraitImpl` resolution ignores `ti_trait`, so `impl MissingTrait for Article { ... }` succeeds even when the trait name is undefined. The AST explicitly carries `ti_trait` (`lib/ast.mli`), parser tests already support trait impl syntax (`test/test_parser.ml`), but the resolver only resolves `ti_ty` and method bodies. This leaves a parsed global type/trait namespace unresolved in Phase 4."
-      },
-      {
-        "file": "lib/resolver.ml",
-        "line": 103,
-        "severity": "blocking",
-        "description": "Generic trait bounds are parsed but never resolved. `type_param.tp_bound` stores names like `Display + Summary` (`lib/ast.mli`), and parser tests cover that syntax (`test/test_parser.ml`), yet `resolve_fn_decl`, `ItemStruct`, `ItemEnum`, `ItemImpl`, `ItemTraitImpl`, and `ItemTrait` only add type parameters and resolve field/param/result types. As a result, undefined trait names inside bounds are silently accepted, which is a missed name-resolution case for declared type/global names."
-      }
-    ]
+    "summary": "The original Phase 4 feature previously missed two resolver cases, but the current code now closes both gaps. `lib/resolver.ml` resolves generic trait bounds via `resolve_bounds` and validates `ItemTraitImpl.ti_trait` before resolving impl bodies, and `test/test_resolver.ml` now covers both the positive and negative trait-name scenarios. With those later fixes present, the milestone behavior required for name resolution and semantic errors is adequately satisfied.",
+    "issues": []
   },
   "sharedStateObservations": [],
-  "addressesFailureFrom": null,
-  "summary": "Reviewed the feature handoff, worker transcript skeleton, compiler-worker skill, architecture/services docs, and commit `e7b64e3`. The implementation correctly adds a resolver pass and strong coverage for functions, structs, enum variants, local bindings, fields, and duplicate definitions, but it does not resolve trait names in trait impls or generic bounds even though those names are already present in the parsed AST. I marked the review as failed because those omissions leave semantically invalid programs accepted by Phase 4 name resolution."
+  "addressesFailureFrom": ".factory/validation/phase-4-name-resolution/scrutiny/reviews/phase-4-name-resolution-and-semantic-errors.json",
+  "summary": "Reviewed the prior failed scrutiny report and synthesis, the original feature handoff/transcript/diff for commit `e7b64e3`, and the current resolver/tests after later fix commit `d5969ef`. The previously blocking omissions for undefined trait names in `impl Trait for Type` and generic trait bounds are fixed in the current codebase, with regression coverage in `test/test_resolver.ml`, so this re-review passes."
 }
