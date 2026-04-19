@@ -407,6 +407,186 @@ fn main() {
 }
 |}
 
+(* ======== Regression: whole-expression enum inference ======== *)
+
+(* An if-expression whose then-branch produces an enum should NOT cause the
+   checker to cache the enum type for the whole expression by sampling a
+   single branch. Without a type annotation, the scrutinee type is unknown
+   from the tenv, so an empty match must NOT be falsely rejected. *)
+let if_expr_no_annotation_empty_match =
+  {|
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+fn make() -> Color {
+    Color::Red
+}
+fn test(flag: bool) -> i32 {
+    let c = if flag { make() } else { make() };
+    match c {
+        _ => 1,
+    }
+}
+fn main() {
+    let r = test(true);
+}
+|}
+
+(* A match-expression init whose first arm produces an enum should NOT cause
+   the checker to sample that arm's type for the whole expression. Without
+   annotation, the tenv should not record the enum type from sampling. *)
+let match_expr_no_annotation_wildcard =
+  {|
+enum Shape {
+    Circle,
+    Square,
+}
+enum Choice {
+    A,
+    B,
+}
+fn test(ch: Choice) -> i32 {
+    let s = match ch {
+        Choice::A => Shape::Circle,
+        Choice::B => Shape::Square,
+    };
+    match s {
+        _ => 1,
+    }
+}
+fn main() {
+    let r = test(Choice::A);
+}
+|}
+
+(* With a type annotation, the if-produced value has a known enum type and
+   the non-exhaustive match MUST be rejected. *)
+let if_expr_annotated_non_exhaustive =
+  {|
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+fn make() -> Color {
+    Color::Red
+}
+fn test(flag: bool) -> i32 {
+    let c: Color = if flag { make() } else { make() };
+    match c {
+        Color::Red => 1,
+    }
+}
+fn main() {
+    let r = test(true);
+}
+|}
+
+(* With a type annotation, the match-produced value has a known enum type
+   and the non-exhaustive match MUST be rejected. *)
+let match_expr_annotated_non_exhaustive =
+  {|
+enum Shape {
+    Circle,
+    Square,
+}
+enum Choice {
+    A,
+    B,
+}
+fn test(ch: Choice) -> i32 {
+    let s: Shape = match ch {
+        Choice::A => Shape::Circle,
+        Choice::B => Shape::Square,
+    };
+    match s {
+        Shape::Circle => 1,
+    }
+}
+fn main() {
+    let r = test(Choice::A);
+}
+|}
+
+(* Exhaustive match on an if-produced enum with annotation should pass *)
+let if_expr_annotated_exhaustive =
+  {|
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+fn make() -> Color {
+    Color::Red
+}
+fn test(flag: bool) -> i32 {
+    let c: Color = if flag { make() } else { make() };
+    match c {
+        Color::Red => 1,
+        Color::Green => 2,
+        Color::Blue => 3,
+    }
+}
+fn main() {
+    let r = test(true);
+}
+|}
+
+(* Without annotation, if-produced enum values should not be cached in tenv.
+   An if-expression initializer where each branch produces a different enum
+   variant must not bogusly cause the checker to infer the enum type for
+   the let-binding. The arm patterns still identify the enum, but the
+   tenv-based scrutinee resolution should not fire. *)
+let if_expr_no_annotation_non_exhaustive_detected_via_patterns =
+  {|
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+fn make() -> Color {
+    Color::Red
+}
+fn test(flag: bool) -> i32 {
+    let c = if flag { make() } else { make() };
+    match c {
+        Color::Red => 1,
+    }
+}
+fn main() {
+    let r = test(true);
+}
+|}
+
+(* Without annotation, a match-expression initializer should not cache
+   its type in tenv from arm sampling. But arm patterns can still detect
+   non-exhaustive matches. *)
+let match_expr_no_annotation_non_exhaustive_detected_via_patterns =
+  {|
+enum Shape {
+    Circle,
+    Square,
+}
+enum Choice {
+    A,
+    B,
+}
+fn test(ch: Choice) -> i32 {
+    let s = match ch {
+        Choice::A => Shape::Circle,
+        Choice::B => Shape::Square,
+    };
+    match s {
+        Shape::Circle => 1,
+    }
+}
+fn main() {
+    let r = test(Choice::A);
+}
+|}
+
 (* ======== Test registration ======== *)
 
 let positive_tests =
@@ -468,6 +648,37 @@ let regression_negative =
       fail ~expect:"AB::B" direct_block_scrutinee_non_exhaustive );
   ]
 
+let regression_whole_expr_positive =
+  [
+    ( "if-expr no annotation wildcard passes",
+      `Quick,
+      pass if_expr_no_annotation_empty_match );
+    ( "match-expr no annotation wildcard passes",
+      `Quick,
+      pass match_expr_no_annotation_wildcard );
+    ( "if-expr annotated exhaustive passes",
+      `Quick,
+      pass if_expr_annotated_exhaustive );
+  ]
+
+let regression_whole_expr_negative =
+  [
+    ( "if-expr annotated non-exhaustive rejected",
+      `Quick,
+      fail ~expect:"Color::Green" if_expr_annotated_non_exhaustive );
+    ( "match-expr annotated non-exhaustive rejected",
+      `Quick,
+      fail ~expect:"Shape::Square" match_expr_annotated_non_exhaustive );
+    ( "if-expr no annotation non-exhaustive via patterns",
+      `Quick,
+      fail ~expect:"Color::Green"
+        if_expr_no_annotation_non_exhaustive_detected_via_patterns );
+    ( "match-expr no annotation non-exhaustive via patterns",
+      `Quick,
+      fail ~expect:"Shape::Square"
+        match_expr_no_annotation_non_exhaustive_detected_via_patterns );
+  ]
+
 let () =
   Alcotest.run "exhaust"
     [
@@ -475,4 +686,6 @@ let () =
       ("negative", negative_tests);
       ("regression-positive", regression_positive);
       ("regression-negative", regression_negative);
+      ("regression-whole-expr-positive", regression_whole_expr_positive);
+      ("regression-whole-expr-negative", regression_whole_expr_negative);
     ]

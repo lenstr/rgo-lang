@@ -88,19 +88,17 @@ let match_position (scrutinee : expr) (arms : match_arm list) : int * int =
           (id.span.start.line, id.span.start.col)
       | _ -> (0, 0))
 
-(* Infer the type name of an expression from the init expression.
-   Follows block expressions, if-expressions, and match expressions
-   to find the underlying enum type produced by complex forms. *)
+(* Infer the type name of an expression from authoritative sources only.
+   Follows block expressions (whose final expression determines the type)
+   but does NOT sample individual branches of if-expressions or arms of
+   match-expressions, because those are multi-branch forms whose type
+   cannot be reliably determined by examining a single branch. *)
 let rec expr_type_name tenv fn_ret_types (e : expr) : string option =
   match e with
   | ExprIdent id -> SMap.find_opt id.node tenv
   | ExprPath (type_name, _) -> Some type_name.node
   | ExprCall (ExprIdent fn_name, _) -> List.assoc_opt fn_name.node fn_ret_types
   | ExprBlock { final_expr = Some fe; _ } -> expr_type_name tenv fn_ret_types fe
-  | ExprIf (_, { final_expr = Some te; _ }, _) ->
-      expr_type_name tenv fn_ret_types te
-  | ExprMatch (_, { arm_expr; _ } :: _) ->
-      expr_type_name tenv fn_ret_types arm_expr
   | _ -> None
 
 (* Resolve the scrutinee expression to an enum name using the type env *)
