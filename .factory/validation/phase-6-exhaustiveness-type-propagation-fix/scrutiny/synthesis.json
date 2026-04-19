@@ -1,0 +1,46 @@
+{
+  "milestone": "phase-6-exhaustiveness-type-propagation-fix",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "nix develop -c dune runtest",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "nix develop -c dune build",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "nix develop -c dune build @fmt",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "failedFeatures": [
+      "phase-6-fix-enum-type-propagation-for-block-scrutinees"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "phase-6-fix-enum-type-propagation-for-block-scrutinees",
+      "severity": "blocking",
+      "description": "`lib/exhaust.ml` infers `ExprIf` enum type information from only the then-branch final expression, so a let-bound value can be cached under the wrong enum when the else branch has a different effective type."
+    },
+    {
+      "featureId": "phase-6-fix-enum-type-propagation-for-block-scrutinees",
+      "severity": "blocking",
+      "description": "`lib/exhaust.ml` infers `ExprMatch` enum type information from only the first arm expression, which can poison the exhaustiveness type environment with a non-authoritative enum name and produce bogus missing-variant diagnostics later."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [],
+  "rejectedObservations": [],
+  "previousRound": null
+}

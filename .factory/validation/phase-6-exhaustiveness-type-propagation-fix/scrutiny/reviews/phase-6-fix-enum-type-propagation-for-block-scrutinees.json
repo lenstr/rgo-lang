@@ -1,0 +1,28 @@
+{
+  "featureId": "phase-6-fix-enum-type-propagation-for-block-scrutinees",
+  "reviewedAt": "2026-04-19T20:39:14.555967+00:00",
+  "commitId": "3afe3b6",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The patch correctly extends exhaustiveness type propagation through block, if, and match expressions, and the new regression tests exercise the block-produced cases described in the feature. However, the new `ExprIf` and `ExprMatch` inference is unsound because it inspects only the then branch or first arm, so let-bound values from mixed-type or non-enum-first-arm expressions can be recorded under the wrong enum name and later trigger bogus exhaustiveness errors.",
+    "issues": [
+      {
+        "file": "lib/exhaust.ml",
+        "line": 100,
+        "severity": "blocking",
+        "description": "`expr_type_name` infers `ExprIf` from only the then-branch final expression and ignores the else branch entirely. If the then branch yields an enum but the else branch yields a different non-enum type (or a different enum), `StmtLet` will still record the binding as the then-branch enum in `tenv`, and a later `match` on that value can be exhaustiveness-checked against the wrong enum. This is unsound because `Typecheck.check_if` only enforces equal branch types when both branches are non-void, not that the chosen then branch is authoritative for inference here."
+      },
+      {
+        "file": "lib/exhaust.ml",
+        "line": 102,
+        "severity": "blocking",
+        "description": "`expr_type_name` infers `ExprMatch` from the first arm expression only. When the first arm returns an enum-looking expression but the overall match expression is not actually that enum (for example because later arms differ, or the typechecker already reduced the result to `TVoid` for an empty/statement-like arm mix), `StmtLet` will still cache that first-arm enum name and later matches can report incorrect missing-variant diagnostics. Exhaustiveness type propagation should only reuse enum info when the whole expression is known to resolve to one authoritative enum type, not from a single representative arm."
+      }
+    ]
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/phase-6-exhaustiveness-fix/scrutiny/reviews/phase-6-fix-scrutinee-type-driven-exhaustiveness.json",
+  "summary": "Reviewed the feature handoff, transcript skeleton, and commit `3afe3b6`. The fix closes the original block-scrutinee gap and adds focused regression tests, but the newly added inference for `if` and `match` expressions is too heuristic to be authoritative and can poison the exhaustiveness type environment with the wrong enum name, so the review fails on correctness grounds."
+}
