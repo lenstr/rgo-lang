@@ -1,0 +1,48 @@
+{
+  "milestone": "phase-5-typecheck",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "nix develop -c dune runtest",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "nix develop -c dune build",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "nix develop -c dune build @fmt",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "failedFeatures": [
+      "phase-5-typecheck-inference-and-question-mark"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "phase-5-typecheck-inference-and-question-mark",
+      "severity": "blocking",
+      "description": "Trait method signatures are recorded using only explicit parameter types and return type; `sig_self` / `fn_self` is discarded. Later impl validation compares only parameter count/types and return type, so a trait requiring `fn touch(&mut self)` is incorrectly satisfied by `impl Trait for T { fn touch(&self) { ... } }` (and vice versa). This violates the trait contract and will allow non-mutating receivers to pass typecheck where mutation capability is required."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "skill:scrutiny-validator",
+      "suggestion": "Clarify that `.factory/services.yaml` is resolved relative to the repo root/working tree, not the mission home directory, so validators and reviewers do not attempt nonexistent absolute paths outside the repository.",
+      "evidence": "Attempting to read `/home/lenstr/.factory/services.yaml` returned ENOENT during review, while the repo clearly contains `.factory/library/*` under `/home/lenstr/workspace/personal/hack/rgo-lang/.factory/`.",
+      "isSystemic": true
+    }
+  ],
+  "rejectedObservations": [],
+  "previousRound": null
+}
