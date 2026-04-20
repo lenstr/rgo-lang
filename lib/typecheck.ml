@@ -185,10 +185,10 @@ let rec types_compatible ?(type_params = []) expected actual =
     (* TVoid acts as a wildcard for builtin constructors like HashMap::new() *)
     | _, TVoid -> true
     | TVoid, _ -> true
-    (* TParam is compatible with anything only when it is in scope as a
-       generic type parameter.  TParam-vs-TParam is always compatible
-       (both sides are generic). *)
-    | TParam _, TParam _ -> true
+    (* TParam is a wildcard only when its name is in the ~type_params list
+       (which should contain only the *callee's* generic parameters, not
+       the caller's in-scope parameters).  Same-name TParams are already
+       handled by the structural equality check at the top. *)
     | TParam p, _ -> List.mem p type_params
     | _, TParam p -> List.mem p type_params
     (* Struct/Enum with matching name: compatible when args are pairwise
@@ -202,8 +202,8 @@ let rec types_compatible ?(type_params = []) expected actual =
         && List.for_all2 (types_compatible ~type_params) args1 args2
     | _ -> false
 
-let expect_type ~env ~(span : span) ~expected ~actual =
-  if not (types_compatible ~type_params:env.type_params expected actual) then
+let expect_type ~env:_ ~(span : span) ~expected ~actual =
+  if not (types_compatible expected actual) then
     error_at span "type mismatch: expected %s, got %s" (show_ty expected)
       (show_ty actual)
 
@@ -400,19 +400,20 @@ and check_call env callee args =
           ret
       | _ -> error_at (expr_span callee) "expression is not callable")
 
-and check_fn_args ~env ~span ~name expected actual =
+and check_fn_args ~env:_ ~span ~name expected actual =
   let expected_len = List.length expected in
   let actual_len = List.length actual in
   if expected_len <> actual_len then
     error_at span "function '%s' expects %d argument(s), got %d" name
       expected_len actual_len;
   (* Collect TParam names from the callee's signature so they act as
-     wildcards even when the caller's env has no matching type_params. *)
+     wildcards — the callee's own generic parameters can be instantiated
+     with any concrete type.  The caller's in-scope type parameters are
+     NOT included: they are rigid/opaque in the caller. *)
   let sig_tparams = List.fold_left collect_tparams [] expected in
-  let tp = sig_tparams @ env.type_params in
   List.iter2
     (fun exp act ->
-      if not (types_compatible ~type_params:tp exp act) then
+      if not (types_compatible ~type_params:sig_tparams exp act) then
         error_at span "type mismatch: expected %s, got %s" (show_ty exp)
           (show_ty act))
     expected actual
@@ -961,7 +962,7 @@ and check_question env e =
   match (t, env.ret_ty) with
   | TResult (ok, err), Some (TResult (_, ret_err)) ->
       (* ? on Result<T,E> in Result-returning fn -> unwrap T, but error types must match *)
-      if not (types_compatible ~type_params:env.type_params ret_err err) then
+      if not (types_compatible ret_err err) then
         error_at span
           "`?` error type mismatch: function returns Result<_, %s> but \
            expression has error type %s"

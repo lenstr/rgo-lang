@@ -821,6 +821,33 @@ fn main() {
 }
 |}
 
+(* Regression: passing a generic parameter to a concrete-typed parameter
+   must be rejected.  T is not known to be i32. *)
+let invalid_generic_param_to_concrete =
+  {|
+fn takes_i32(x: i32) -> i32 {
+    x
+}
+fn foo<T>(x: T) -> i32 {
+    takes_i32(x)
+}
+fn main() {
+    let _ = foo(42);
+}
+|}
+
+(* Regression: returning a different generic parameter where another is
+   expected must be rejected.  B is not the same as A. *)
+let invalid_generic_param_cross_return =
+  {|
+fn bad<A, B>(a: A, b: B) -> A {
+    b
+}
+fn main() {
+    let _ = bad(1, 2);
+}
+|}
+
 (* Regression: generic constructor outside impl infers concrete type args.
    Box::new(42) should produce Box<i32>, satisfying the return type. *)
 let valid_generic_constructor_outside_impl =
@@ -1057,6 +1084,12 @@ let negative_tests =
     ( "generic assign type mismatch",
       `Quick,
       fail ~expect:"type mismatch" invalid_generic_assign );
+    ( "generic param to concrete rejected",
+      `Quick,
+      fail ~expect:"type mismatch" invalid_generic_param_to_concrete );
+    ( "generic cross-param return rejected",
+      `Quick,
+      fail ~expect:"type mismatch" invalid_generic_param_cross_return );
   ]
 
 let () =
