@@ -187,18 +187,43 @@ Run everything:
 nix develop -c dune runtest
 ```
 
-## Validation workflow
+## Compiler pipeline
 
-The compiler pipeline validates `.rg` programs through these phases in order:
+The compiler processes `.rg` programs through these phases in order:
 
 1. **Lexing** — tokenize with position tracking
-2. **Parsing** — produce a typed AST
+2. **Parsing** — produce the AST
 3. **Name resolution** — resolve identifiers, detect undefined/duplicate symbols
 4. **Type checking** — infer and check types, validate trait bounds
 5. **Exhaustiveness** — reject non-exhaustive `match` expressions
 6. **Code generation** — emit idiomatic Go, apply `gofmt`
 
 If any phase fails, the compiler reports the error with file, line, and column information and exits non-zero.
+
+## Validation
+
+Flake-backed commands used to validate the compiler:
+
+```bash
+nix develop -c dune build          # build the compiler
+nix develop -c dune runtest         # run the full test suite
+nix develop -c dune build @fmt      # check OCaml formatting
+nix develop -c dune exec rgoc -- --version  # smoke-test the CLI
+```
+
+The test suite also exercises the downstream generated-Go acceptance flow.
+For every codegen and e2e fixture the tests automatically run:
+
+```bash
+gofmt -d output.go   # verify formatter stability
+go build output.go   # verify the generated code compiles
+go vet output.go     # verify idiomatic Go analysis passes
+go run output.go     # verify runtime behavior matches expected output
+```
+
+This includes a final MVP acceptance program that compiles and runs
+a single integrated `.rg` source exercising traits, enums, match exhaustiveness,
+`Option`, `HashMap`, `Vec`, loops, generics, and method dispatch end-to-end.
 
 ## Documentation
 
