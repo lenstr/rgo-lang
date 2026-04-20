@@ -1036,6 +1036,41 @@ let test_go_version_adequate () =
         (String.length ver > 2 && String.sub ver 0 2 = "go")
   | Error msg -> Alcotest.fail ("Go version check failed: " ^ msg)
 
+let test_go_version_below_minimum () =
+  (* Simulate an old Go version line to verify the below-minimum error path *)
+  let line = "go version go1.21.5 linux/amd64" in
+  match Rgo.Driver.parse_go_version_line line with
+  | Error msg ->
+      Alcotest.(check bool)
+        "error mentions version" true (contains msg "go1.21.5");
+      Alcotest.(check bool)
+        "error mentions 1.26+ requirement" true (contains msg "Go 1.26+")
+  | Ok _ -> Alcotest.fail "Expected error for Go 1.21 but got Ok"
+
+let test_go_version_unparseable () =
+  (* Simulate completely garbled output *)
+  let line = "some random garbage output" in
+  match Rgo.Driver.parse_go_version_line line with
+  | Error msg ->
+      Alcotest.(check bool)
+        "error mentions parsing failure" true
+        (contains msg "cannot parse Go version")
+  | Ok _ -> Alcotest.fail "Expected error for unparseable output but got Ok"
+
+let test_go_version_success_simulated () =
+  (* Simulate a good Go version line to verify the success path independently *)
+  let line = "go version go1.26.1 linux/amd64" in
+  match Rgo.Driver.parse_go_version_line line with
+  | Ok v -> Alcotest.(check string) "parsed version" "go1.26.1" v
+  | Error msg -> Alcotest.fail ("Expected Ok for Go 1.26.1 but got: " ^ msg)
+
+let test_go_version_future () =
+  (* Simulate a future Go version to verify forward compatibility *)
+  let line = "go version go2.0.0 linux/amd64" in
+  match Rgo.Driver.parse_go_version_line line with
+  | Ok v -> Alcotest.(check string) "parsed version" "go2.0.0" v
+  | Error msg -> Alcotest.fail ("Expected Ok for Go 2.0 but got: " ^ msg)
+
 (* ---------- CLI pipeline (VAL-CROSS-001) ---------- *)
 
 let test_cli_pipeline () =
@@ -1280,6 +1315,14 @@ let () =
         [
           Alcotest.test_case "Go 1.26+ for trait Self" `Quick
             test_go_version_adequate;
+          Alcotest.test_case "below-minimum Go rejects" `Quick
+            test_go_version_below_minimum;
+          Alcotest.test_case "unparseable Go version" `Quick
+            test_go_version_unparseable;
+          Alcotest.test_case "simulated success path" `Quick
+            test_go_version_success_simulated;
+          Alcotest.test_case "future Go version OK" `Quick
+            test_go_version_future;
         ] );
       ( "cli-pipeline",
         [ Alcotest.test_case "source to runnable Go" `Quick test_cli_pipeline ]
