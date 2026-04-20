@@ -374,6 +374,27 @@ fn main() {
   let _go = compile_and_check ~expected_output:"done\n" src in
   ()
 
+(* ---------- Result signature without Err construction ---------- *)
+
+let test_result_sig_no_err_construction () =
+  let src =
+    {|
+fn maybe_ok(x: i64) -> Result<i64, str> {
+    Ok(x + 1)
+}
+
+fn main() {
+    let r = maybe_ok(41);
+    println("done");
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"done\n" src in
+  (* The generated Go must NOT import "errors" because no Err is constructed *)
+  Alcotest.(check bool) "no errors import" false (contains go "\"errors\"");
+  (* But it should still have the (int64, error) return signature *)
+  Alcotest.(check bool) "has error return" true (contains go "error")
+
 (* ---------- Array literal tests ---------- *)
 
 let test_array_literal () =
@@ -1172,6 +1193,8 @@ let () =
         [
           Alcotest.test_case "basic result" `Quick test_result_basic;
           Alcotest.test_case "let _ = result fn" `Quick test_let_wildcard_result;
+          Alcotest.test_case "result sig without Err" `Quick
+            test_result_sig_no_err_construction;
         ] );
       ( "question-mark",
         [

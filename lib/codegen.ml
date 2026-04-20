@@ -188,7 +188,6 @@ let go_ret_sig env (ret : Ast.ty option) : string =
   match ret with
   | None -> ""
   | Some (TyGeneric ({ node = "Result"; _ }, [ ok; _err ])) ->
-      env.shared.needs_errors <- true;
       " (" ^ go_type env ok ^ ", error)"
   | Some t -> " " ^ go_type env t
 
