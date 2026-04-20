@@ -319,6 +319,43 @@ fn main() {
   Alcotest.(check bool) "returns *int64" true (contains go "*int64");
   Alcotest.(check bool) "literal is typed" true (contains go "int64(0)")
 
+(* Regression: Some(-1) must emit new(int64(-1)) not new(-1) *)
+let test_option_negative_int_literal () =
+  let src =
+    {|
+fn get_neg() -> Option<i64> {
+    Some(-1)
+}
+
+fn main() {
+    let r = get_neg();
+    println("done");
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"done\n" src in
+  Alcotest.(check bool) "returns *int64" true (contains go "*int64");
+  Alcotest.(check bool) "negative literal is typed" true (contains go "int64(")
+
+(* Regression: Some(-1.5) as f32 must emit new(float32(-1.5)) not new(-1.5) *)
+let test_option_negative_float_literal () =
+  let src =
+    {|
+fn get_neg_f() -> Option<f32> {
+    Some(-1.5)
+}
+
+fn main() {
+    let r = get_neg_f();
+    println("done");
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"done\n" src in
+  Alcotest.(check bool) "returns *float32" true (contains go "*float32");
+  Alcotest.(check bool)
+    "negative float literal is typed" true (contains go "float32(")
+
 (* ---------- Result tests ---------- *)
 
 let test_result_basic () =
@@ -1381,6 +1418,10 @@ let () =
             test_option_non_nullable;
           Alcotest.test_case "nullable option" `Quick test_option_nullable;
           Alcotest.test_case "literal int option" `Quick test_option_literal_int;
+          Alcotest.test_case "negative int literal option" `Quick
+            test_option_negative_int_literal;
+          Alcotest.test_case "negative float literal option" `Quick
+            test_option_negative_float_literal;
         ] );
       ( "result",
         [

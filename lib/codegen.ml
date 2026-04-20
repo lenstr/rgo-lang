@@ -837,11 +837,22 @@ and gen_return_none env buf =
 
 and gen_new_expr env buf indent (inner_ty : Ast.ty option) arg =
   (* Emit new(ty(lit)) for literal args to avoid Go untyped constant issues
-     (e.g., new(0) produces *int, but we need *int64). *)
+     (e.g., new(0) produces *int, but we need *int64). Also handles negative
+     literals like -1, -1.5 which are ExprUnary(Neg, ExprLit ...). *)
   Buffer.add_string buf "new(";
+  let is_int_literal = function
+    | Ast.ExprLit (LitInt _) -> true
+    | Ast.ExprUnary (Neg, ExprLit (LitInt _)) -> true
+    | _ -> false
+  in
+  let is_float_literal = function
+    | Ast.ExprLit (LitFloat _) -> true
+    | Ast.ExprUnary (Neg, ExprLit (LitFloat _)) -> true
+    | _ -> false
+  in
   let needs_cast =
-    match (inner_ty, arg) with
-    | Some ty, Ast.ExprLit (LitInt _) ->
+    match inner_ty with
+    | Some ty when is_int_literal arg ->
         let gt = go_type env ty in
         if gt <> "int" then begin
           Buffer.add_string buf gt;
@@ -849,7 +860,7 @@ and gen_new_expr env buf indent (inner_ty : Ast.ty option) arg =
           true
         end
         else false
-    | Some ty, Ast.ExprLit (LitFloat _) ->
+    | Some ty when is_float_literal arg ->
         let gt = go_type env ty in
         if gt <> "float64" then begin
           Buffer.add_string buf gt;
