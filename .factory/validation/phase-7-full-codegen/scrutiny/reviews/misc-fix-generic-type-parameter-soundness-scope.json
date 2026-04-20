@@ -1,0 +1,15 @@
+{
+  "featureId": "misc-fix-generic-type-parameter-soundness-scope",
+  "reviewedAt": "2026-04-20T13:18:57Z",
+  "commitId": "91be93dfbff5de8d13580e1bf2e4707a062e6186",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The follow-up fix fully addresses the original generic soundness gap. `types_compatible` no longer treats different `TParam`s as interchangeable, `expect_type` now checks assignments/returns/branch merges with rigid caller-side type parameters, and `check_fn_args` limits wildcard matching to type parameters that belong to the callee signature. That closes the prior unsound cases (`fn foo<T>(x: T) { takes_i32(x); }` and `fn bad<A, B>(a: A, b: B) -> A { b }`) while preserving the previously valid generic constructor and generic `Self` paths that remain covered by the existing positive tests.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/phase-7-full-codegen/scrutiny/reviews/misc-fix-generic-type-compatibility-soundness.json",
+  "summary": "Reviewed the prior failed scrutiny report, both feature entries in mission metadata, both handoffs, both transcript skeletons, the compiler-worker skill, and the current `91be93d` diff in `lib/typecheck.ml` and `test/test_typecheck.ml`. The new patch removes the remaining caller-scope `TParam` wildcard behavior identified by the original review and adds direct negative regressions for the two unsound programs, while the existing positive generic constructor / generic-`Self` cases are still present in the test suite. No additional shared-state gaps were identified, and no extra validation rerun was needed beyond the already-passing targeted coverage recorded in the handoff and validator outputs."
+}

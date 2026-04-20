@@ -1,0 +1,15 @@
+{
+  "featureId": "phase-7-fix-result-option-example-runtime-regression",
+  "reviewedAt": "2026-04-20T11:23:35.857526+00:00",
+  "commitId": "ebb7eccda4ad136f3982d2a23d5b54e75cf9c4a2",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix resolves the prior gap. `examples/result_option.rg` is back to a direct-main program with no wrapper helpers, and `test/test_codegen.ml` now validates the shipped example end-to-end by asserting stdout `5\\n12\\n1\\n11\\n` via `compile_and_check`, which runs `go run` when `expected_output` is provided.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/phase-7-full-codegen/scrutiny/reviews/phase-7-fix-result-option-example-regression.json",
+  "summary": "Review passed: the missing runtime validation is restored, the example no longer relies on wrapper helpers, and the regression test now exercises the shipped `result_option.rg` through the runtime path."
+}

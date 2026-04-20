@@ -1,0 +1,15 @@
+{
+  "featureId": "phase-7-fix-generic-zero-values-on-error-paths",
+  "reviewedAt": "2026-04-20T11:26:37Z",
+  "commitId": "59c66d1d6a4631beaa56d01d6961c68ed9df504e",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix addresses the prior blocking bug: `go_zero_value` now preserves generic type arguments for nominal `TyGeneric` values, and all Result/error-path emission sites route through that helper. The new regression test covers a generic `Result<Self, str>` associated function, and its compile/build/vet checks would fail if the old bare `Pair{}` emission still occurred.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/phase-7-full-codegen/scrutiny/reviews/misc-fix-codegen-generic-type-parameter-emission.json",
+  "summary": "Reviewed the original failed review, feature metadata, worker transcript skeleton, handoff, and commit `59c66d1d6a4631beaa56d01d6961c68ed9df504e`. `lib/codegen.ml:212-214` now emits `Name[args]{}` for generic nominal zero values, and the added regression in `test/test_codegen.ml:1344-1373` demonstrates that generic `Result` error paths preserve type arguments and still produce Go that passes formatting/build/vet execution in the test harness."
+}

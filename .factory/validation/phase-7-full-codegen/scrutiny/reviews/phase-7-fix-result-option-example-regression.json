@@ -1,0 +1,28 @@
+{
+  "featureId": "phase-7-fix-result-option-example-regression",
+  "reviewedAt": "2026-04-20T07:29:13.079492+00:00",
+  "commitId": "0cdee8e1c99722ad797e73b3f2d5c94697ba362f",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The worker repaired the example fixture and added regression coverage, but the assigned feature ID does not match the implemented feature recorded in mission metadata and the new regression test only proves compile/build cleanliness, not the full example pipeline behavior described for the fix feature.",
+    "issues": [
+      {
+        "file": "test/test_codegen.ml",
+        "line": 614,
+        "severity": "blocking",
+        "description": "The added regression test only calls `compile_and_check src` without an `expected_output`, so it verifies parse/typecheck/codegen plus gofmt/build/vet, but never executes the example or asserts observable behavior. The feature description says the example should no longer break the end-to-end example pipeline, and the handoff claims full-pipeline validation; without a runtime assertion this test would still pass if the example later compiled but misbehaved at `go run` time."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "knowledge",
+      "observation": "Mission metadata still names the implemented feature `phase-7-fix-result-option-example-fixture`, while the scrutiny assignment refers to `phase-7-fix-result-option-example-regression`. This mismatch makes traceability between the assigned review target and the recorded implementation artifact ambiguous.",
+      "evidence": "features.json:1367 records the completed feature as `phase-7-fix-result-option-example-fixture`; the reviewed handoff file is `...__phase-7-fix-result-option-example-fixture__9ee043e5-ab3b-4a85-9c05-b37526e5fd6a.json`; the parent task asked for `phase-7-fix-result-option-example-regression`."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Review failed: the code change fixes the undefined `parse_int` usage and adds coverage, but the regression test does not actually exercise runtime behavior for the example, so it falls short of fully proving the end-to-end example pipeline remains healthy."
+}

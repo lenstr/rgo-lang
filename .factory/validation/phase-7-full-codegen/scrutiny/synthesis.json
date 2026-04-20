@@ -1,0 +1,38 @@
+{
+  "milestone": "phase-7-full-codegen",
+  "round": 3,
+  "status": "pass",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "nix develop -c dune runtest",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "nix develop -c dune build",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "nix develop -c dune build @fmt",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "failedFeatures": []
+  },
+  "blockingIssues": [],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [],
+  "rejectedObservations": [
+    {
+      "observation": "Re-report the already-superseded misc-followups-3 generic-soundness complaint instead of evaluating the current fix state.",
+      "reason": "superseded by later follow-up work; the new round-3 review confirmed the remaining generic type-parameter soundness defect is fixed in current code."
+    }
+  ],
+  "previousRound": ".factory/validation/phase-7-full-codegen/scrutiny/synthesis.round2.json"
+}

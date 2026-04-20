@@ -1,0 +1,39 @@
+{
+  "featureId": "phase-7-full-codegen-core-types-and-control-flow",
+  "reviewedAt": "2026-04-20T07:29:47.643038+00:00",
+  "commitId": "f039cf569f39b4dfba199adef8c9acd8131a98e3",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The core Phase 7 codegen rewrite is substantial and the commit implements many requested mappings, but this feature overreaches its declared scope and milestone contract: it claims only core types/control-flow coverage, yet it adds and relies on impl/collection/go-cleanliness coverage that belongs to the separate follow-up feature. The dedicated pointer-receiver regression also does not actually exercise a non-addressable receiver call site.",
+    "issues": [
+      {
+        "file": "test/test_codegen.ml",
+        "line": 568,
+        "severity": "blocking",
+        "description": "The required non-addressable pointer-receiver scenario is not actually covered. `test_pointer_receiver_non_addressable` calls `p.get_x()` where `p` is a local variable, which is addressable in Go. This misses the feature requirement and VAL-CODEGEN-015 requirement for a non-addressable expression such as a constructor/temporary result."
+      },
+      {
+        "file": "/home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/features.json",
+        "line": 1394,
+        "severity": "blocking",
+        "description": "The commit adds impl/Vec/HashMap/go-cleanliness/go-version coverage that belongs to the separate feature `phase-7-impls-collections-and-go-cleanliness`. Those tests and behaviors are outside this feature's description/fulfills set, so the implementation does not align cleanly with the milestone contract and makes later feature boundaries unverifiable."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The compiler-worker skill says tests should be written first, but the worker explicitly deviated because this was a full rewrite. For large compiler rewrites, the skill procedure may need to acknowledge when test scaffolding depends on implementation shape.",
+      "evidence": "Handoff skillFeedback.deviations for session 87d0665c-277e-43d7-8d7f-f3649ea93874 states codegen was implemented before tests because the module was rewritten from a small stub to ~2000 lines."
+    },
+    {
+      "area": "conventions",
+      "observation": "Feature scope boundaries in `features.json` matter for reviewability: this Phase 7 core feature was supposed to stop before impl/collection/go-cleanliness work, but the worker added those tests here anyway. The mission shared state should emphasize that workers must not pre-consume later feature scope even if code happens to support it.",
+      "evidence": "Feature `phase-7-full-codegen-core-types-and-control-flow` fulfills only core codegen items, while separate feature `phase-7-impls-collections-and-go-cleanliness` is defined at features.json:1394 with impls/collections/go-cleanliness responsibilities. test/test_codegen.ml in commit f039cf5 already contains impl, Vec, HashMap, representative go-vet, and Go-version tests."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Review failed: the commit delivers much of the requested core codegen machinery, but it misses the specific non-addressable pointer-receiver coverage it claims and it folds in responsibilities reserved for the next Phase 7 feature, breaking feature/milestone contract alignment."
+}

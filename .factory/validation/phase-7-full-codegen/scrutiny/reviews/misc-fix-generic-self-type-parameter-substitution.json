@@ -1,0 +1,28 @@
+{
+  "featureId": "misc-fix-generic-self-type-parameter-substitution",
+  "reviewedAt": "2026-04-20T07:29:37.795437+00:00",
+  "commitId": "6a0fb86a305bfff59dcf7f821c857f4e5a37068f",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The feature fixes the immediate generic `Self` substitution bug, but it also weakens generic type compatibility so far that mismatched generic instantiations can pass typechecking. That introduces a compiler soundness regression beyond the requested scope.",
+    "issues": [
+      {
+        "file": "lib/typecheck.ml",
+        "line": 186,
+        "severity": "blocking",
+        "description": "`types_compatible` now treats any in-scope `TParam` as compatible with any type. Because `check_fn_args` seeds `type_params` from the callee signature, unrelated generic parameters become wildcards across method bodies and call sites. This allows invalid programs where one generic parameter is returned or assigned as another distinct generic parameter to typecheck, so concrete mismatches such as returning an `A` where `B` is required can slip through. The feature needed to preserve concrete `Self` arguments like `Box<T>`; it did not justify making all in-scope type parameters universally compatible."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The compiler-worker skill's manual-check guidance is too coarse for semantic-only fixes that reuse codegen fixtures. It nudged this worker to record a `.rg -> .go` pipeline check even though the handoff also documented that generic Go emission was still broken until a later feature fixed it.",
+      "evidence": "The handoff for `misc-fix-generic-self-type-parameter-substitution` records `nix develop -c dune exec rgoc -- examples/generics.rg -o /tmp/test_generics.go` and notes the generated Go still had a separate codegen gap, while `.factory/skills/compiler-worker/SKILL.md` step 6 broadly requires manual `.rg -> .go` checks for codegen or CLI features without clarifying semantic-only follow-up fixes."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed the feature handoff, transcript skeleton, and commit `6a0fb86a305bfff59dcf7f821c857f4e5a37068f`. The targeted generic `Self` substitution behavior is covered, but the implementation also introduces an unsound generic-compatibility relaxation in `lib/typecheck.ml`, so this review fails with one blocking issue."
+}

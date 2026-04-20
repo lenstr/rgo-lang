@@ -1,0 +1,21 @@
+{
+  "featureId": "phase-7-fix-non-addressable-pointer-receiver-regression",
+  "reviewedAt": "2026-04-20T14:26:07+03:00",
+  "commitId": "5b1bdd7",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix resolves the prior blocking gap. The regression test now uses a genuinely non-addressable rvalue receiver (`Counter::new(42).get()`) and checks runtime output, while the codegen change fixes the underlying detection/generation path by resolving associated-function `Self` returns to the concrete receiver type and emitting a typed temporary-binding wrapper when the pointer-receiver call returns a value.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `compiler-worker` skill requires a manual representative `.rg -> .go` sanity-check with the exact command/output path recorded for codegen features, but this worker session only recorded `dune runtest`/`@fmt` validation and still marked `followedProcedure` true. Either the skill should clarify that `compile_and_check`-based coverage satisfies step 6, or workers should record an explicit manual `rgoc` flow in the handoff.",
+      "evidence": "`.factory/skills/compiler-worker/SKILL.md` step 6 requires a manual `.rg -> .go` check; the transcript skeleton for worker session `91e8252d-05c8-488e-8fb6-b4af40f6a962` and its handoff list only `nix develop -c dune runtest --no-buffer`, `nix develop -c dune runtest`, and `nix develop -c dune build @fmt`."
+    }
+  ],
+  "addressesFailureFrom": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/phase-7-full-codegen/scrutiny/reviews/phase-7-full-codegen-core-types-and-control-flow.json",
+  "summary": "Pass: the rerun fixes the real defect behind VAL-CODEGEN-015 coverage by handling `Self`-returning associated constructors in type inference, preserving return values in the non-addressable temporary wrapper, and updating the regression to a true rvalue pointer-receiver call that builds and runs correctly."
+}

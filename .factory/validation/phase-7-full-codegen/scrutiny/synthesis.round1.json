@@ -1,0 +1,92 @@
+{
+  "milestone": "phase-7-full-codegen",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "nix develop -c dune runtest",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "nix develop -c dune build",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "nix develop -c dune build @fmt",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 5,
+    "passed": 0,
+    "failed": 5,
+    "failedFeatures": [
+      "phase-7-full-codegen-core-types-and-control-flow",
+      "phase-7-fix-result-option-example-regression",
+      "phase-7-impls-collections-and-go-cleanliness",
+      "misc-fix-generic-self-type-parameter-substitution",
+      "misc-fix-codegen-generic-type-parameter-emission"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "phase-7-full-codegen-core-types-and-control-flow",
+      "severity": "blocking",
+      "description": "The dedicated pointer-receiver regression does not actually use a non-addressable receiver call site, so VAL-CODEGEN-015 is not truly covered."
+    },
+    {
+      "featureId": "phase-7-full-codegen-core-types-and-control-flow",
+      "severity": "blocking",
+      "description": "The feature commit includes impl/Vec/HashMap/go-cleanliness/go-version coverage that belongs to a separate phase-7 feature, breaking feature-boundary contract clarity and reviewability."
+    },
+    {
+      "featureId": "phase-7-fix-result-option-example-regression",
+      "severity": "blocking",
+      "description": "The regression test only checks compile/build cleanliness and never runs the repaired example, so it does not prove end-to-end runtime behavior for the example pipeline."
+    },
+    {
+      "featureId": "phase-7-impls-collections-and-go-cleanliness",
+      "severity": "blocking",
+      "description": "The Go 1.26+ validation only checks the success path in the current environment and does not exercise the required user-visible warning/failure path for unsupported Go versions, leaving VAL-CROSS-007 unverified."
+    },
+    {
+      "featureId": "misc-fix-generic-self-type-parameter-substitution",
+      "severity": "blocking",
+      "description": "The typechecker change makes in-scope generic type parameters act as universal wildcards in `types_compatible`, introducing a soundness regression beyond the intended Self-substitution fix."
+    },
+    {
+      "featureId": "misc-fix-codegen-generic-type-parameter-emission",
+      "severity": "blocking",
+      "description": "Codegen still drops type arguments when emitting zero values for generic nominal types, so error paths like `Result<Pair[A, B], str>` can still generate invalid Go."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Reinforce that workers must not pre-consume later feature scope even when the code already supports it; each feature should stay within its declared fulfills and verification boundary.",
+      "evidence": "The review for `phase-7-full-codegen-core-types-and-control-flow` found impl/collections/go-cleanliness coverage added in a commit whose feature description only covered core codegen responsibilities, while those responsibilities were assigned to `phase-7-impls-collections-and-go-cleanliness`.",
+      "isSystemic": true
+    },
+    {
+      "target": "skill:compiler-worker",
+      "suggestion": "Clarify how to handle large rewrites where fully test-first sequencing is impractical, and distinguish semantic-only follow-up fixes from true codegen milestones when requiring manual `.rg -> .go` checks.",
+      "evidence": "Two reviews surfaced skill friction: the core Phase 7 rewrite explicitly deviated from test-first because the module was rewritten wholesale, and the generic Self semantic fix recorded a manual codegen check even though a separate later feature was still needed to repair generic Go emission.",
+      "isSystemic": true
+    }
+  ],
+  "rejectedObservations": [
+    {
+      "observation": "Add a library note that `go vet` is part of standard Phase 7 generated-Go cleanliness validation.",
+      "reason": "already-documented in mission AGENTS.md and reflected operationally in tests; no additional library entry was necessary."
+    },
+    {
+      "observation": "Record the feature-name mismatch between `phase-7-fix-result-option-example-fixture` and `phase-7-fix-result-option-example-regression` as shared-state knowledge.",
+      "reason": "ambiguous traceability issue for orchestrator cleanup rather than durable repository knowledge."
+    }
+  ],
+  "previousRound": null
+}

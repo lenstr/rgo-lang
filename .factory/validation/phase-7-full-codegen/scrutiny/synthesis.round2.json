@@ -1,0 +1,53 @@
+{
+  "milestone": "phase-7-full-codegen",
+  "round": 2,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "nix develop -c dune runtest",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "nix develop -c dune build",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "nix develop -c dune build @fmt",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 5,
+    "passed": 4,
+    "failed": 1,
+    "failedFeatures": [
+      "misc-fix-generic-type-compatibility-soundness"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "misc-fix-generic-type-compatibility-soundness",
+      "severity": "blocking",
+      "description": "`types_compatible` still treats in-scope generic parameters as wildcards, and direct rerun probes confirmed unsound programs like `fn foo<T>(x: T) { takes_i32(x) }` and `fn bad<A, B>(a: A, b: B) -> A { b }` compile successfully."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "skill:compiler-worker",
+      "suggestion": "Clarify whether codegen features must always record an explicit manual `.rg -> .go` command in the handoff, or whether `compile_and_check`-style end-to-end coverage satisfies the manual-check requirement.",
+      "evidence": "The rerun review for `phase-7-fix-non-addressable-pointer-receiver-regression` found the worker marked `followedProcedure` true while only recording test-suite validation, even though step 6 of the compiler-worker skill requires a representative manual `.rg -> .go` sanity-check command and output path.",
+      "isSystemic": false
+    }
+  ],
+  "rejectedObservations": [
+    {
+      "observation": "Re-raise the prior core-vs-later Phase 7 scope-overreach finding as a fresh blocking code defect in this rerun.",
+      "reason": "guidance/accounting issue already captured in round 1 and explicitly superseded as non-feature follow-up guidance for this rerun."
+    }
+  ],
+  "previousRound": ".factory/validation/phase-7-full-codegen/scrutiny/synthesis.round1.json"
+}

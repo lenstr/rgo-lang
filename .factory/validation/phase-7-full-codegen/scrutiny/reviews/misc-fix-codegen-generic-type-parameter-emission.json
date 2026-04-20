@@ -1,0 +1,22 @@
+{
+  "featureId": "misc-fix-codegen-generic-type-parameter-emission",
+  "reviewedAt": "2026-04-20T07:29:24Z",
+  "commitId": "5e393532ca40543d346c9313da33a9a3b8e5cd03",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The feature fixes generic type-parameter emission for declarations and the added regression tests cover the reported Box/Pair/identity paths, but the codegen still emits invalid zero values for generic named types such as Pair[A, B] on Result error paths because go_zero_value drops type arguments. That leaves the implementation short of the milestone requirement that generic structs, functions, and methods emit valid Go type parameter declarations and uses.",
+    "issues": [
+      {
+        "file": "lib/codegen.ml",
+        "line": 213,
+        "severity": "blocking",
+        "description": "go_zero_value returns `name + \"{}\"` for every generic nominal type, so a zero value for `Pair[A, B]` becomes `Pair{}` instead of `Pair[A, B]{}`. Any generated function or method returning `Result<Pair[A, B], str>` (or another generic nominal type on an error path) will still produce invalid Go, so generic type uses are not fixed comprehensively."
+      }
+    ]
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed the worker transcript skeleton, handoff, skill, mission contract, and commit 5e39353. The patch correctly repairs generic declarations and receivers and adds meaningful regression coverage, but a remaining blocking bug in generic zero-value emission means the feature does not yet fully satisfy the generic Go codegen requirement."
+}

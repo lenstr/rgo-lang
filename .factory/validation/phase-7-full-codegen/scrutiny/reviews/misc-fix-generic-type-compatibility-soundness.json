@@ -1,0 +1,22 @@
+{
+  "featureId": "misc-fix-generic-type-compatibility-soundness",
+  "reviewedAt": "2026-04-20T11:27:18Z",
+  "commitId": "1323fae324a6dfb5a096595c9a5c570e183a9b57",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The patch fixes the non-generic wildcard cases from the prior review and removes the bare-vs-instantiated nominal shortcut, but it does not fully resolve the original soundness defect: in-scope generic parameters are still treated as wildcards, so generic bodies and generic callers can still mix unrelated type parameters or pass a generic value where a concrete type is required.",
+    "issues": [
+      {
+        "file": "lib/typecheck.ml",
+        "line": 191,
+        "severity": "blocking",
+        "description": "`types_compatible` still accepts any `TParam` pair (`line 191`) and any in-scope `TParam` against arbitrary types (`lines 192-193`). Because `expect_type` uses the current generic scope (`lines 205-206`) and `check_fn_args` unions the callee and caller generic names before calling the same predicate (`lines 409-415`), programs in generic scopes remain unsound: e.g. `fn bad<A, B>(a: A, b: B) -> A { b }`, `let x: A = 42`, or `fn foo<T>(x: T) { takes_i32(x) }` would still typecheck. That is the core defect the original failed review described, so this rerun fix is incomplete."
+      }
+    ]
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/phase-7-full-codegen/scrutiny/reviews/misc-fix-generic-self-type-parameter-substitution.json",
+  "summary": "Reviewed the original failed review, mission metadata, worker transcript skeleton, handoff, compiler-worker skill, commit `1323fae324a6dfb5a096595c9a5c570e183a9b57`, and the current `lib/typecheck.ml`/`test/test_typecheck.ml` state. The fix repairs the specific non-generic regressions covered by the new tests, but the original soundness problem is still present inside generic scopes because in-scope type parameters remain wildcards, so this review stays in fail status."
+}

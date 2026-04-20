@@ -1,0 +1,28 @@
+{
+  "featureId": "phase-7-impls-collections-and-go-cleanliness",
+  "reviewedAt": "2026-04-20T07:29:21Z",
+  "commitId": "9995779391e12cc502b1369d1b0e5015ff2692ef",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The feature materially extends Phase 7 coverage for impls, collections, and Go-tool cleanliness, but it does not fully satisfy the milestone contract because the new VAL-CROSS-007 coverage only checks the current toolchain version and never exercises the required warning/failure path for an insufficient Go version.",
+    "issues": [
+      {
+        "file": "test/test_codegen.ml",
+        "line": 991,
+        "severity": "blocking",
+        "description": "The added `Go 1.26+ for trait Self` test only asserts that `check_go_version_adequate()` succeeds in the current environment. VAL-CROSS-007 explicitly requires a user-visible warning or failure path when the environment is below Go 1.26, but no test or fixture simulates or asserts that unsupported-version path, so the feature does not actually verify the requirement it claims to cover."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "knowledge",
+      "observation": "Phase 7 codegen validation now treats `go vet` as part of the standard generated-Go cleanliness contract, not just `gofmt` and `go build`.",
+      "evidence": "test/test_codegen.ml:43-90 adds `go vet` to the shared `compile_and_check` helper used by codegen tests; AGENTS.md already mentions `go vet`, but `.factory/library/` had no Phase 7-specific note and the worker handoff highlights this as a milestone-wide expansion."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed commit `9995779` and the worker transcript/handoff for `phase-7-impls-collections-and-go-cleanliness`. Struct/enum impl, Vec/HashMap, and Go-tooling coverage were expanded substantially, but the feature should fail scrutiny because its claimed VAL-CROSS-007 coverage never validates the below-Go-1.26 warning/failure behavior required by the validation contract."
+}
