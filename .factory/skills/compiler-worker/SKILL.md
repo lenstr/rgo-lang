@@ -9,7 +9,7 @@ NOTE: Startup and cleanup are handled by `worker-base`. This skill defines the W
 
 ## When to Use This Skill
 
-Use for compiler implementation features in this mission: project skeleton, lexer, parser/AST, semantic analysis, typechecking, exhaustiveness, code generation, CLI behavior, and trait support.
+Use for compiler implementation features in this mission: parser/AST, semantic analysis, ownership and move tracking, Drop/Copy/Clone behavior, exhaustiveness, code generation, CLI behavior, and related examples/tests.
 
 ## Required Skills
 
@@ -22,9 +22,10 @@ None.
 3. Write or extend tests first for the requested behavior. For compiler work this usually means unit tests, negative fixtures, snapshot/expect tests, or e2e fixtures. Make the new tests fail before implementing the feature.
 4. Implement the smallest code change set needed to make the new tests pass while preserving PRD behavior.
 5. Run the narrowest relevant validators during iteration, then run the mission-level validators from `.factory/services.yaml` before handoff.
-6. For codegen or CLI features, manually sanity-check at least one representative `.rg -> .go` flow and record the exact command/output path in the handoff.
-7. Do not leave generated temp files or long-running processes behind. Clean up temporary outputs created for manual verification unless the feature explicitly adds fixtures.
-8. In the handoff, be explicit about tests added, commands run, manual checks performed, and anything skipped or blocked.
+6. For codegen, CLI, or ownership-sensitive features (Drop/Copy/Clone/moves), manually sanity-check at least one representative `.rg -> .go` flow and record the exact command/output path plus the observed runtime or diagnostic result in the handoff.
+7. When a feature changes ownership-sensitive behavior, prefer one negative compile-path test and one positive generated-Go/runtime path so move-vs-copy-vs-clone vs cleanup timing are all observable.
+8. Do not leave generated temp files or long-running processes behind. Clean up temporary outputs created for manual verification unless the feature explicitly adds fixtures.
+9. In the handoff, be explicit about tests added, commands run, manual checks performed, and anything skipped or blocked.
 
 ## Example Handoff
 
