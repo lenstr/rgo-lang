@@ -854,7 +854,18 @@ and gen_path_call env buf indent type_name fn_name args =
       | None ->
           (* Check impl assoc functions *)
           gen_assoc_fn_call env buf indent type_name fn_name args)
-  | None -> gen_assoc_fn_call env buf indent type_name fn_name args
+  | None ->
+      if not (gen_builtin_path_call buf type_name fn_name) then
+        gen_assoc_fn_call env buf indent type_name fn_name args
+
+and gen_builtin_path_call buf type_name fn_name =
+  match (type_name.node, fn_name.node) with
+  | ("HashMap" | "Vec"), "new" ->
+      (* Handled specially in gen_stmt for let bindings with type annotations.
+         If we reach here (e.g., expression context without let), emit nil. *)
+      Buffer.add_string buf "nil";
+      true
+  | _ -> false
 
 and gen_assoc_fn_call env buf indent type_name fn_name args =
   let is_pub = fn_name_is_pub fn_name.node env type_name.node in
@@ -1445,24 +1456,30 @@ and gen_match_as_return env buf indent scrutinee arms =
 
 and gen_block_with_return env buf indent blk =
   let inner = push_scope env in
-  List.iter
-    (fun s ->
-      Buffer.add_string buf indent;
-      gen_stmt inner buf indent s;
-      Buffer.add_char buf '\n')
-    blk.stmts;
+  let inner =
+    List.fold_left
+      (fun env s ->
+        Buffer.add_string buf indent;
+        let env = gen_stmt env buf indent s in
+        Buffer.add_char buf '\n';
+        env)
+      inner blk.stmts
+  in
   match blk.final_expr with
   | Some e -> gen_final_expr_as_return inner buf indent e
   | None -> ()
 
 and gen_block_stmts env buf indent blk =
   let inner = push_scope env in
-  List.iter
-    (fun s ->
-      Buffer.add_string buf indent;
-      gen_stmt inner buf indent s;
-      Buffer.add_char buf '\n')
-    blk.stmts;
+  let inner =
+    List.fold_left
+      (fun env s ->
+        Buffer.add_string buf indent;
+        let env = gen_stmt env buf indent s in
+        Buffer.add_char buf '\n';
+        env)
+      inner blk.stmts
+  in
   match blk.final_expr with
   | Some e ->
       Buffer.add_string buf indent;
@@ -1605,9 +1622,9 @@ and gen_repeat env buf indent elem count =
       gen_expr env buf indent CtxExpr count;
       Buffer.add_char buf ')'
 
-and gen_stmt env buf indent (s : Ast.stmt) : unit =
+and gen_stmt env buf indent (s : Ast.stmt) : cg_env =
   match s with
-  | StmtLet { pat = PatBind name; ty; init; _ } ->
+  | StmtLet { pat = PatBind name; ty; init; is_mut } ->
       let binding_ty =
         match ty with Some t -> Some t | None -> infer_expr_type env init
       in
@@ -1615,6 +1632,14 @@ and gen_stmt env buf indent (s : Ast.stmt) : unit =
       (match (ty, init) with
       | Some t, ExprArray [] ->
           Printf.bprintf buf "var %s %s" esc_name (go_type env t)
+      | ( Some (TyGeneric ({ node = "HashMap"; _ }, _) as t),
+          ExprCall (ExprPath ({ node = "HashMap"; _ }, { node = "new"; _ }), [])
+        ) ->
+          Printf.bprintf buf "%s := make(%s)" esc_name (go_type env t)
+      | ( Some (TyGeneric ({ node = "Vec"; _ }, _) as t),
+          ExprCall (ExprPath ({ node = "Vec"; _ }, { node = "new"; _ }), []) )
+        ->
+          Printf.bprintf buf "%s := make(%s, 0)" esc_name (go_type env t)
       | Some t, _ when needs_explicit_type t init ->
           Buffer.add_string buf "var ";
           Buffer.add_string buf esc_name;
@@ -1635,14 +1660,21 @@ and gen_stmt env buf indent (s : Ast.stmt) : unit =
           Buffer.add_string buf " := ";
           gen_let_init env buf indent ty init);
       Printf.bprintf buf "\n%s_ = %s" indent esc_name;
-      ignore (add_value name.node binding_ty ~is_mut:false env)
+      add_value name.node binding_ty ~is_mut env
   | StmtLet { pat = PatWild; init; _ } ->
       Buffer.add_string buf "_ = ";
-      gen_expr env buf indent CtxExpr init
+      gen_expr env buf indent CtxExpr init;
+      env
   | StmtLet _ -> failwith "codegen: unsupported let pattern"
-  | StmtExpr (ExprQuestion e) -> gen_question_stmt env buf indent e
-  | StmtExpr (ExprReturn _ as ret) -> gen_expr env buf indent CtxStmt ret
-  | StmtExpr e -> gen_expr env buf indent CtxStmt e
+  | StmtExpr (ExprQuestion e) ->
+      gen_question_stmt env buf indent e;
+      env
+  | StmtExpr (ExprReturn _ as ret) ->
+      gen_expr env buf indent CtxStmt ret;
+      env
+  | StmtExpr e ->
+      gen_expr env buf indent CtxStmt e;
+      env
 
 and init_is_enum env (init : Ast.expr) : bool =
   match init with
@@ -1808,14 +1840,18 @@ and gen_fn_body env buf body _ret_ty =
     | Some (TyName { node = "void"; _ }) -> false
     | _ -> true
   in
+  let fold_stmts env stmts =
+    List.fold_left
+      (fun env s ->
+        Buffer.add_string buf indent;
+        let env = gen_stmt env buf indent s in
+        Buffer.add_char buf '\n';
+        env)
+      env stmts
+  in
   match body.final_expr with
   | Some e ->
-      List.iter
-        (fun s ->
-          Buffer.add_string buf indent;
-          gen_stmt inner buf indent s;
-          Buffer.add_char buf '\n')
-        body.stmts;
+      let inner = fold_stmts inner body.stmts in
       gen_final_expr_as_return inner buf indent e
   | None ->
       (* Check if last stmt is an expr that should be returned *)
@@ -1824,26 +1860,15 @@ and gen_fn_body env buf body _ret_ty =
       if has_return_type && n > 0 then begin
         let front = List.filteri (fun i _ -> i < n - 1) stmts in
         let last = List.nth stmts (n - 1) in
-        List.iter
-          (fun s ->
-            Buffer.add_string buf indent;
-            gen_stmt inner buf indent s;
-            Buffer.add_char buf '\n')
-          front;
+        let inner = fold_stmts inner front in
         match last with
         | StmtExpr e -> gen_final_expr_as_return inner buf indent e
         | s ->
             Buffer.add_string buf indent;
-            gen_stmt inner buf indent s;
+            ignore (gen_stmt inner buf indent s);
             Buffer.add_char buf '\n'
       end
-      else
-        List.iter
-          (fun s ->
-            Buffer.add_string buf indent;
-            gen_stmt inner buf indent s;
-            Buffer.add_char buf '\n')
-          stmts
+      else ignore (fold_stmts inner stmts)
 
 and gen_struct_decl env buf s_name s_generics s_fields =
   let generics = go_generics_decl s_generics in

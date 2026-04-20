@@ -1,3 +1,8 @@
+val check_go_version_adequate : unit -> (string, string) result
+(** [check_go_version_adequate ()] checks whether the Go toolchain version is >=
+    1.26, which is required for trait [Self] support in generated code. Returns
+    [Ok version_string] or [Error reason]. *)
+
 type compile_error =
   | Lex_error of { msg : string; line : int; col : int }
   | Parse_error of { msg : string; line : int; col : int }

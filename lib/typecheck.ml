@@ -157,6 +157,11 @@ let rec types_compatible expected actual =
         types_compatible ok1 ok2 && types_compatible err1 err2
     | TOption inner1, TOption inner2 -> types_compatible inner1 inner2
     | TVec inner1, TVec inner2 -> types_compatible inner1 inner2
+    | THashMap (k1, v1), THashMap (k2, v2) ->
+        types_compatible k1 k2 && types_compatible v1 v2
+    (* TVoid acts as a wildcard for builtin constructors like HashMap::new() *)
+    | _, TVoid -> true
+    | TVoid, _ -> true
     | _ -> false
 
 let expect_type ~(span : span) ~expected ~actual =
@@ -410,7 +415,21 @@ and check_impl_assoc_fn env type_name fn_name arg_types =
       | None ->
           error_at fn_name.span "no associated function '%s' on type '%s'"
             fn_name.node type_name.node)
-  | None -> error_at fn_name.span "no impl block for type '%s'" type_name.node
+  | None ->
+      (* Handle builtin constructors for collection types *)
+      check_builtin_assoc_fn type_name fn_name arg_types
+
+and check_builtin_assoc_fn type_name fn_name arg_types =
+  match (type_name.node, fn_name.node) with
+  | "HashMap", "new" ->
+      if arg_types <> [] then
+        error_at fn_name.span "HashMap::new() takes no arguments";
+      THashMap (TVoid, TVoid)
+  | "Vec", "new" ->
+      if arg_types <> [] then
+        error_at fn_name.span "Vec::new() takes no arguments";
+      TVec TVoid
+  | _ -> error_at fn_name.span "no impl block for type '%s'" type_name.node
 
 and check_method_call env receiver method_name args =
   let recv_ty = check_expr env receiver in

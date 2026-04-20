@@ -40,7 +40,7 @@ let contains haystack needle =
     done;
     !found
 
-(* Helper: compile rgo source to Go, check gofmt-clean, go build, go run *)
+(* Helper: compile rgo source to Go, check gofmt-clean, go build, go vet, go run *)
 let compile_and_check ?expected_output source =
   match Rgo.Driver.compile_string ~filename:"test.rg" source with
   | Error e ->
@@ -71,6 +71,13 @@ let compile_and_check ?expected_output source =
       if code <> 0 then
         Alcotest.fail
           ("go build failed:\n" ^ stderr ^ "\nGenerated Go:\n" ^ go_src);
+      (* Check go vet *)
+      let code, _, stderr =
+        run_cmd (Printf.sprintf "go vet %s" (Filename.quote out))
+      in
+      if code <> 0 then
+        Alcotest.fail
+          ("go vet failed:\n" ^ stderr ^ "\nGenerated Go:\n" ^ go_src);
       (* Check go run if expected output provided *)
       (match expected_output with
       | Some expected ->
@@ -592,6 +599,439 @@ let test_result_option_example () =
   let _go = compile_and_check src in
   ()
 
+(* ---------- Struct impl tests (VAL-CODEGEN-010) ---------- *)
+
+let test_struct_impl_constructor () =
+  let src =
+    {|
+struct Counter {
+    value: i64,
+}
+
+impl Counter {
+    pub fn new() -> Self {
+        Counter { value: 0 }
+    }
+
+    pub fn get(&self) -> i64 {
+        self.value
+    }
+
+    pub fn inc(&mut self) {
+        self.value = self.value + 1;
+    }
+}
+
+fn main() {
+    let mut c = Counter::new();
+    c.inc();
+    c.inc();
+    c.inc();
+    println(c.get());
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"3\n" src in
+  Alcotest.(check bool) "assoc fn CounterNew" true (contains go "CounterNew");
+  Alcotest.(check bool) "method Get" true (contains go "Get()");
+  Alcotest.(check bool) "method Inc" true (contains go "Inc()")
+
+let test_struct_impl_value_receiver () =
+  let src =
+    {|
+struct Point {
+    pub x: f64,
+    pub y: f64,
+}
+
+impl Point {
+    pub fn origin() -> Self {
+        Point { x: 0.0, y: 0.0 }
+    }
+
+    pub fn translate(self, dx: f64, dy: f64) -> Point {
+        Point { x: self.x + dx, y: self.y + dy }
+    }
+
+    pub fn sum(&self) -> f64 {
+        self.x + self.y
+    }
+}
+
+fn main() {
+    let p = Point::origin();
+    let p2 = p.translate(3.0, 4.0);
+    println(p2.sum());
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"7\n" src in
+  Alcotest.(check bool)
+    "value receiver Translate" true
+    (contains go "(self Point) Translate")
+
+let test_struct_impl_mut_ref () =
+  let src =
+    {|
+struct Acc {
+    pub total: i64,
+}
+
+impl Acc {
+    pub fn new() -> Self {
+        Acc { total: 0 }
+    }
+
+    pub fn add(&mut self, n: i64) {
+        self.total = self.total + n;
+    }
+
+    pub fn value(&self) -> i64 {
+        self.total
+    }
+}
+
+fn main() {
+    let mut a = Acc::new();
+    a.add(10);
+    a.add(20);
+    a.add(30);
+    println(a.value());
+}
+|}
+  in
+  let _go = compile_and_check ~expected_output:"60\n" src in
+  ()
+
+(* ---------- Enum impl tests (VAL-CODEGEN-011) ---------- *)
+
+let test_enum_impl_method () =
+  let src =
+    {|
+enum Animal {
+    Dog(str),
+    Cat(str),
+}
+
+impl Animal {
+    pub fn name(&self) -> str {
+        match self {
+            Animal::Dog(n) => n,
+            Animal::Cat(n) => n,
+        }
+    }
+
+    pub fn speak(&self) -> str {
+        match self {
+            Animal::Dog(_) => "woof",
+            Animal::Cat(_) => "meow",
+        }
+    }
+}
+
+fn main() {
+    let d = Animal::Dog("Rex");
+    let c = Animal::Cat("Whiskers");
+    println(d.name());
+    println(d.speak());
+    println(c.name());
+    println(c.speak());
+}
+|}
+  in
+  let go =
+    compile_and_check ~expected_output:"Rex\nwoof\nWhiskers\nmeow\n" src
+  in
+  Alcotest.(check bool) "interface has Name" true (contains go "Name() string");
+  Alcotest.(check bool)
+    "interface has Speak" true
+    (contains go "Speak() string");
+  Alcotest.(check bool) "helper impl" true (contains go "animalNameImpl")
+
+let test_enum_impl_with_params () =
+  let src =
+    {|
+enum Expr {
+    Num(f64),
+    Add(f64, f64),
+}
+
+impl Expr {
+    pub fn eval(&self) -> f64 {
+        match self {
+            Expr::Num(n) => n,
+            Expr::Add(a, b) => a + b,
+        }
+    }
+}
+
+fn main() {
+    let e1 = Expr::Num(42.0);
+    let e2 = Expr::Add(10.0, 20.0);
+    println(e1.eval());
+    println(e2.eval());
+}
+|}
+  in
+  let _go = compile_and_check ~expected_output:"42\n30\n" src in
+  ()
+
+(* ---------- Vec operations tests (VAL-CODEGEN-013) ---------- *)
+
+let test_vec_push_len () =
+  let src =
+    {|
+fn main() {
+    let mut v: Vec<i64> = [1, 2, 3];
+    v.push(4);
+    v.push(5);
+    println(v.len());
+    println(v[0]);
+    println(v[4]);
+}
+|}
+  in
+  let _go = compile_and_check ~expected_output:"5\n1\n5\n" src in
+  ()
+
+let test_vec_iteration () =
+  let src =
+    {|
+fn main() {
+    let v: Vec<i64> = [10, 20, 30];
+    for x in v {
+        println(x);
+    }
+}
+|}
+  in
+  let _go = compile_and_check ~expected_output:"10\n20\n30\n" src in
+  ()
+
+let test_vec_pop () =
+  let src =
+    {|
+fn main() {
+    let mut v: Vec<i64> = [1, 2, 3];
+    let popped = v.pop();
+    println(v.len());
+}
+|}
+  in
+  let _go = compile_and_check ~expected_output:"2\n" src in
+  ()
+
+(* ---------- HashMap operations tests (VAL-CODEGEN-013) ---------- *)
+
+let test_hashmap_insert_len () =
+  let src =
+    {|
+fn main() {
+    let mut m: HashMap<str, i64> = HashMap::new();
+    m.insert("a", 1);
+    m.insert("b", 2);
+    m.insert("c", 3);
+    println(m.len());
+}
+|}
+  in
+  let _go = compile_and_check ~expected_output:"3\n" src in
+  ()
+
+let test_hashmap_contains_key () =
+  let src =
+    {|
+fn main() {
+    let mut m: HashMap<str, i64> = HashMap::new();
+    m.insert("x", 42);
+    println(m.contains_key("x"));
+    println(m.contains_key("y"));
+}
+|}
+  in
+  let _go = compile_and_check ~expected_output:"true\nfalse\n" src in
+  ()
+
+let test_hashmap_remove () =
+  let src =
+    {|
+fn main() {
+    let mut m: HashMap<str, i64> = HashMap::new();
+    m.insert("a", 1);
+    m.insert("b", 2);
+    m.remove("a");
+    println(m.len());
+    println(m.contains_key("a"));
+}
+|}
+  in
+  let _go = compile_and_check ~expected_output:"1\nfalse\n" src in
+  ()
+
+let test_hashmap_get () =
+  let src =
+    {|
+fn main() {
+    let mut m: HashMap<str, i64> = HashMap::new();
+    m.insert("key", 99);
+    let v = m.get("key");
+    println("done");
+}
+|}
+  in
+  let _go = compile_and_check ~expected_output:"done\n" src in
+  ()
+
+(* ---------- Go vet and determinism (VAL-CODEGEN-016, VAL-CROSS-005) ---------- *)
+
+let test_representative_go_vet () =
+  (* A realistic program that exercises multiple codegen features *)
+  let src =
+    {|
+enum Shape {
+    Circle(f64),
+    Square(f64),
+}
+
+impl Shape {
+    pub fn area(&self) -> f64 {
+        match self {
+            Shape::Circle(r) => 3.14 * r * r,
+            Shape::Square(s) => s * s,
+        }
+    }
+}
+
+struct Stats {
+    pub count: i64,
+    pub total: f64,
+}
+
+impl Stats {
+    pub fn new() -> Self {
+        Stats { count: 0, total: 0.0 }
+    }
+
+    pub fn record(&mut self, val: f64) {
+        self.count = self.count + 1;
+        self.total = self.total + val;
+    }
+}
+
+fn classify(x: i64) -> str {
+    if x > 0 {
+        "positive"
+    } else {
+        "non-positive"
+    }
+}
+
+fn main() {
+    let c = Shape::Circle(1.0);
+    let sq = Shape::Square(2.0);
+    let mut s = Stats::new();
+    s.record(c.area());
+    s.record(sq.area());
+    println(s.count);
+    println(classify(1));
+}
+|}
+  in
+  let _go = compile_and_check ~expected_output:"2\npositive\n" src in
+  ()
+
+let test_determinism_representative () =
+  (* Verify deterministic output for a program with impls, collections, match *)
+  let src =
+    {|
+struct Box {
+    pub value: i64,
+}
+
+impl Box {
+    pub fn new(v: i64) -> Self {
+        Box { value: v }
+    }
+
+    pub fn get(&self) -> i64 {
+        self.value
+    }
+}
+
+enum Tag {
+    A,
+    B(i64),
+}
+
+impl Tag {
+    pub fn label(&self) -> str {
+        match self {
+            Tag::A => "a",
+            Tag::B(_) => "b",
+        }
+    }
+}
+
+fn main() {
+    let b = Box::new(42);
+    println(b.get());
+    let t = Tag::B(10);
+    println(t.label());
+}
+|}
+  in
+  let go1 = compile_snapshot src in
+  let go2 = compile_snapshot src in
+  Alcotest.(check string) "deterministic impl+enum" go1 go2
+
+(* ---------- Go version requirements (VAL-CROSS-007) ---------- *)
+
+let test_go_version_adequate () =
+  match Rgo.Driver.check_go_version_adequate () with
+  | Ok ver ->
+      Alcotest.(check bool) "go version detected" true (String.length ver > 0);
+      (* Verify it's at least go1.26 *)
+      Alcotest.(check bool)
+        "version starts with go" true
+        (String.length ver > 2 && String.sub ver 0 2 = "go")
+  | Error msg -> Alcotest.fail ("Go version check failed: " ^ msg)
+
+(* ---------- CLI pipeline (VAL-CROSS-001) ---------- *)
+
+let test_cli_pipeline () =
+  (* Full pipeline: compile .rg source -> go build -> go run *)
+  let src =
+    {|
+fn add(a: i64, b: i64) -> i64 {
+    a + b
+}
+
+fn main() {
+    let result = add(17, 25);
+    println(result);
+}
+|}
+  in
+  let _go = compile_and_check ~expected_output:"42\n" src in
+  ()
+
+(* ---------- Example fixture tests ---------- *)
+
+let test_impl_methods_example () =
+  let src = read_file "../examples/impl_methods.rg" in
+  let _go = compile_and_check ~expected_output:"2\n" src in
+  ()
+
+let test_shapes_example () =
+  let src = read_file "../examples/shapes.rg" in
+  let _go = compile_and_check ~expected_output:"78.5\n" src in
+  ()
+
+let test_loops_example () =
+  let src = read_file "../examples/loops.rg" in
+  let _go = compile_and_check ~expected_output:"15\n10\n" src in
+  ()
+
 let () =
   Alcotest.run "codegen"
     [
@@ -660,9 +1100,56 @@ let () =
           Alcotest.test_case "hello world" `Quick test_hello_world;
           Alcotest.test_case "println int" `Quick test_println_int;
         ] );
+      ( "struct-impl",
+        [
+          Alcotest.test_case "constructor + methods" `Quick
+            test_struct_impl_constructor;
+          Alcotest.test_case "value receiver" `Quick
+            test_struct_impl_value_receiver;
+          Alcotest.test_case "mut ref methods" `Quick test_struct_impl_mut_ref;
+        ] );
+      ( "enum-impl",
+        [
+          Alcotest.test_case "method across variants" `Quick
+            test_enum_impl_method;
+          Alcotest.test_case "method with params" `Quick
+            test_enum_impl_with_params;
+        ] );
+      ( "vec-ops",
+        [
+          Alcotest.test_case "push and len" `Quick test_vec_push_len;
+          Alcotest.test_case "iteration" `Quick test_vec_iteration;
+          Alcotest.test_case "pop" `Quick test_vec_pop;
+        ] );
+      ( "hashmap-ops",
+        [
+          Alcotest.test_case "insert and len" `Quick test_hashmap_insert_len;
+          Alcotest.test_case "contains_key" `Quick test_hashmap_contains_key;
+          Alcotest.test_case "remove" `Quick test_hashmap_remove;
+          Alcotest.test_case "get" `Quick test_hashmap_get;
+        ] );
+      ( "go-cleanliness",
+        [
+          Alcotest.test_case "representative go vet" `Quick
+            test_representative_go_vet;
+          Alcotest.test_case "determinism with impls" `Quick
+            test_determinism_representative;
+        ] );
+      ( "go-version",
+        [
+          Alcotest.test_case "Go 1.26+ for trait Self" `Quick
+            test_go_version_adequate;
+        ] );
+      ( "cli-pipeline",
+        [ Alcotest.test_case "source to runnable Go" `Quick test_cli_pipeline ]
+      );
       ( "example-fixtures",
         [
           Alcotest.test_case "result_option.rg compiles" `Quick
             test_result_option_example;
+          Alcotest.test_case "impl_methods.rg runs" `Quick
+            test_impl_methods_example;
+          Alcotest.test_case "shapes.rg runs" `Quick test_shapes_example;
+          Alcotest.test_case "loops.rg runs" `Quick test_loops_example;
         ] );
     ]
