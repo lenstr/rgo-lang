@@ -1,0 +1,15 @@
+{
+  "featureId": "phase-8-fix-outer-generic-bound-propagation",
+  "reviewedAt": "2026-04-20T17:42:36Z",
+  "commitId": "e7aeba8c284dfbfe662376167ec3672016975752",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The rerun directly closes the prior gap: `bounds_of_generics` now seeds `param_bounds` from outer generic declarations in `ItemImpl`, `ItemTraitImpl`, and `ItemTrait` before dispatching into `check_fn_decl`, so the generic-receiver lookup added in `b43379d` can see outer trait bounds as well as method-local ones.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/phase-8-traits-fix/scrutiny/reviews/phase-8-fix-generic-trait-bound-method-resolution.json",
+  "summary": "Review passed: compared with the failed `b43379d` change, commit `e7aeba8` fixes the remaining outer-bound propagation bug in all three affected item forms and adds focused regression coverage for impl methods, trait-impl methods, and trait default bodies."
+}

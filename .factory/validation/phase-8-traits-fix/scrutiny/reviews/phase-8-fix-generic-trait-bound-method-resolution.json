@@ -1,0 +1,28 @@
+{
+  "featureId": "phase-8-fix-generic-trait-bound-method-resolution",
+  "reviewedAt": "2026-04-20T17:12:57Z",
+  "commitId": "b43379d0297aee0343f7d4777904157307dd040a",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The patch fixes the original function-generic lookup bug and starts typechecking default trait bodies, but generic method resolution still drops declared trait bounds when the type parameter comes from an outer impl, trait-impl, or trait generic list rather than the method's own `<...>` list.",
+    "issues": [
+      {
+        "file": "lib/typecheck.ml",
+        "line": 1458,
+        "severity": "blocking",
+        "description": "`check_fn_decl` rebuilds `param_bounds` from `fd.fn_generics` only, while the enclosing `ItemImpl`, `ItemTraitImpl`, and `ItemTrait` environments at lines 1507, 1527, and 1630 add outer generic names to `type_params` without seeding matching bounds. Because parser/AST generics support bounds on impls and traits too (`lib/parser.mly:99,179,183,190`; `lib/ast.ml:108,159,164,172`), a method/default body that uses an outer bounded parameter like `impl<T: Show> Box<T> { fn render(item: T) -> str { item.show() } }` will still see `T` as an unconstrained generic and reject the valid trait call. The feature contract says generic receiver lookup should honor the receiver type parameter's declared trait bounds, but this fix only honors bounds declared directly on the function being checked."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `compiler-worker` skill still says to add/extend tests before implementation, but this worker edited `lib/typecheck.ml` and built/tests the implementation before touching `test/test_typecheck.ml`; the handoff simultaneously marks `followedProcedure: true` and records a deviation from that step.",
+      "evidence": "Transcript skeleton for session `5f9d5932-31ee-41f2-af28-8bf1b6038f71` shows multiple `Edit` calls in `lib/typecheck.ml`, followed by build/test runs, before the later section that adds regression cases to `test/test_typecheck.ml`. `.factory/skills/compiler-worker/SKILL.md` step 3 requires writing/extending tests first."
+    }
+  ],
+  "addressesFailureFrom": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/phase-8-traits/scrutiny/reviews/phase-8-traits-and-final-acceptance-program.json",
+  "summary": "Review failed: commit `b43379d` fixes the original top-level function-generic trait-bound lookup bug and default-body typechecking, but it still ignores bounds declared on outer impl/trait generic parameters, so generic receiver method resolution remains incomplete for supported bounded-generic forms."
+}
