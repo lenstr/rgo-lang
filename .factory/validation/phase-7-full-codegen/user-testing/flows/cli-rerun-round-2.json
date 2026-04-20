@@ -1,0 +1,140 @@
+{
+  "groupId": "cli-rerun-round-2",
+  "testedAt": "2026-04-20T16:16:55.546083Z",
+  "isolation": {
+    "surface": "CLI",
+    "repoRoot": "/home/lenstr/workspace/personal/hack/rgo-lang",
+    "missionDir": "/home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7",
+    "evidenceDir": "/home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-rerun-round-2",
+    "concurrencyLimit": 1,
+    "workingTree": "repository working tree directly"
+  },
+  "toolsUsed": [
+    "cli shell commands",
+    "nix develop -c dune exec rgoc",
+    "nix develop -c gofmt -d",
+    "nix develop -c go build",
+    "nix develop -c go run"
+  ],
+  "assertions": [
+    {
+      "id": "VAL-CODEGEN-005",
+      "title": "Nested optional forms remain distinguishable",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile a nested-option CLI fixture with `rgoc input.rg -o output.go`",
+          "expected": "rgoc succeeds and writes Go output for both `Option<Option<i64>>` and `Option<Vec<i64>>` cases.",
+          "observed": "The compile command exited 0 and emitted `phase-7-full-codegen/cli-rerun-round-2/VAL-CODEGEN-005.go`."
+        },
+        {
+          "action": "Inspect the generated Go representation",
+          "expected": "The outer nested option remains distinct from the inner option and `Option<Vec<i64>>` remains distinct from `Vec<i64>`.",
+          "observed": "Generated Go contains `func maybe_nested(x int64) Option[*int64]` and `func maybe_vec(x int64) Option[[]int64]`; it does not contain `**int64` or `*[]int64`."
+        },
+        {
+          "action": "Run `gofmt -d`, `go build`, and `go run` on the generated Go",
+          "expected": "No formatting diff, successful build, and runtime output proving `Some(Some(9))`, `Some(None)`, `None`, and `Option<Vec<i64>>` all stay distinguishable.",
+          "observed": "All three commands exited 0. `gofmt -d` produced no diff beyond the Nix shell banner, and `go run` printed `9`, `inner none`, `outer none`, `4`, `5`, `vec none`."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "phase-7-full-codegen/cli-rerun-round-2/VAL-CODEGEN-005-compile.log",
+          "phase-7-full-codegen/cli-rerun-round-2/VAL-CODEGEN-005-gofmt.log",
+          "phase-7-full-codegen/cli-rerun-round-2/VAL-CODEGEN-005-build.log",
+          "phase-7-full-codegen/cli-rerun-round-2/VAL-CODEGEN-005-run.log"
+        ],
+        "artifacts": [
+          "phase-7-full-codegen/cli-rerun-round-2/VAL-CODEGEN-005.rg",
+          "phase-7-full-codegen/cli-rerun-round-2/VAL-CODEGEN-005.go",
+          "phase-7-full-codegen/cli-rerun-round-2/VAL-CODEGEN-005.bin"
+        ],
+        "commands": [
+          {
+            "command": "nix develop --quiet -c dune exec rgoc -- /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-rerun-round-2/VAL-CODEGEN-005.rg -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-rerun-round-2/VAL-CODEGEN-005.go",
+            "exitCode": 0,
+            "logPath": "evidence/phase-7-full-codegen/cli-rerun-round-2/VAL-CODEGEN-005-compile.log"
+          },
+          {
+            "command": "nix develop --quiet -c gofmt -d /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-rerun-round-2/VAL-CODEGEN-005.go",
+            "exitCode": 0,
+            "logPath": "evidence/phase-7-full-codegen/cli-rerun-round-2/VAL-CODEGEN-005-gofmt.log"
+          },
+          {
+            "command": "nix develop --quiet -c go build -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-rerun-round-2/VAL-CODEGEN-005.bin /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-rerun-round-2/VAL-CODEGEN-005.go",
+            "exitCode": 0,
+            "logPath": "evidence/phase-7-full-codegen/cli-rerun-round-2/VAL-CODEGEN-005-build.log"
+          },
+          {
+            "command": "nix develop --quiet -c go run /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-rerun-round-2/VAL-CODEGEN-005.go",
+            "exitCode": 0,
+            "logPath": "evidence/phase-7-full-codegen/cli-rerun-round-2/VAL-CODEGEN-005-run.log"
+          }
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CODEGEN-009",
+      "title": "Match lowering preserves destructuring behavior and expression results",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile a match-heavy CLI fixture with `rgoc input.rg -o output.go`",
+          "expected": "rgoc succeeds for a program that uses destructuring matches in both expression and statement positions, including wildcard arms.",
+          "observed": "The compile command exited 0 and emitted `phase-7-full-codegen/cli-rerun-round-2/VAL-CODEGEN-009.go`."
+        },
+        {
+          "action": "Inspect the generated Go lowering",
+          "expected": "Expression-position and statement-position matches lower to valid Go while preserving destructured payload access.",
+          "observed": "Generated Go lowers `eval` and `print_msg` to separate type switches over `Msg`, destructures `MsgNumber` and `MsgPair`, and contains exactly two `default:` clauses total\u2014one per match, so the earlier duplicate-default regression is absent."
+        },
+        {
+          "action": "Run `gofmt -d`, `go build`, and `go run` on the generated Go",
+          "expected": "No formatting diff, successful build, and runtime output showing correct expression and statement results.",
+          "observed": "All three commands exited 0. `gofmt -d` produced no diff beyond the Nix shell banner, and `go run` printed `7`, `7`, `12`, `0`."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "phase-7-full-codegen/cli-rerun-round-2/VAL-CODEGEN-009-compile.log",
+          "phase-7-full-codegen/cli-rerun-round-2/VAL-CODEGEN-009-gofmt.log",
+          "phase-7-full-codegen/cli-rerun-round-2/VAL-CODEGEN-009-build.log",
+          "phase-7-full-codegen/cli-rerun-round-2/VAL-CODEGEN-009-run.log"
+        ],
+        "artifacts": [
+          "phase-7-full-codegen/cli-rerun-round-2/VAL-CODEGEN-009.rg",
+          "phase-7-full-codegen/cli-rerun-round-2/VAL-CODEGEN-009.go",
+          "phase-7-full-codegen/cli-rerun-round-2/VAL-CODEGEN-009.bin"
+        ],
+        "commands": [
+          {
+            "command": "nix develop --quiet -c dune exec rgoc -- /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-rerun-round-2/VAL-CODEGEN-009.rg -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-rerun-round-2/VAL-CODEGEN-009.go",
+            "exitCode": 0,
+            "logPath": "evidence/phase-7-full-codegen/cli-rerun-round-2/VAL-CODEGEN-009-compile.log"
+          },
+          {
+            "command": "nix develop --quiet -c gofmt -d /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-rerun-round-2/VAL-CODEGEN-009.go",
+            "exitCode": 0,
+            "logPath": "evidence/phase-7-full-codegen/cli-rerun-round-2/VAL-CODEGEN-009-gofmt.log"
+          },
+          {
+            "command": "nix develop --quiet -c go build -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-rerun-round-2/VAL-CODEGEN-009.bin /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-rerun-round-2/VAL-CODEGEN-009.go",
+            "exitCode": 0,
+            "logPath": "evidence/phase-7-full-codegen/cli-rerun-round-2/VAL-CODEGEN-009-build.log"
+          },
+          {
+            "command": "nix develop --quiet -c go run /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-rerun-round-2/VAL-CODEGEN-009.go",
+            "exitCode": 0,
+            "logPath": "evidence/phase-7-full-codegen/cli-rerun-round-2/VAL-CODEGEN-009-run.log"
+          }
+        ]
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Retested 2 assertions: 2 passed, 0 failed, 0 blocked. VAL-CODEGEN-005 now lowers nested options as `Option[*int64]` and `Option[[]int64]`, and VAL-CODEGEN-009 builds and runs with one wildcard `default:` per generated match switch."
+}

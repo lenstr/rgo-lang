@@ -1,0 +1,43 @@
+{
+  "milestone": "phase-7-full-codegen",
+  "round": 1,
+  "status": "fail",
+  "assertionsSummary": {
+    "total": 19,
+    "passed": 17,
+    "failed": 2,
+    "blocked": 0
+  },
+  "passedAssertions": [
+    "VAL-CODEGEN-001",
+    "VAL-CODEGEN-002",
+    "VAL-CODEGEN-003",
+    "VAL-CODEGEN-004",
+    "VAL-CODEGEN-006",
+    "VAL-CODEGEN-007",
+    "VAL-CODEGEN-008",
+    "VAL-CODEGEN-010",
+    "VAL-CODEGEN-011",
+    "VAL-CODEGEN-012",
+    "VAL-CODEGEN-013",
+    "VAL-CODEGEN-014",
+    "VAL-CODEGEN-016",
+    "VAL-CROSS-001",
+    "VAL-CROSS-003",
+    "VAL-CROSS-004",
+    "VAL-CROSS-005"
+  ],
+  "failedAssertions": [
+    {
+      "id": "VAL-CODEGEN-005",
+      "reason": "Nested `Option<Option<i64>>` lowers to invalid Go (`**int64` plus undefined `OptionSome`/`OptionNone` references) and does not build."
+    },
+    {
+      "id": "VAL-CODEGEN-009",
+      "reason": "A match statement with an explicit wildcard arm lowers to a Go type switch containing two `default` clauses, so the generated program does not build."
+    }
+  ],
+  "blockedAssertions": [],
+  "appliedUpdates": [],
+  "previousRound": null
+}

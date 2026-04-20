@@ -1,0 +1,417 @@
+{
+  "milestone": "phase-7-full-codegen",
+  "groupId": "cli-results-and-determinism",
+  "surface": "rgoc CLI + generated Go artifacts",
+  "testedAt": "2026-04-20T17:13:28+03:00",
+  "isolation": {
+    "repoRoot": "/home/lenstr/workspace/personal/hack/rgo-lang",
+    "missionDir": "/home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7",
+    "services": "none",
+    "maxConcurrentValidators": 1,
+    "validatorInstance": "single CLI validator"
+  },
+  "toolsUsed": [
+    "Read",
+    "Grep",
+    "Execute",
+    "TodoWrite"
+  ],
+  "assertions": [
+    {
+      "id": "VAL-CODEGEN-006",
+      "title": "Result lowers to Go success and error behavior",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile dedicated CLI fixture",
+          "expected": "rgoc succeeds.",
+          "observed": "ocaml: 5.4.1 | dune:  3.21.1 | opam:  2.5.0 | warning: Git tree '/home/lenstr/workspace/personal/hack/rgo-lang' is dirty"
+        },
+        {
+          "action": "Check gofmt cleanliness",
+          "expected": "No diff.",
+          "observed": "ocaml: 5.4.1 | dune:  3.21.1 | opam:  2.5.0 | warning: Git tree '/home/lenstr/workspace/personal/hack/rgo-lang' is dirty"
+        },
+        {
+          "action": "Build generated Go",
+          "expected": "go build succeeds.",
+          "observed": "ocaml: 5.4.1 | dune:  3.21.1 | opam:  2.5.0 | warning: Git tree '/home/lenstr/workspace/personal/hack/rgo-lang' is dirty"
+        },
+        {
+          "action": "Vet generated Go",
+          "expected": "go vet succeeds.",
+          "observed": "ocaml: 5.4.1 | dune:  3.21.1 | opam:  2.5.0 | warning: Git tree '/home/lenstr/workspace/personal/hack/rgo-lang' is dirty"
+        },
+        {
+          "action": "Run generated Go",
+          "expected": "'5\\n0\\ndivision by zero\\n'",
+          "observed": "'5\\n0\\ndivision by zero\\n'"
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-006-compile.log",
+          "evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-006-gofmt.log",
+          "evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-006-build.log",
+          "evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-006-vet.log",
+          "evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-006-run.log"
+        ],
+        "codeRefs": [
+          "test/test_codegen.ml:361",
+          "validation-contract.md:217-220"
+        ],
+        "commands": [
+          {
+            "command": "nix develop --quiet -c dune exec rgoc -- /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-006.rg -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-006.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c gofmt -d /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-006.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go build -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-006.bin /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-006.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go vet /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-006.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go run /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-006.go",
+            "exitCode": 0
+          }
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CODEGEN-007",
+      "title": "Result question-mark preserves early return semantics",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile dedicated CLI fixture",
+          "expected": "rgoc succeeds.",
+          "observed": "Compilation succeeded and emitted Go with explicit error propagation through a temporary `__err_0` check before returning the propagated error."
+        },
+        {
+          "action": "Check gofmt cleanliness",
+          "expected": "No diff.",
+          "observed": "gofmt -d exited 0 and emitted no diff."
+        },
+        {
+          "action": "Build and vet generated Go",
+          "expected": "go build and go vet succeed.",
+          "observed": "Both commands exited 0 on the generated Go artifact."
+        },
+        {
+          "action": "Run generated Go",
+          "expected": "'11\\nnegative\\n'",
+          "observed": "'11\\nnegative\\n'"
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-007-compile.log",
+          "evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-007-gofmt.log",
+          "evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-007-build.log",
+          "evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-007-vet.log",
+          "evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-007-run.log"
+        ],
+        "codeRefs": [
+          "test/test_codegen.ml:384",
+          "test/test_codegen.ml:432",
+          "test/test_codegen.ml:488",
+          "test/test_codegen.ml:512"
+        ],
+        "commands": [
+          {
+            "command": "nix develop --quiet -c dune exec rgoc -- /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-007.rg -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-007.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c gofmt -d /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-007.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go build -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-007.bin /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-007.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go vet /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-007.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go run /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-007.go",
+            "exitCode": 0
+          }
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CODEGEN-008",
+      "title": "Option question-mark preserves early return semantics for both representations",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile dedicated CLI fixture",
+          "expected": "rgoc succeeds.",
+          "observed": "ocaml: 5.4.1 | dune:  3.21.1 | opam:  2.5.0 | warning: Git tree '/home/lenstr/workspace/personal/hack/rgo-lang' is dirty"
+        },
+        {
+          "action": "Check gofmt cleanliness",
+          "expected": "No diff.",
+          "observed": "ocaml: 5.4.1 | dune:  3.21.1 | opam:  2.5.0 | warning: Git tree '/home/lenstr/workspace/personal/hack/rgo-lang' is dirty"
+        },
+        {
+          "action": "Build generated Go",
+          "expected": "go build succeeds.",
+          "observed": "ocaml: 5.4.1 | dune:  3.21.1 | opam:  2.5.0 | warning: Git tree '/home/lenstr/workspace/personal/hack/rgo-lang' is dirty"
+        },
+        {
+          "action": "Vet generated Go",
+          "expected": "go vet succeeds.",
+          "observed": "ocaml: 5.4.1 | dune:  3.21.1 | opam:  2.5.0 | warning: Git tree '/home/lenstr/workspace/personal/hack/rgo-lang' is dirty"
+        },
+        {
+          "action": "Run generated Go",
+          "expected": "'6\\n-1\\nactive\\nnone\\n'",
+          "observed": "'6\\n-1\\nactive\\nnone\\n'"
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-008-compile.log",
+          "evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-008-gofmt.log",
+          "evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-008-build.log",
+          "evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-008-vet.log",
+          "evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-008-run.log"
+        ],
+        "codeRefs": [
+          "test/test_codegen.ml:408",
+          "test/test_codegen.ml:460",
+          "docs/PRD_rust_syntax_go_target_5.md:548-552"
+        ],
+        "commands": [
+          {
+            "command": "nix develop --quiet -c dune exec rgoc -- /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-008.rg -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-008.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c gofmt -d /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-008.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go build -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-008.bin /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-008.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go vet /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-008.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go run /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-008.go",
+            "exitCode": 0
+          }
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CODEGEN-009",
+      "title": "Match lowering preserves destructuring behavior and expression results",
+      "status": "fail",
+      "steps": [
+        {
+          "action": "Compile dedicated CLI fixture",
+          "expected": "rgoc succeeds.",
+          "observed": "ocaml: 5.4.1 | dune:  3.21.1 | opam:  2.5.0 | warning: Git tree '/home/lenstr/workspace/personal/hack/rgo-lang' is dirty"
+        },
+        {
+          "action": "Check gofmt cleanliness",
+          "expected": "No diff.",
+          "observed": "ocaml: 5.4.1 | dune:  3.21.1 | opam:  2.5.0 | warning: Git tree '/home/lenstr/workspace/personal/hack/rgo-lang' is dirty"
+        },
+        {
+          "action": "Build generated Go",
+          "expected": "go build succeeds.",
+          "observed": "opam:  2.5.0 | warning: Git tree '/home/lenstr/workspace/personal/hack/rgo-lang' is dirty | # command-line-arguments | ../../../../.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-009.go:55:2: multiple defaults (first at ../../../../.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-009.go:52:2)"
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-009-compile.log",
+          "evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-009-gofmt.log",
+          "evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-009-build.log"
+        ],
+        "codeRefs": [
+          "test/test_codegen.ml:212",
+          "test/test_codegen.ml:235"
+        ],
+        "commands": [
+          {
+            "command": "nix develop --quiet -c dune exec rgoc -- /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-009.rg -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-009.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c gofmt -d /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-009.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go build -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-009.bin /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-009.go",
+            "exitCode": 1
+          }
+        ]
+      },
+      "issues": "opam:  2.5.0 | warning: Git tree '/home/lenstr/workspace/personal/hack/rgo-lang' is dirty | # command-line-arguments | ../../../../.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-009.go:55:2: multiple defaults (first at ../../../../.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-009.go:52:2)"
+    },
+    {
+      "id": "VAL-CODEGEN-016",
+      "title": "Generated Go is deterministic and downstream-tool clean",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run focused Alcotest codegen coverage",
+          "expected": "VAL-CODEGEN-016 passes.",
+          "observed": "[OK]          go-cleanliness            0   representative go vet. | [OK]          go-cleanliness            1   determinism with impls. | Test Successful in 0.402s. 2 tests run."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CODEGEN-016.log"
+        ],
+        "codeRefs": [
+          "test/test_codegen.ml:1090",
+          "test/test_codegen.ml:1146",
+          "validation-contract.md:267-269"
+        ],
+        "commands": [
+          {
+            "command": "nix develop --quiet -c dune exec ./test/test_codegen.exe -- test --color=never go-cleanliness 0-1",
+            "exitCode": 0
+          }
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-001",
+      "title": "CLI pipeline goes from source to runnable Go",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run focused Alcotest codegen coverage",
+          "expected": "VAL-CROSS-001 passes.",
+          "observed": "[OK]          cli-pipeline              0   source to runnable Go. | Test Successful in 0.397s. 1 test run."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CROSS-001.log"
+        ],
+        "codeRefs": [
+          "test/test_codegen.ml:1239",
+          "validation-contract.md:341-343"
+        ],
+        "commands": [
+          {
+            "command": "nix develop --quiet -c dune exec ./test/test_codegen.exe -- test --color=never cli-pipeline 0",
+            "exitCode": 0
+          }
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-003",
+      "title": "Full compilation is deterministic across repeated runs",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run focused Alcotest codegen coverage",
+          "expected": "VAL-CROSS-003 passes.",
+          "observed": "[OK]          determinism               0   deterministic output. | Test Successful in 0.001s. 1 test run."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CROSS-003.log"
+        ],
+        "codeRefs": [
+          "test/test_codegen.ml:676",
+          "test/test_codegen.ml:1146",
+          "validation-contract.md:351-353"
+        ],
+        "commands": [
+          {
+            "command": "nix develop --quiet -c dune exec ./test/test_codegen.exe -- test --color=never determinism 0",
+            "exitCode": 0
+          }
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-004",
+      "title": "Generated Go stays formatter-stable and build-clean across milestones",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run focused Alcotest codegen coverage",
+          "expected": "VAL-CROSS-004 passes.",
+          "observed": "[OK]          go-cleanliness            0   representative go vet. | Test Successful in 0.392s. 1 test run."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CROSS-004.log"
+        ],
+        "codeRefs": [
+          "test/test_codegen.ml:1090",
+          "test/test_codegen.ml:1239",
+          "validation-contract.md:356-358"
+        ],
+        "commands": [
+          {
+            "command": "nix develop --quiet -c dune exec ./test/test_codegen.exe -- test --color=never go-cleanliness 0",
+            "exitCode": 0
+          }
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-005",
+      "title": "Generated Go passes vet on realistic MVP programs",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run focused Alcotest codegen coverage",
+          "expected": "VAL-CROSS-005 passes.",
+          "observed": "[OK]          go-cleanliness            0   representative go vet. | Test Successful in 0.383s. 1 test run."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "evidence/phase-7-full-codegen/cli-results-and-determinism-final/VAL-CROSS-005.log"
+        ],
+        "codeRefs": [
+          "test/test_codegen.ml:1090",
+          "validation-contract.md:361-362"
+        ],
+        "commands": [
+          {
+            "command": "nix develop --quiet -c dune exec ./test/test_codegen.exe -- test --color=never go-cleanliness 0",
+            "exitCode": 0
+          }
+        ]
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Validated Result, question-mark, match, CLI pipeline, determinism, and downstream Go cleanliness using direct CLI fixtures plus focused Alcotest coverage."
+}

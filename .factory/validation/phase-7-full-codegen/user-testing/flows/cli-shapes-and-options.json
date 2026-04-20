@@ -1,0 +1,315 @@
+{
+  "milestone": "phase-7-full-codegen",
+  "groupId": "cli-shapes-and-options",
+  "surface": "rgoc CLI + generated Go artifacts",
+  "testedAt": "2026-04-20T17:13:18+03:00",
+  "isolation": {
+    "repoRoot": "/home/lenstr/workspace/personal/hack/rgo-lang",
+    "missionDir": "/home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7",
+    "services": "none",
+    "maxConcurrentValidators": 1,
+    "validatorInstance": "single CLI validator"
+  },
+  "toolsUsed": [
+    "Read",
+    "Grep",
+    "Execute",
+    "TodoWrite"
+  ],
+  "assertions": [
+    {
+      "id": "VAL-CODEGEN-001",
+      "title": "Struct codegen preserves shape and visibility",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run focused Alcotest codegen coverage through the Nix CLI surface",
+          "expected": "The selected test group for VAL-CODEGEN-001 passes.",
+          "observed": "[OK]          struct                    0   basic struct. | [OK]          struct                    1   pub/private fields. | [OK]          struct-impl               0   constructor + methods. | [OK]          struct-impl               1   value receiver. | Test Successful in 1.244s. 4 tests run."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "evidence/phase-7-full-codegen/cli-shapes-and-options-final/VAL-CODEGEN-001.log"
+        ],
+        "codeRefs": [
+          "test/test_codegen.ml:112",
+          "test/test_codegen.ml:133"
+        ],
+        "commands": [
+          {
+            "command": "nix develop --quiet -c dune exec ./test/test_codegen.exe -- test --color=never struct 0-1",
+            "exitCode": 0
+          }
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CODEGEN-002",
+      "title": "Enum codegen preserves variant structure and builds as Go",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run focused Alcotest codegen coverage through the Nix CLI surface",
+          "expected": "The selected test group for VAL-CODEGEN-002 passes.",
+          "observed": "[OK]          enum                      0   basic enum. | [OK]          enum                      1   enum with fields. | [OK]          enum-impl                 0   method across variants. | [OK]          enum-impl                 1   method with params. | Test Successful in 1.525s. 4 tests run."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "evidence/phase-7-full-codegen/cli-shapes-and-options-final/VAL-CODEGEN-002.log"
+        ],
+        "codeRefs": [
+          "test/test_codegen.ml:155",
+          "test/test_codegen.ml:179"
+        ],
+        "commands": [
+          {
+            "command": "nix develop --quiet -c dune exec ./test/test_codegen.exe -- test --color=never enum 0-1",
+            "exitCode": 0
+          }
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CODEGEN-012",
+      "title": "Array literals and repeats lower correctly",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run focused Alcotest codegen coverage through the Nix CLI surface",
+          "expected": "The selected test group for VAL-CODEGEN-012 passes.",
+          "observed": "[OK]          array                     0   array literal. | [OK]          array                     1   empty array with annotation. | [OK]          array                     2   repeat small. | [OK]          array                     3   repeat large. | [OK]          array                     4   struct variant in array. | Test Successful in 1.907s. 5 tests run."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "evidence/phase-7-full-codegen/cli-shapes-and-options-final/VAL-CODEGEN-012.log"
+        ],
+        "codeRefs": [
+          "test/test_codegen.ml:563",
+          "test/test_codegen.ml:575",
+          "test/test_codegen.ml:587",
+          "test/test_codegen.ml:599"
+        ],
+        "commands": [
+          {
+            "command": "nix develop --quiet -c dune exec ./test/test_codegen.exe -- test --color=never array 0-4",
+            "exitCode": 0
+          }
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CODEGEN-014",
+      "title": "Generated Go escapes identifiers that collide with Go keywords",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run focused Alcotest codegen coverage through the Nix CLI surface",
+          "expected": "The selected test group for VAL-CODEGEN-014 passes.",
+          "observed": "[OK]          keyword-escaping          0   go keyword escape. | Test Successful in 0.387s. 1 test run."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "evidence/phase-7-full-codegen/cli-shapes-and-options-final/VAL-CODEGEN-014.log"
+        ],
+        "codeRefs": [
+          "test/test_codegen.ml:628"
+        ],
+        "commands": [
+          {
+            "command": "nix develop --quiet -c dune exec ./test/test_codegen.exe -- test --color=never keyword-escaping 0",
+            "exitCode": 0
+          }
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CODEGEN-003",
+      "title": "Non-nullable Option preserves present and absent behavior in generated Go",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile a dedicated CLI fixture to Go",
+          "expected": "rgoc succeeds and emits generated Go.",
+          "observed": "ocaml: 5.4.1 | dune:  3.21.1 | opam:  2.5.0 | warning: Git tree '/home/lenstr/workspace/personal/hack/rgo-lang' is dirty"
+        },
+        {
+          "action": "Check gofmt cleanliness",
+          "expected": "Generated Go is already canonical.",
+          "observed": "ocaml: 5.4.1 | dune:  3.21.1 | opam:  2.5.0 | warning: Git tree '/home/lenstr/workspace/personal/hack/rgo-lang' is dirty"
+        },
+        {
+          "action": "Build generated Go",
+          "expected": "go build succeeds.",
+          "observed": "ocaml: 5.4.1 | dune:  3.21.1 | opam:  2.5.0 | warning: Git tree '/home/lenstr/workspace/personal/hack/rgo-lang' is dirty"
+        },
+        {
+          "action": "Vet generated Go",
+          "expected": "go vet succeeds.",
+          "observed": "ocaml: 5.4.1 | dune:  3.21.1 | opam:  2.5.0 | warning: Git tree '/home/lenstr/workspace/personal/hack/rgo-lang' is dirty"
+        },
+        {
+          "action": "Run generated Go",
+          "expected": "'42\\n-1\\nhi\\nnone\\n7\\n-1\\n'",
+          "observed": "'42\\n-1\\nhi\\nnone\\n7\\n-1\\n'"
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "evidence/phase-7-full-codegen/cli-shapes-and-options-final/VAL-CODEGEN-003-compile.log",
+          "evidence/phase-7-full-codegen/cli-shapes-and-options-final/VAL-CODEGEN-003-gofmt.log",
+          "evidence/phase-7-full-codegen/cli-shapes-and-options-final/VAL-CODEGEN-003-build.log",
+          "evidence/phase-7-full-codegen/cli-shapes-and-options-final/VAL-CODEGEN-003-vet.log",
+          "evidence/phase-7-full-codegen/cli-shapes-and-options-final/VAL-CODEGEN-003-run.log"
+        ],
+        "codeRefs": [
+          "test/test_codegen.ml:259",
+          "test/test_codegen.ml:305",
+          "test/test_codegen.ml:323",
+          "test/test_codegen.ml:341"
+        ],
+        "commands": [
+          {
+            "command": "nix develop --quiet -c dune exec rgoc -- /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-shapes-and-options-final/VAL-CODEGEN-003.rg -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-shapes-and-options-final/VAL-CODEGEN-003.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c gofmt -d /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-shapes-and-options-final/VAL-CODEGEN-003.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go build -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-shapes-and-options-final/VAL-CODEGEN-003.bin /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-shapes-and-options-final/VAL-CODEGEN-003.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go vet /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-shapes-and-options-final/VAL-CODEGEN-003.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go run /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-shapes-and-options-final/VAL-CODEGEN-003.go",
+            "exitCode": 0
+          }
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CODEGEN-004",
+      "title": "Nullable Option preserves present and absent behavior in generated Go",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile a dedicated CLI fixture to Go",
+          "expected": "rgoc succeeds and emits generated Go.",
+          "observed": "ocaml: 5.4.1 | dune:  3.21.1 | opam:  2.5.0 | warning: Git tree '/home/lenstr/workspace/personal/hack/rgo-lang' is dirty"
+        },
+        {
+          "action": "Check gofmt cleanliness",
+          "expected": "Generated Go is already canonical.",
+          "observed": "ocaml: 5.4.1 | dune:  3.21.1 | opam:  2.5.0 | warning: Git tree '/home/lenstr/workspace/personal/hack/rgo-lang' is dirty"
+        },
+        {
+          "action": "Build generated Go",
+          "expected": "go build succeeds.",
+          "observed": "ocaml: 5.4.1 | dune:  3.21.1 | opam:  2.5.0 | warning: Git tree '/home/lenstr/workspace/personal/hack/rgo-lang' is dirty"
+        },
+        {
+          "action": "Vet generated Go",
+          "expected": "go vet succeeds.",
+          "observed": "ocaml: 5.4.1 | dune:  3.21.1 | opam:  2.5.0 | warning: Git tree '/home/lenstr/workspace/personal/hack/rgo-lang' is dirty"
+        },
+        {
+          "action": "Run generated Go",
+          "expected": "'present\\nnone\\nitems\\nnone\\n'",
+          "observed": "'present\\nnone\\nitems\\nnone\\n'"
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "evidence/phase-7-full-codegen/cli-shapes-and-options-final/VAL-CODEGEN-004-compile.log",
+          "evidence/phase-7-full-codegen/cli-shapes-and-options-final/VAL-CODEGEN-004-gofmt.log",
+          "evidence/phase-7-full-codegen/cli-shapes-and-options-final/VAL-CODEGEN-004-build.log",
+          "evidence/phase-7-full-codegen/cli-shapes-and-options-final/VAL-CODEGEN-004-vet.log",
+          "evidence/phase-7-full-codegen/cli-shapes-and-options-final/VAL-CODEGEN-004-run.log"
+        ],
+        "codeRefs": [
+          "test/test_codegen.ml:278",
+          "test/test_codegen.ml:640",
+          "docs/PRD_rust_syntax_go_target_5.md:467-469"
+        ],
+        "commands": [
+          {
+            "command": "nix develop --quiet -c dune exec rgoc -- /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-shapes-and-options-final/VAL-CODEGEN-004.rg -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-shapes-and-options-final/VAL-CODEGEN-004.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c gofmt -d /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-shapes-and-options-final/VAL-CODEGEN-004.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go build -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-shapes-and-options-final/VAL-CODEGEN-004.bin /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-shapes-and-options-final/VAL-CODEGEN-004.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go vet /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-shapes-and-options-final/VAL-CODEGEN-004.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go run /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-shapes-and-options-final/VAL-CODEGEN-004.go",
+            "exitCode": 0
+          }
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CODEGEN-005",
+      "title": "Nested optional forms remain distinguishable",
+      "status": "fail",
+      "steps": [
+        {
+          "action": "Compile a dedicated CLI fixture to Go",
+          "expected": "rgoc succeeds and emits generated Go that preserves nested Option structure.",
+          "observed": "Compilation succeeded, but the emitted Go lowered `Option<Option<i64>>` to `**int64` and then generated a type switch over undefined `OptionSome`/`OptionNone` symbols."
+        },
+        {
+          "action": "Build generated Go",
+          "expected": "go build succeeds and the runtime can distinguish outer None vs Some(None) vs Some(Some(9)).",
+          "observed": "go build failed with `v (variable of type *int64) is not an interface`, `undefined: OptionSome`, and `undefined: OptionNone` in the generated file."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "evidence/phase-7-full-codegen/cli-shapes-and-options-final/VAL-CODEGEN-005-compile.log",
+          "evidence/phase-7-full-codegen/cli-shapes-and-options-final/VAL-CODEGEN-005-build.log"
+        ],
+        "codeRefs": [
+          "docs/PRD_rust_syntax_go_target_5.md:392",
+          "docs/PRD_rust_syntax_go_target_5.md:467-469",
+          "docs/PRD_rust_syntax_go_target_5.md:1332"
+        ],
+        "commands": [
+          {
+            "command": "nix develop --quiet -c dune exec rgoc -- /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-shapes-and-options-final/VAL-CODEGEN-005.rg -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-shapes-and-options-final/VAL-CODEGEN-005.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go build -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-shapes-and-options-final/VAL-CODEGEN-005.bin /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-7-full-codegen/cli-shapes-and-options-final/VAL-CODEGEN-005.go",
+            "exitCode": 1
+          }
+        ]
+      },
+      "issues": "Nested `Option<Option<i64>>` compiled into invalid Go: the outer option became `**int64`, then the generated match attempted a type switch on `*int64` and referenced undefined `OptionSome`/`OptionNone` helpers."
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Validated struct/enum/option/array/keyword Phase 7 assertions using focused Alcotest runs plus direct CLI fixtures for Option representations."
+}

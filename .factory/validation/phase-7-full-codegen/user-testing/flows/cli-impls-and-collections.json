@@ -1,0 +1,124 @@
+{
+  "milestone": "phase-7-full-codegen",
+  "groupId": "cli-impls-and-collections",
+  "surface": "rgoc CLI + generated Go artifacts",
+  "testedAt": "2026-04-20T17:13:36+03:00",
+  "isolation": {
+    "repoRoot": "/home/lenstr/workspace/personal/hack/rgo-lang",
+    "missionDir": "/home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7",
+    "services": "none",
+    "maxConcurrentValidators": 1,
+    "validatorInstance": "single CLI validator"
+  },
+  "toolsUsed": [
+    "Read",
+    "Grep",
+    "Execute",
+    "TodoWrite"
+  ],
+  "assertions": [
+    {
+      "id": "VAL-CODEGEN-010",
+      "title": "Struct impl blocks preserve method and associated-function behavior",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run focused Alcotest codegen coverage",
+          "expected": "VAL-CODEGEN-010 passes.",
+          "observed": "[OK]          struct-impl               0   constructor + methods. | [OK]          struct-impl               1   value receiver. | [OK]          struct-impl               2   mut ref methods. | Test Successful in 1.149s. 3 tests run."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "evidence/phase-7-full-codegen/cli-impls-and-collections-final/VAL-CODEGEN-010-struct-impl-0-2.log"
+        ],
+        "codeRefs": [
+          "test/test_codegen.ml:807",
+          "test/test_codegen.ml:842",
+          "test/test_codegen.ml:876"
+        ],
+        "commands": [
+          {
+            "command": "nix develop --quiet -c dune exec ./test/test_codegen.exe -- test --color=never struct-impl 0-2",
+            "exitCode": 0
+          }
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CODEGEN-011",
+      "title": "Enum impl blocks preserve method-call behavior",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run focused Alcotest codegen coverage",
+          "expected": "VAL-CODEGEN-011 passes.",
+          "observed": "[OK]          enum-impl                 0   method across variants. | [OK]          enum-impl                 1   method with params. | Test Successful in 0.798s. 2 tests run."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "evidence/phase-7-full-codegen/cli-impls-and-collections-final/VAL-CODEGEN-011-enum-impl-0-1.log"
+        ],
+        "codeRefs": [
+          "test/test_codegen.ml:911",
+          "test/test_codegen.ml:954"
+        ],
+        "commands": [
+          {
+            "command": "nix develop --quiet -c dune exec ./test/test_codegen.exe -- test --color=never enum-impl 0-1",
+            "exitCode": 0
+          }
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CODEGEN-013",
+      "title": "Vec and HashMap operations lower to working Go behaviors",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run Vec operation codegen tests",
+          "expected": "Vec operations pass.",
+          "observed": "[OK]          vec-ops                   0   push and len. | [OK]          vec-ops                   1   iteration. | [OK]          vec-ops                   2   pop. | Test Successful in 1.139s. 3 tests run."
+        },
+        {
+          "action": "Run HashMap operation codegen tests",
+          "expected": "HashMap operations pass.",
+          "observed": "[OK]          hashmap-ops               0   insert and len. | [OK]          hashmap-ops               1   contains_key. | [OK]          hashmap-ops               2   remove. | [OK]          hashmap-ops               3   get. | Test Successful in 1.545s. 4 tests run."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "evidence/phase-7-full-codegen/cli-impls-and-collections-final/VAL-CODEGEN-013-vec-ops-0-2.log",
+          "evidence/phase-7-full-codegen/cli-impls-and-collections-final/VAL-CODEGEN-013-hashmap-ops-0-3.log"
+        ],
+        "codeRefs": [
+          "test/test_codegen.ml:1000",
+          "test/test_codegen.ml:1014",
+          "test/test_codegen.ml:1029",
+          "test/test_codegen.ml:1044",
+          "test/test_codegen.ml:1058",
+          "test/test_codegen.ml:1074",
+          "test/test_codegen.ml:984"
+        ],
+        "commands": [
+          {
+            "command": "nix develop --quiet -c dune exec ./test/test_codegen.exe -- test --color=never vec-ops 0-2",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c dune exec ./test/test_codegen.exe -- test --color=never hashmap-ops 0-3",
+            "exitCode": 0
+          }
+        ]
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Validated struct impls, enum impls, and container operations through focused Phase 7 codegen Alcotest coverage."
+}
