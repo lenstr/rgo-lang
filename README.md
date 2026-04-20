@@ -11,107 +11,55 @@ The biggest practical benefit is compilation speed: `rgo` lowers to Go, so the f
 - **Compiler implementation:** OCaml 5.x
 - **Target:** Go 1.26+
 
-## Why this is interesting
+## Language capabilities
 
-`rgo` aims to combine:
+The compiler currently supports the full feature set described in the PRD (Phases 0–8):
 
-- Rust-like syntax
-- algebraic data types (`enum`)
-- `Option<T>` / `Result<T, E>`
-- `match`
-- `impl`, `trait`, and generics
-- the `?` operator
-
-with practical Go advantages:
-
-- **fast compilation via the standard Go toolchain**
-- readable and idiomatic generated Go
-- goroutines and Go's runtime model
-- a mature standard library
-- simple binary distribution
-
-The goal is not to generate weird intermediate code that merely happens to compile.
-The goal is to translate Rust-like source into Go that a Go developer can still read, debug, and maintain.
-
-## Rust-like in, idiomatic Go out
-
-### Example: function translation
-
-`rgo`:
-
-```rust
-pub fn add(a: i64, b: i64) -> i64 {
-    a + b
-}
-```
-
-Generated Go:
-
-```go
-func Add(a int64, b int64) int64 {
-    return a + b
-}
-```
-
-### Example: `Result` + `?` to Go-style error handling
-
-`rgo`:
-
-```rust
-fn double(s: str) -> Result<i64, str> {
-    let n = parse_int(s)?;
-    Ok(n * 2)
-}
-```
-
-Generated Go:
-
-```go
-func Double(s string) (int64, error) {
-    n, err := parseInt(s)
-    if err != nil {
-        return 0, err
-    }
-    return n * 2, nil
-}
-```
-
-That translation style is a major part of the project vision: keep the input language modern and expressive, while keeping the output close to normal Go conventions.
-
-## Project status
-
-This repository is currently in the early prototype stage.
-
-What already exists:
-
-- a `dune`-based project skeleton
-- a CLI with `--version`
-- a Unicode-aware lexer built with `sedlex`
-- tests for core tokens and position tracking
-
-The README below shows the **intended language syntax**, meaning examples of what `rgo` is expected to look like as the compiler grows.
+- Functions, `let` bindings, mutability, control flow (`if`/`else`, `while`, `loop`, `for`)
+- Structs with fields and `impl` blocks (methods + associated functions)
+- Enums with tuple, struct, and unit variants
+- Pattern matching (`match`) with exhaustiveness checking
+- `Option<T>` and `Result<T, E>` as built-in sum types
+- The `?` operator for early-return error/option propagation
+- Generics with type parameters on structs, functions, and impl blocks
+- Traits (`trait`, `impl Trait for Type`, default methods, generic bounds)
+- Collections: `Vec<T>`, `HashMap<K, V>`, array literals
+- Visibility (`pub`)
+- Go code generation with `gofmt`-clean, deterministic output
 
 ## Quick start
 
-All project commands should be run through the Nix flake:
+All project commands run through the Nix flake:
 
 ```bash
+# Enter the dev shell (optional — you can also prefix each command)
+nix develop
+
+# Build the compiler
 nix develop -c dune build
+
+# Run the test suite
 nix develop -c dune runtest
+
+# Check formatting
+nix develop -c dune build @fmt
+
+# Print the compiler version
 nix develop -c dune exec rgoc -- --version
 ```
 
-Expected output:
+## Compiling an `.rg` file
 
-```text
-rgoc v0.0.1
+```bash
+nix develop -c dune exec rgoc -- examples/hello.rg -o hello.go
+go run hello.go
 ```
 
-## Syntax examples
+The compiler reads a single `.rg` source file, runs the full pipeline (lex → parse → resolve → typecheck → exhaustiveness → codegen), writes Go source, and applies `gofmt`.
 
-> The examples below describe the target language design, even if some constructs are not implemented in the compiler yet.
+## Example
 
-### Hello world
+`examples/hello.rg`:
 
 ```rust
 fn main() {
@@ -119,57 +67,19 @@ fn main() {
 }
 ```
 
-### Functions and `let`
+Generated Go:
 
-```rust
-fn add(a: i64, b: i64) -> i64 {
-    a + b
-}
+```go
+package main
 
-fn main() {
-    let x = add(20, 22);
-    println(x);
-}
-```
+import "fmt"
 
-### Mutable variables
-
-```rust
-fn main() {
-    let mut total: i64 = 0;
-    total = total + 10;
-    println(total);
+func main() {
+	fmt.Println("Hello, world!")
 }
 ```
 
-### Conditional expressions
-
-```rust
-fn abs(x: i64) -> i64 {
-    if x < 0 {
-        -x
-    } else {
-        x
-    }
-}
-```
-
-### Struct
-
-```rust
-struct Point {
-    x: f64,
-    y: f64,
-}
-
-fn distance_squared(a: Point, b: Point) -> f64 {
-    let dx = a.x - b.x;
-    let dy = a.y - b.y;
-    dx * dx + dy * dy
-}
-```
-
-### Enum and `match`
+### Enum + match
 
 ```rust
 enum Shape {
@@ -187,74 +97,41 @@ fn area(shape: Shape) -> f64 {
 }
 ```
 
-### `Option<T>`
+### Result + `?` operator
 
 ```rust
-fn first(v: Vec<i64>) -> Option<i64> {
-    if v.len() == 0 {
-        return None;
+fn divide(a: i64, b: i64) -> Result<i64, str> {
+    if b == 0 {
+        return Err("division by zero");
     }
+    Ok(a / b)
+}
 
-    Some(v[0])
+fn half_divide(a: i64, b: i64) -> Result<i64, str> {
+    let n = divide(a, b)?;
+    Ok(n / 2)
 }
 ```
 
-### `Result<T, E>` and the `?` operator
+### Generics + impl
 
 ```rust
-fn parse_int(s: str) -> Result<i64, str> {
-    // later this will bind to strconv.ParseInt
+struct Box<T> {
+    value: T,
 }
 
-fn double(s: str) -> Result<i64, str> {
-    let n = parse_int(s)?;
-    Ok(n * 2)
-}
-```
-
-### Methods with `impl`
-
-```rust
-struct Counter {
-    value: i64,
-}
-
-impl Counter {
-    pub fn new() -> Self {
-        Counter { value: 0 }
+impl<T> Box<T> {
+    pub fn new(v: T) -> Self {
+        Box { value: v }
     }
 
-    pub fn get(&self) -> i64 {
+    pub fn get(&self) -> T {
         self.value
     }
-
-    pub fn inc(&mut self) {
-        self.value = self.value + 1;
-    }
 }
 ```
 
-### Associated functions
-
-```rust
-struct Point {
-    x: f64,
-    y: f64,
-}
-
-impl Point {
-    pub fn new(x: f64, y: f64) -> Self {
-        Point { x, y }
-    }
-}
-
-fn main() {
-    let p = Point::new(1.0, 2.0);
-    println(p.x);
-}
-```
-
-### Trait and generic bounds
+### Traits
 
 ```rust
 trait Display {
@@ -270,97 +147,61 @@ impl Display for User {
         self.name
     }
 }
-
-fn print_one<T: Display>(value: T) {
-    println(value.display());
-}
 ```
 
-### Collections
+More examples live in the `examples/` directory.
 
-```rust
-fn main() {
-    let xs: Vec<i64> = [1, 2, 3, 4];
-    let empty: Vec<String> = [];
-    let zeros: Vec<i64> = [0; 8];
+## Project structure
 
-    println(xs.len());
-    println(empty.len());
-    println(zeros.len());
-}
+```
+bin/          CLI entry point (rgoc)
+lib/          Compiler library modules
+  lexer.ml        Unicode-aware lexer (sedlex)
+  parser.mly      Menhir grammar
+  ast.ml          AST types
+  resolver.ml     Name resolution + symbol tables
+  typecheck.ml    Type checking + inference
+  exhaust.ml      Match exhaustiveness checker
+  codegen.ml      Go code emitter
+  driver.ml       Pipeline orchestration
+test/         Unit, snapshot, and e2e tests
+examples/     Sample .rg programs
+docs/         PRD and design decisions
 ```
 
-### Loops
+## Testing
 
-```rust
-fn sum(xs: Vec<i64>) -> i64 {
-    let mut total: i64 = 0;
+The test suite covers each compiler phase:
 
-    for x in xs {
-        total = total + x;
-    }
+- **Lexer**: tokens, positions, nested comments, Unicode identifiers
+- **Parser**: AST snapshots for all language constructs
+- **Resolver**: symbol resolution, duplicate/undefined diagnostics
+- **Typechecker**: type inference, error messages, generics, traits
+- **Exhaustiveness**: missing-pattern diagnostics for match expressions
+- **Codegen**: snapshot tests of generated Go, Go build/run validation
+- **E2E**: full `.rg` -> `.go` -> `go build` -> `go run` round-trips
 
-    total
-}
-```
-
-### `while` and `loop`
-
-```rust
-fn countdown(mut n: i64) {
-    while n > 0 {
-        println(n);
-        n = n - 1;
-    }
-
-    loop {
-        break;
-    }
-}
-```
-
-## Example of the planned pipeline
-
-In the target form, the compiler should support a workflow roughly like this:
-
-```bash
-rgoc examples/hello.rg -o hello.go
-gofmt -w hello.go
-go run hello.go
-```
-
-## What tests cover today
-
-Right now, tests mainly cover the lexer:
-
-- keywords (`fn`, `let`, `match`, `impl`, `trait`, etc.)
-- built-in types (`i64`, `String`, `Option`, `Result`, `Vec`, `HashMap`)
-- strings, numbers, and operators
-- nested block comments
-- Unicode identifiers
-- token positions
-
-Run them with:
+Run everything:
 
 ```bash
 nix develop -c dune runtest
 ```
 
-## Next steps
+## Validation workflow
 
-The next major milestones are:
+The compiler pipeline validates `.rg` programs through these phases in order:
 
-1. AST
-2. parser with Menhir
-3. name resolution
-4. type checking
-5. exhaustiveness checking for `match`
-6. Go code generation
+1. **Lexing** — tokenize with position tracking
+2. **Parsing** — produce a typed AST
+3. **Name resolution** — resolve identifiers, detect undefined/duplicate symbols
+4. **Type checking** — infer and check types, validate trait bounds
+5. **Exhaustiveness** — reject non-exhaustive `match` expressions
+6. **Code generation** — emit idiomatic Go, apply `gofmt`
+
+If any phase fails, the compiler reports the error with file, line, and column information and exits non-zero.
 
 ## Documentation
 
-The detailed product and technical plan lives here:
+The detailed product requirements and technical plan:
 
 - `docs/PRD_rust_syntax_go_target_5.md`
-
-If you want a quick overview of the project direction, start with this README and then move on to the PRD.
