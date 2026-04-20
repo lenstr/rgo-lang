@@ -412,7 +412,11 @@ let collect_globals env (items : item list) =
           in
           add_type e_name { ti_variants = variants; ti_fields = [] } e
       | ItemImpl _ | ItemTraitImpl _ -> e
-      | ItemTrait { t_name; _ } -> add_trait t_name e)
+      | ItemTrait { t_name; _ } ->
+          if SMap.mem t_name.node e.imported_packages then
+            import_error_at t_name.span
+              (Import_alias_collision (t_name.node, t_name.span));
+          add_trait t_name e)
     env items
 
 let resolve_item env (item : item) =

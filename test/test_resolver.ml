@@ -377,6 +377,13 @@ use net::http;
 enum http { A, B }
 |}
 
+(* Negative: alias collision with user-defined trait *)
+let alias_collision_trait =
+  {|
+use net::http;
+trait http { fn do_thing(&self); }
+|}
+
 (* Negative: duplicate import *)
 let duplicate_import = {|
 use net::http;
@@ -411,6 +418,9 @@ let import_negative_tests =
     ( "alias collision with enum",
       `Quick,
       fail_resolve ~expect:"collides" alias_collision_enum );
+    ( "alias collision with trait",
+      `Quick,
+      fail_resolve ~expect:"collides" alias_collision_trait );
     ( "duplicate import",
       `Quick,
       fail_resolve ~expect:"collides" duplicate_import );

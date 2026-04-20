@@ -199,6 +199,49 @@ let test_import_collision_no_output () =
       Alcotest.(check bool)
         "collision diagnostic" true (contains msg "collides")
 
+let test_import_trait_collision_no_output () =
+  let src =
+    "use net::http;\ntrait http { fn do_thing(&self); }\nfn main() {}"
+  in
+  match Rgo.Driver.compile_string ~filename:"trait_collision.rg" src with
+  | Ok _ -> Alcotest.fail "should fail: trait alias collision"
+  | Error e ->
+      let msg =
+        match e with
+        | Rgo.Driver.Resolve_error { msg; _ } -> msg
+        | _ -> Alcotest.fail "expected resolve error"
+      in
+      Alcotest.(check bool)
+        "collision diagnostic" true (contains msg "collides")
+
+let test_import_missing_type_position_no_output () =
+  let src = "fn handler(req: http::Request) {}\nfn main() {}" in
+  match Rgo.Driver.compile_string ~filename:"missing_type.rg" src with
+  | Ok _ -> Alcotest.fail "should fail: http not imported in type position"
+  | Error e ->
+      let msg =
+        match e with
+        | Rgo.Driver.Resolve_error { msg; _ } -> msg
+        | _ -> Alcotest.fail "expected resolve error"
+      in
+      Alcotest.(check bool)
+        "package-aware diagnostic in type position" true
+        (contains msg "not imported")
+
+let test_import_unknown_member_no_output () =
+  let src = "use net::http;\nfn main() { let x = http::missing_symbol; }" in
+  match Rgo.Driver.compile_string ~filename:"unknown_member.rg" src with
+  | Ok _ -> Alcotest.fail "should fail: unknown member"
+  | Error e ->
+      let msg =
+        match e with
+        | Rgo.Driver.Typecheck_error { msg; _ } -> msg
+        | _ -> Alcotest.fail "expected typecheck error"
+      in
+      Alcotest.(check bool)
+        "member-aware diagnostic" true
+        (contains msg "undefined member" || contains msg "unknown")
+
 let () =
   Alcotest.run "e2e"
     [
@@ -223,11 +266,17 @@ let () =
         [
           Alcotest.test_case "missing import no output" `Quick
             test_import_missing_no_output;
+          Alcotest.test_case "missing import type position no output" `Quick
+            test_import_missing_type_position_no_output;
           Alcotest.test_case "malformed import no output" `Quick
             test_import_malformed_no_output;
           Alcotest.test_case "external package no output" `Quick
             test_import_external_pkg_no_output;
           Alcotest.test_case "alias collision no output" `Quick
             test_import_collision_no_output;
+          Alcotest.test_case "trait alias collision no output" `Quick
+            test_import_trait_collision_no_output;
+          Alcotest.test_case "unknown stdlib member no output" `Quick
+            test_import_unknown_member_no_output;
         ] );
     ]
