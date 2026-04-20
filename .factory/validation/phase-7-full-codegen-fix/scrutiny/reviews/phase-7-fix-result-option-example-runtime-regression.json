@@ -1,0 +1,28 @@
+{
+  "featureId": "phase-7-fix-result-option-example-runtime-regression",
+  "reviewedAt": "2026-04-20T13:26:42+03:00",
+  "commitId": "523729cb7362a97bc15537c2269461cbd64a244a",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The latest fix commit resolves the round-3 blocker about `demo_result` / `demo_option`, but the feature still does not meet its contract. The shipped fixture is still not preserved in its original authored direct `divide` / `half_divide` / `first` / `head_plus_one` form: `examples/result_option.rg` now routes `main` through new `show_*` wrappers, and `test/test_codegen.ml` bakes that wrapper structure into the regression instead of checking the unchanged authored example plus external stdout only.",
+    "issues": [
+      {
+        "file": "examples/result_option.rg",
+        "line": 25,
+        "severity": "blocking",
+        "description": "The current fixture still adds a helper layer (`show_divide`, `show_half_divide`, `show_first`, `show_head_plus_one`) and a wrapper-driven `main` instead of preserving the original authored structure. The feature description/expectedBehavior require the shipped example to keep the direct `divide` / `half_divide` / `first` / `head_plus_one` flow with no wrapper helper layer; compare the historical authored fixture at `0cdee8e:examples/result_option.rg`, where `main` directly binds those four calls."
+      },
+      {
+        "file": "test/test_codegen.ml",
+        "line": 809,
+        "severity": "blocking",
+        "description": "The refreshed regression now asserts that `examples/result_option.rg` contains the `show_*` wrappers and their callsites. That encodes the wrong fixture shape into the test suite: a correct restoration of the original direct-main example would now fail this test even though it matches the feature contract. The requirement was to keep runtime validation in `test/test_codegen.ml` while the example remained the unchanged shipped artifact, not to bless a new wrapper structure."
+      }
+    ]
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/phase-7-full-codegen-fix/scrutiny/reviews/phase-7-fix-result-option-example-runtime-regression.json",
+  "summary": "Reviewed the prior failing report, feature metadata, latest worker transcript skeleton/handoff, commit `523729c`, current `examples/result_option.rg`, current `test/test_codegen.ml`, and the round-3 synthesis. The prior `demo_*` blocker is fixed, but the feature still fails because the example is not restored to its original no-wrapper authored form and the updated regression test now enforces the incorrect `show_*` wrapper structure."
+}

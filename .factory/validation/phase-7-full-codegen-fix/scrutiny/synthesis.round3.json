@@ -1,0 +1,59 @@
+{
+  "milestone": "phase-7-full-codegen-fix",
+  "round": 3,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "nix develop -c dune runtest",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "nix develop -c dune build",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "nix develop -c dune build @fmt",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 9,
+    "passed": 8,
+    "failed": 1,
+    "failedFeatures": [
+      "phase-7-fix-result-option-example-runtime-regression"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "phase-7-fix-result-option-example-runtime-regression",
+      "severity": "blocking",
+      "description": "The stale `show_*`-wrapper finding is resolved, but `examples/result_option.rg` is still not preserved as originally authored: it now introduces `demo_result` / `demo_option` wrapper helpers and a wrapper-driven `main`, so the runtime regression still validates a modified fixture instead of the unchanged shipped example."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "compiler-worker skill",
+      "suggestion": "Relax or clarify the blanket 'tests first' rule for small codegen fixes and fixture-preservation refactors so workers can inspect or patch the implementation first when the required regression is already known or intentionally unchanged.",
+      "evidence": "Three separate review reports in this milestone flagged the same mismatch between the skill and actual successful/attempted workflows: `phase-7-fix-question-mark-subexpression-codegen`, `phase-7-fix-result-option-example-runtime-regression`, and `phase-7-fix-option-literal-pointer-typing` all record that the current compiler-worker guidance is too rigid for these fix shapes.",
+      "isSystemic": true
+    },
+    {
+      "target": "compiler-worker skill",
+      "suggestion": "Clarify whether codegen fix handoffs must always include a manual representative `.rg -> .go` sanity check, or explicitly allow automated-only verification when `dune runtest` already exercises `gofmt`, `go build`, `go vet`, and `go run` for the affected path.",
+      "evidence": "The refreshed review for `phase-7-fix-option-literal-pointer-typing` found that the skill still mandates a manual representative sanity check, but the worker handoff recorded only automated validators while still marking procedure-following as true.",
+      "isSystemic": true
+    }
+  ],
+  "rejectedObservations": [
+    {
+      "observation": "The worker discovered a still-open typechecker limitation while building the regression test: generic associated-function calls from outside impl scope lose concrete type arguments because concrete_type_for_name falls back to TStruct(name, []) / TEnum(name, []). This constraint materially shaped the final test design, but it is not reflected in shared library docs.",
+      "reason": "already-documented by the dedicated fix feature `phase-7-fix-generic-constructor-type-argument-inference` in this same milestone, so adding a separate shared-state update here would be stale."
+    }
+  ],
+  "previousRound": ".factory/validation/phase-7-full-codegen-fix/scrutiny/synthesis.round2.json"
+}

@@ -1,0 +1,58 @@
+{
+  "milestone": "phase-7-full-codegen-fix",
+  "round": 2,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "nix develop -c dune runtest",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "nix develop -c dune build",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "nix develop -c dune build @fmt",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 9,
+    "passed": 6,
+    "failed": 3,
+    "failedFeatures": [
+      "phase-7-fix-option-literal-pointer-typing",
+      "phase-7-fix-question-mark-subexpression-codegen",
+      "phase-7-fix-result-option-example-runtime-regression"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "phase-7-fix-option-literal-pointer-typing",
+      "severity": "blocking",
+      "description": "`gen_new_expr` only inserts explicit Go type conversions for raw numeric literal AST nodes, so negative numeric payloads parsed as unary expressions (for example `Some(-1)` / `Some(-1.5)`) still bypass the typed-literal path and leave the pointer-backed Option literal fix incomplete."
+    },
+    {
+      "featureId": "phase-7-fix-question-mark-subexpression-codegen",
+      "severity": "blocking",
+      "description": "Wildcard let bindings still bypass the new nested-`?` hoisting path, so constructs like `let _ = add_ten(inner(x)?);` emit invalid Go instead of hoisted early-return checks."
+    },
+    {
+      "featureId": "phase-7-fix-result-option-example-runtime-regression",
+      "severity": "blocking",
+      "description": "The shipped `examples/result_option.rg` example is still rewritten with `show_*` wrappers and a wrapper-driven `main`, so the regression does not validate the original authored example end-to-end from the test harness as required."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [],
+  "rejectedObservations": [
+    {
+      "observation": "The worker discovered a still-open typechecker limitation while building the regression test: generic associated-function calls from outside impl scope lose concrete type arguments because concrete_type_for_name falls back to TStruct(name, []) / TEnum(name, []). This constraint materially shaped the final test design, but it is not reflected in shared library docs.",
+      "reason": "already-documented by the dedicated fix feature phase-7-fix-generic-constructor-type-argument-inference in this same milestone, so adding a separate shared-state update would be stale."
+    }
+  ],
+  "previousRound": ".factory/validation/phase-7-full-codegen-fix/scrutiny/synthesis.round1.json"
+}

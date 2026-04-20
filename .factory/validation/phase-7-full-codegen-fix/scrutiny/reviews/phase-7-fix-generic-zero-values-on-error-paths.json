@@ -1,0 +1,21 @@
+{
+  "featureId": "phase-7-fix-generic-zero-values-on-error-paths",
+  "reviewedAt": "2026-04-20T08:31:32.298528+00:00",
+  "commitId": "59c66d1",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The change in lib/codegen.ml directly fixes the reported zero-value emission bug for generic nominal types, and the added regression test exercises a representative Result-return path that previously would have emitted invalid bare generic literals. I did not find any high-confidence actionable defects in the scoped implementation.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "knowledge",
+      "observation": "The worker discovered a still-open typechecker limitation while building the regression test: generic associated-function calls from outside impl scope lose concrete type arguments because concrete_type_for_name falls back to TStruct(name, []) / TEnum(name, []). This constraint materially shaped the final test design, but it is not reflected in shared library docs.",
+      "evidence": "lib/typecheck.ml:447-454 falls back to TStruct(name, [])/TEnum(name, []); the handoff's discoveredIssues section documents the same limitation with Box::new/Pair::new examples."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed the handoff, transcript skeleton, skill guidance, shared-state docs, and commit 59c66d1. The feature appears correct and in-scope: generic zero values now preserve type arguments in codegen, and the added regression test covers a representative Result error-path scenario."
+}

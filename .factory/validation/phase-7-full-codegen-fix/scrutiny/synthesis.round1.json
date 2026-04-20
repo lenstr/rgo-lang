@@ -1,0 +1,46 @@
+{
+  "milestone": "phase-7-full-codegen-fix",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "nix develop -c dune runtest",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "nix develop -c dune build",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "nix develop -c dune build @fmt",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 7,
+    "passed": 6,
+    "failed": 1,
+    "failedFeatures": [
+      "phase-7-fix-result-option-example-runtime-regression"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "phase-7-fix-result-option-example-runtime-regression",
+      "severity": "blocking",
+      "description": "The feature changes the shipped example program itself by adding show_* helper functions and replacing main with hard-coded print wrappers, instead of adding runtime-only validation around the existing example. The task required strengthening regression coverage for the repaired example, not altering the example's observable program structure to make it printable. This means the test no longer validates the original divide/half_divide/first/head_plus_one example end-to-end as authored; it validates a new wrapper-driven program instead."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [],
+  "rejectedObservations": [
+    {
+      "observation": "The worker discovered a still-open typechecker limitation while building the regression test: generic associated-function calls from outside impl scope lose concrete type arguments because concrete_type_for_name falls back to TStruct(name, []) / TEnum(name, []). This constraint materially shaped the final test design, but it is not reflected in shared library docs.",
+      "reason": "already-documented by the dedicated fix feature phase-7-fix-generic-constructor-type-argument-inference in this same milestone, so adding a separate shared-state update would be stale."
+    }
+  ],
+  "previousRound": null
+}

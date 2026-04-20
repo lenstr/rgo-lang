@@ -1,0 +1,21 @@
+{
+  "featureId": "phase-7-fix-question-mark-subexpression-codegen",
+  "reviewedAt": "2026-04-20T13:00:33+03:00",
+  "commitId": "f411adf",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The rerun fixes the prior blocker. `StmtLet { pat = PatWild; ... }` now routes direct `ExprQuestion` and nested `contains_question` initializers through the dedicated `?` handling path in `lib/codegen.ml:1854-1863`, so wildcard discards no longer leave hoisted early-return code stranded inside an expression context. The new regression `test_question_mark_wildcard_let_nested` in `test/test_codegen.ml:512-538` exercises the exact failing shape `let _ = add_ten(inner(x)?);`, and its `compile_and_check` harness verifies `gofmt -d`, `go build`, `go vet`, and `go run` for the generated Go.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The compiler-worker skill's strict 'tests first, make them fail first' requirement does not match how this codegen bug fix was actually executed. The worker had to inspect the existing hoisting logic and patch `lib/codegen.ml` before adding the regression, and the handoff explicitly requested relaxing that guidance for codegen fixes.",
+      "evidence": "The transcript skeleton for worker session `80d49f12-c9bb-4461-9ccc-bda6043bb1d9` shows reads of `lib/codegen.ml` and an edit to that file before the later edits to `test/test_codegen.ml`. Compare that with step 3 in `.factory/skills/compiler-worker/SKILL.md`, and with `handoff.skillFeedback.suggestedChanges[0]` in `/home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/handoffs/2026-04-20T09-48-54-124Z__phase-7-fix-question-mark-subexpression-codegen__80d49f12-c9bb-4461-9ccc-bda6043bb1d9.json`."
+    }
+  ],
+  "addressesFailureFrom": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/phase-7-full-codegen-fix/scrutiny/reviews/phase-7-fix-question-mark-subexpression-codegen.json",
+  "summary": "Reviewed the prior failing report, synthesis, latest handoff, transcript skeleton, skill, and commit `f411adf`. The new wildcard-let branches in `lib/codegen.ml` now hoist nested `?` expressions before the discard assignment, and the added regression test covers the previously failing `let _ = add_ten(inner(x)?);` path through formatting, build, vet, and runtime checks, so the rerun resolves the earlier blocking defect."
+}
