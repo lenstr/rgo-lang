@@ -12,6 +12,30 @@ let error_at (span : span) fmt =
         (Resolve_error { msg; line = span.start.line; col = span.start.col }))
     fmt
 
+(* ---------- import errors ---------- *)
+
+type import_error_kind =
+  | Malformed_import of string
+  | Unsupported_external_package of string
+  | Import_alias_collision of string * span
+  | Missing_import of string
+
+exception Import_error of { kind : import_error_kind; span : span }
+
+let import_error_at span kind = raise (Import_error { kind; span })
+
+(* ---------- supported stdlib packages ---------- *)
+
+let supported_stdlib_packages = [ ([ "net"; "http" ], "http") ]
+
+let is_stdlib_path segments =
+  List.exists (fun (path, _alias) -> path = segments) supported_stdlib_packages
+
+let alias_for_path segments =
+  List.find_map
+    (fun (path, alias) -> if path = segments then Some alias else None)
+    supported_stdlib_packages
+
 (* ---------- scopes ---------- *)
 
 (* A scope maps names to "declared" markers.  We use a simple string set
@@ -28,6 +52,8 @@ type env = {
   types : type_info SMap.t; (* global type namespace *)
   fns : unit SMap.t; (* global function namespace *)
   traits : unit SMap.t; (* global trait namespace *)
+  imported_packages : string list SMap.t;
+      (* alias -> path segments, e.g. "http" -> ["net"; "http"] *)
 }
 
 let empty_env =
@@ -36,6 +62,7 @@ let empty_env =
     types = SMap.empty;
     fns = SMap.empty;
     traits = SMap.empty;
+    imported_packages = SMap.empty;
   }
 
 let push_scope env = { env with values = SMap.empty :: env.values }
@@ -65,6 +92,9 @@ let add_trait (name : ident located) env =
   { env with traits = SMap.add name.node () env.traits }
 
 let lookup_trait (name : string) env = SMap.mem name env.traits
+
+let lookup_imported_package (name : string) env =
+  SMap.mem name env.imported_packages
 
 (* ---------- built-in names ---------- *)
 
@@ -162,31 +192,47 @@ let rec resolve_pat env (p : pat) =
         env field_pats
 
 and resolve_enum_variant_ref env enum_name variant_name =
-  match enum_name.node with
-  | "Option" ->
-      if not (List.mem variant_name.node [ "Some"; "None" ]) then
-        error_at variant_name.span "undefined variant '%s' in '%s'"
-          variant_name.node enum_name.node
-  | "Result" ->
-      if not (List.mem variant_name.node [ "Ok"; "Err" ]) then
-        error_at variant_name.span "undefined variant '%s' in '%s'"
-          variant_name.node enum_name.node
-  | _ -> (
-      match lookup_type enum_name.node env with
-      | None -> error_at enum_name.span "undefined type '%s'" enum_name.node
-      | Some ti ->
-          if not (List.mem variant_name.node ti.ti_variants) then
-            error_at variant_name.span "undefined variant '%s' in '%s'"
-              variant_name.node enum_name.node)
+  (* If left side is an imported package, defer to typechecking *)
+  if lookup_imported_package enum_name.node env then ()
+  else
+    match enum_name.node with
+    | "Option" ->
+        if not (List.mem variant_name.node [ "Some"; "None" ]) then
+          error_at variant_name.span "undefined variant '%s' in '%s'"
+            variant_name.node enum_name.node
+    | "Result" ->
+        if not (List.mem variant_name.node [ "Ok"; "Err" ]) then
+          error_at variant_name.span "undefined variant '%s' in '%s'"
+            variant_name.node enum_name.node
+    | _ -> (
+        match lookup_type enum_name.node env with
+        | None -> error_at enum_name.span "undefined type '%s'" enum_name.node
+        | Some ti ->
+            if not (List.mem variant_name.node ti.ti_variants) then
+              error_at variant_name.span "undefined variant '%s' in '%s'"
+                variant_name.node enum_name.node)
 
 and resolve_path_ref env type_name _member_name =
-  (* Type::Member can be either an enum variant or an associated function.
-     At the resolution phase we only check that the type exists.
-     Member validation (variant or associated function) is deferred to
-     the type-checking phase where impl blocks are available. *)
-  match lookup_type type_name.node env with
-  | None -> error_at type_name.span "undefined type '%s'" type_name.node
-  | Some _ti -> ()
+  (* If the left-hand side is an imported package, the path is valid
+     and member resolution is deferred to typechecking. *)
+  if lookup_imported_package type_name.node env then ()
+  else
+    (* Type::Member can be either an enum variant or an associated function.
+       At the resolution phase we only check that the type exists.
+       Member validation (variant or associated function) is deferred to
+       the type-checking phase where impl blocks are available. *)
+    match lookup_type type_name.node env with
+    | None ->
+        (* Check if this could be a known stdlib package that's not imported *)
+        let is_known_alias =
+          List.exists
+            (fun (_path, alias) -> alias = type_name.node)
+            supported_stdlib_packages
+        in
+        if is_known_alias then
+          import_error_at type_name.span (Missing_import type_name.node)
+        else error_at type_name.span "undefined type '%s'" type_name.node
+    | Some _ti -> ()
 
 (* ---------- expression resolution ---------- *)
 
@@ -335,11 +381,21 @@ let collect_globals env (items : item list) =
   List.fold_left
     (fun e item ->
       match item with
-      | ItemFn fd -> add_fn fd.fn_name e
+      | ItemFn fd ->
+          if SMap.mem fd.fn_name.node e.imported_packages then
+            import_error_at fd.fn_name.span
+              (Import_alias_collision (fd.fn_name.node, fd.fn_name.span));
+          add_fn fd.fn_name e
       | ItemStruct { s_name; s_fields; _ } ->
+          if SMap.mem s_name.node e.imported_packages then
+            import_error_at s_name.span
+              (Import_alias_collision (s_name.node, s_name.span));
           let fields = List.map (fun (f : field) -> f.fd_name.node) s_fields in
           add_type s_name { ti_variants = []; ti_fields = fields } e
       | ItemEnum { e_name; e_variants; _ } ->
+          if SMap.mem e_name.node e.imported_packages then
+            import_error_at e_name.span
+              (Import_alias_collision (e_name.node, e_name.span));
           let variants =
             List.map (fun (v : variant) -> v.var_name.node) e_variants
           in
@@ -470,15 +526,74 @@ let resolve_item env (item : item) =
               resolve_fn_decl method_env fd)
         t_items
 
+(* ---------- import resolution ---------- *)
+
+let resolve_imports env (imports : import_path list) =
+  List.fold_left
+    (fun e (imp : import_path) ->
+      let segments =
+        List.map (fun (seg : ident located) -> seg.node) imp.imp_segments
+      in
+      (* Validate: must have at least 2 segments *)
+      if List.length imp.imp_segments < 2 then
+        import_error_at imp.imp_span
+          (Malformed_import
+             (Printf.sprintf "malformed import: expected 'use pkg::sub'"));
+      (* Check if this is a supported stdlib path *)
+      if not (is_stdlib_path segments) then
+        import_error_at imp.imp_span
+          (Unsupported_external_package
+             (Printf.sprintf "unsupported external package '%s'"
+                (String.concat "::" segments)));
+      (* Get the alias (last segment) *)
+      let alias =
+        match alias_for_path segments with
+        | Some a -> a
+        | None -> List.nth segments (List.length segments - 1)
+      in
+      let alias_loc =
+        List.nth imp.imp_segments (List.length imp.imp_segments - 1)
+      in
+      (* Check for collision with existing types, functions, or other imports *)
+      if SMap.mem alias e.types then
+        import_error_at alias_loc.span
+          (Import_alias_collision (alias, alias_loc.span));
+      if SMap.mem alias e.fns then
+        import_error_at alias_loc.span
+          (Import_alias_collision (alias, alias_loc.span));
+      if SMap.mem alias e.imported_packages then
+        import_error_at alias_loc.span
+          (Import_alias_collision (alias, alias_loc.span));
+      { e with imported_packages = SMap.add alias segments e.imported_packages })
+    env imports
+
 (* ---------- main entry point ---------- *)
 
 let resolve_exn (prog : program) : program =
   let env = init_env () in
+  let env = resolve_imports env prog.imports in
   let env = collect_globals env prog.items in
   List.iter (resolve_item env) prog.items;
   prog
 
+let format_import_error (e : import_error_kind) =
+  match e with
+  | Malformed_import msg -> msg
+  | Unsupported_external_package msg -> msg
+  | Import_alias_collision (alias, _) ->
+      Printf.sprintf "import alias '%s' collides with an existing declaration"
+        alias
+  | Missing_import pkg ->
+      Printf.sprintf
+        "package '%s' is not imported; add 'use ...::%s;' at the top of the \
+         file"
+        pkg pkg
+
 let resolve (prog : program) : (program, string) result =
-  try Ok (resolve_exn prog)
-  with Resolve_error { msg; line; col } ->
-    Error (Printf.sprintf "%d:%d: %s" line col msg)
+  try Ok (resolve_exn prog) with
+  | Resolve_error { msg; line; col } ->
+      Error (Printf.sprintf "%d:%d: %s" line col msg)
+  | Import_error { kind; span } ->
+      Error
+        (Printf.sprintf "%d:%d: %s" span.start.line span.start.col
+           (format_import_error kind))

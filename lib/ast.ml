@@ -174,4 +174,9 @@ type item =
     }
 [@@deriving show]
 
-type program = { items : item list } [@@deriving show]
+(* ---------- imports ---------- *)
+type import_path = { imp_segments : ident located list; imp_span : span }
+[@@deriving show]
+
+type program = { imports : import_path list; items : item list }
+[@@deriving show]

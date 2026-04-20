@@ -66,6 +66,8 @@ type env = {
   type_params : string list; (* in-scope generic type params *)
   param_bounds : string list SMap.t;
       (* type_param_name -> list of required trait names *)
+  imported_packages : string list SMap.t;
+      (* alias -> path segments, for import-aware diagnostics *)
 }
 
 let empty_env =
@@ -82,6 +84,7 @@ let empty_env =
     current_trait = None;
     type_params = [];
     param_bounds = SMap.empty;
+    imported_packages = SMap.empty;
   }
 
 let push_scope env = { env with values = SMap.empty :: env.values }
@@ -470,31 +473,38 @@ and check_bounds env span bounds formals actuals =
       bounds
 
 and check_assoc_fn_call env type_name fn_name arg_types =
-  (* Check for enum variant constructors first *)
-  match SMap.find_opt type_name.node env.enums with
-  | Some ei -> (
-      match List.assoc_opt fn_name.node ei.ei_variants with
-      | Some (VTuple field_tys) ->
-          let expected_len = List.length field_tys in
-          let actual_len = List.length arg_types in
-          if expected_len <> actual_len then
-            error_at fn_name.span "variant '%s::%s' expects %d field(s), got %d"
-              type_name.node fn_name.node expected_len actual_len;
-          List.iter2
-            (fun exp act ->
-              expect_type ~env ~span:fn_name.span ~expected:exp ~actual:act)
-            field_tys arg_types;
-          TEnum (type_name.node, [])
-      | Some VUnit ->
-          if arg_types <> [] then
-            error_at fn_name.span "unit variant '%s::%s' takes no arguments"
-              type_name.node fn_name.node;
-          TEnum (type_name.node, [])
-      | Some (VStruct _) ->
-          error_at fn_name.span "struct variant '%s::%s' must use named fields"
-            type_name.node fn_name.node
-      | None -> check_impl_assoc_fn env type_name fn_name arg_types)
-  | None -> check_impl_assoc_fn env type_name fn_name arg_types
+  (* If this is an imported package, give member-aware diagnostics *)
+  if SMap.mem type_name.node env.imported_packages then
+    error_at fn_name.span "undefined member '%s' in imported package '%s'"
+      fn_name.node type_name.node
+  else
+    (* Check for enum variant constructors first *)
+    match SMap.find_opt type_name.node env.enums with
+    | Some ei -> (
+        match List.assoc_opt fn_name.node ei.ei_variants with
+        | Some (VTuple field_tys) ->
+            let expected_len = List.length field_tys in
+            let actual_len = List.length arg_types in
+            if expected_len <> actual_len then
+              error_at fn_name.span
+                "variant '%s::%s' expects %d field(s), got %d" type_name.node
+                fn_name.node expected_len actual_len;
+            List.iter2
+              (fun exp act ->
+                expect_type ~env ~span:fn_name.span ~expected:exp ~actual:act)
+              field_tys arg_types;
+            TEnum (type_name.node, [])
+        | Some VUnit ->
+            if arg_types <> [] then
+              error_at fn_name.span "unit variant '%s::%s' takes no arguments"
+                type_name.node fn_name.node;
+            TEnum (type_name.node, [])
+        | Some (VStruct _) ->
+            error_at fn_name.span
+              "struct variant '%s::%s' must use named fields" type_name.node
+              fn_name.node
+        | None -> check_impl_assoc_fn env type_name fn_name arg_types)
+    | None -> check_impl_assoc_fn env type_name fn_name arg_types
 
 and concrete_type_for_name env name =
   (* If we're inside an impl block whose Self type matches this name,
@@ -806,41 +816,46 @@ and check_field_access env e field =
   | _ -> error_at field.span "field access on non-struct type %s" (show_ty t)
 
 and check_path env type_name member =
-  (* Type::Variant or Type::assoc_fn (without call) *)
-  let try_assoc_fn () =
-    match SMap.find_opt type_name.node env.impls with
-    | Some ii -> (
-        match SMap.find_opt member.node ii.ii_assoc_fns with
-        | Some fi ->
-            (* Substitute Self with the concrete type so stored
-               associated-function values carry the resolved type
-               (e.g. let make = Status::default; make().is_active()). *)
-            let concrete_self = concrete_type_for_name env type_name.node in
-            Some
-              (TFn
-                 ( List.map (subst_self concrete_self) fi.fi_params,
-                   subst_self concrete_self fi.fi_ret ))
-        | None -> None)
-    | None -> None
-  in
-  match SMap.find_opt type_name.node env.enums with
-  | Some ei -> (
-      match List.assoc_opt member.node ei.ei_variants with
-      | Some VUnit -> TEnum (type_name.node, [])
-      | Some _ ->
-          error_at member.span "variant '%s::%s' requires arguments"
-            type_name.node member.node
-      | None -> (
-          (* Not a variant — try associated function *)
-          match try_assoc_fn () with
-          | Some t -> t
-          | None ->
-              error_at member.span "undefined variant '%s' in '%s'" member.node
-                type_name.node))
-  | None -> (
-      match try_assoc_fn () with
-      | Some t -> t
-      | None -> error_at type_name.span "unknown type '%s'" type_name.node)
+  (* If this is an imported package, give member-aware diagnostics *)
+  if SMap.mem type_name.node env.imported_packages then
+    error_at member.span "undefined member '%s' in imported package '%s'"
+      member.node type_name.node
+  else
+    (* Type::Variant or Type::assoc_fn (without call) *)
+    let try_assoc_fn () =
+      match SMap.find_opt type_name.node env.impls with
+      | Some ii -> (
+          match SMap.find_opt member.node ii.ii_assoc_fns with
+          | Some fi ->
+              (* Substitute Self with the concrete type so stored
+                 associated-function values carry the resolved type
+                 (e.g. let make = Status::default; make().is_active()). *)
+              let concrete_self = concrete_type_for_name env type_name.node in
+              Some
+                (TFn
+                   ( List.map (subst_self concrete_self) fi.fi_params,
+                     subst_self concrete_self fi.fi_ret ))
+          | None -> None)
+      | None -> None
+    in
+    match SMap.find_opt type_name.node env.enums with
+    | Some ei -> (
+        match List.assoc_opt member.node ei.ei_variants with
+        | Some VUnit -> TEnum (type_name.node, [])
+        | Some _ ->
+            error_at member.span "variant '%s::%s' requires arguments"
+              type_name.node member.node
+        | None -> (
+            (* Not a variant — try associated function *)
+            match try_assoc_fn () with
+            | Some t -> t
+            | None ->
+                error_at member.span "undefined variant '%s' in '%s'"
+                  member.node type_name.node))
+    | None -> (
+        match try_assoc_fn () with
+        | Some t -> t
+        | None -> error_at type_name.span "unknown type '%s'" type_name.node)
 
 and check_struct_literal env ty fields =
   let type_name =
@@ -1706,6 +1721,26 @@ let check_item env (item : item) =
 
 let typecheck_exn (prog : program) : program =
   let env = empty_env in
+  (* Register imported packages for member-aware diagnostics *)
+  let env =
+    List.fold_left
+      (fun e (imp : import_path) ->
+        let segments =
+          List.map (fun (s : ident located) -> s.node) imp.imp_segments
+        in
+        let alias =
+          match Resolver.alias_for_path segments with
+          | Some a -> a
+          | None ->
+              (List.nth imp.imp_segments (List.length imp.imp_segments - 1))
+                .node
+        in
+        {
+          e with
+          imported_packages = SMap.add alias segments e.imported_packages;
+        })
+      env prog.imports
+  in
   let env = collect_type_info env prog.items in
   List.iter (check_item env) prog.items;
   prog

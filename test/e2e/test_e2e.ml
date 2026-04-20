@@ -143,6 +143,62 @@ let test_invalid_source_no_output_artifact () =
   Alcotest.(check bool) "no output file left" false (Sys.file_exists out);
   Sys.remove bad_src
 
+(* ---- Import diagnostic e2e tests ---- *)
+
+let test_import_missing_no_output () =
+  let src = "fn main() { let x = http::listen_and_serve; }" in
+  match Rgo.Driver.compile_string ~filename:"no_import.rg" src with
+  | Ok _ -> Alcotest.fail "should fail: http not imported"
+  | Error e ->
+      let msg =
+        match e with
+        | Rgo.Driver.Resolve_error { msg; _ } -> msg
+        | _ -> Alcotest.fail "expected resolve error"
+      in
+      Alcotest.(check bool)
+        "package-aware diagnostic" true
+        (contains msg "not imported")
+
+let test_import_malformed_no_output () =
+  let src = "use http;\nfn main() {}" in
+  match Rgo.Driver.compile_string ~filename:"malformed.rg" src with
+  | Ok _ -> Alcotest.fail "should fail: malformed import"
+  | Error e ->
+      let msg =
+        match e with
+        | Rgo.Driver.Parse_error { msg; _ } -> msg
+        | Rgo.Driver.Resolve_error { msg; _ } -> msg
+        | _ -> Alcotest.fail "expected parse or resolve error"
+      in
+      Alcotest.(check bool) "error message present" true (String.length msg > 0)
+
+let test_import_external_pkg_no_output () =
+  let src = "use github::gin;\nfn main() {}" in
+  match Rgo.Driver.compile_string ~filename:"external.rg" src with
+  | Ok _ -> Alcotest.fail "should fail: external package"
+  | Error e ->
+      let msg =
+        match e with
+        | Rgo.Driver.Resolve_error { msg; _ } -> msg
+        | _ -> Alcotest.fail "expected resolve error"
+      in
+      Alcotest.(check bool)
+        "external package diagnostic" true
+        (contains msg "unsupported external package")
+
+let test_import_collision_no_output () =
+  let src = "use net::http;\nfn http() -> i32 { 42 }\nfn main() {}" in
+  match Rgo.Driver.compile_string ~filename:"collision.rg" src with
+  | Ok _ -> Alcotest.fail "should fail: alias collision"
+  | Error e ->
+      let msg =
+        match e with
+        | Rgo.Driver.Resolve_error { msg; _ } -> msg
+        | _ -> Alcotest.fail "expected resolve error"
+      in
+      Alcotest.(check bool)
+        "collision diagnostic" true (contains msg "collides")
+
 let () =
   Alcotest.run "e2e"
     [
@@ -162,5 +218,16 @@ let () =
             test_invalid_source_fails;
           Alcotest.test_case "invalid source no output artifact" `Quick
             test_invalid_source_no_output_artifact;
+        ] );
+      ( "import-diagnostics",
+        [
+          Alcotest.test_case "missing import no output" `Quick
+            test_import_missing_no_output;
+          Alcotest.test_case "malformed import no output" `Quick
+            test_import_malformed_no_output;
+          Alcotest.test_case "external package no output" `Quick
+            test_import_external_pkg_no_output;
+          Alcotest.test_case "alias collision no output" `Quick
+            test_import_collision_no_output;
         ] );
     ]

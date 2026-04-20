@@ -33,7 +33,13 @@ let mk_loc node (s, e) = { node; span = mk_span (s, e) }
 %%
 
 program:
-  | is = list(item); EOF { { items = is } }
+  | us = list(use_decl); is = list(item); EOF { { imports = us; items = is } }
+  ;
+
+use_decl:
+  | USE; segs = separated_nonempty_list(COLON_COLON, located_ident); SEMI
+    { { imp_segments = segs;
+        imp_span = mk_span ($startpos, $endpos) } }
   ;
 
 item:

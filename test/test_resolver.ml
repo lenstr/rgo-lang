@@ -328,6 +328,99 @@ let negative_tests =
       fail_resolve ~expect:"undefined" undef_field_in_constructor );
   ]
 
+(* ---- Import fixtures ---- *)
+
+(* Positive: use net::http allows http::something paths *)
+let valid_use_net_http =
+  {|
+use net::http;
+fn main() {
+    let x = http::listen_and_serve;
+}
+|}
+
+(* Negative: http::listen_and_serve without import *)
+let missing_import_http =
+  {|
+fn main() {
+    let x = http::listen_and_serve;
+}
+|}
+
+(* Negative: malformed import - single segment *)
+let malformed_import_single = {|
+use http;
+fn main() {}
+|}
+
+(* Negative: external/third-party package path *)
+let external_package = {|
+use github::gin;
+fn main() {}
+|}
+
+(* Negative: alias collision with user-defined function *)
+let alias_collision_fn = {|
+use net::http;
+fn http() -> i32 { 42 }
+|}
+
+(* Negative: alias collision with user-defined struct *)
+let alias_collision_struct = {|
+use net::http;
+struct http { x: i32 }
+|}
+
+(* Negative: alias collision with user-defined enum *)
+let alias_collision_enum = {|
+use net::http;
+enum http { A, B }
+|}
+
+(* Negative: duplicate import *)
+let duplicate_import = {|
+use net::http;
+use net::http;
+fn main() {}
+|}
+
+let import_positive_tests =
+  [
+    ( "use net::http enables http:: path",
+      `Quick,
+      pass_resolve valid_use_net_http );
+  ]
+
+let import_negative_tests =
+  [
+    ( "missing import gives package-aware diagnostic",
+      `Quick,
+      fail_resolve ~expect:"not imported" missing_import_http );
+    ( "malformed single-segment import",
+      `Quick,
+      fail_resolve ~expect:"malformed import" malformed_import_single );
+    ( "external package rejected",
+      `Quick,
+      fail_resolve ~expect:"unsupported external package" external_package );
+    ( "alias collision with function",
+      `Quick,
+      fail_resolve ~expect:"collides" alias_collision_fn );
+    ( "alias collision with struct",
+      `Quick,
+      fail_resolve ~expect:"collides" alias_collision_struct );
+    ( "alias collision with enum",
+      `Quick,
+      fail_resolve ~expect:"collides" alias_collision_enum );
+    ( "duplicate import",
+      `Quick,
+      fail_resolve ~expect:"collides" duplicate_import );
+  ]
+
 let () =
   Alcotest.run "resolver"
-    [ ("positive", positive_tests); ("negative", negative_tests) ]
+    [
+      ("positive", positive_tests);
+      ("negative", negative_tests);
+      ("import-positive", import_positive_tests);
+      ("import-negative", import_negative_tests);
+    ]

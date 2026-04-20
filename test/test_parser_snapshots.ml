@@ -18,7 +18,8 @@ let%expect_test "fn declaration" =
   parse_and_print "fn add(a: i64, b: i64) -> i64 { a + b }";
   [%expect
     {|
-    { Ast.items =
+    { Ast.imports = [];
+      items =
       [(Ast.ItemFn
           { Ast.fn_pub = false;
             fn_name =
@@ -94,7 +95,8 @@ let%expect_test "pub struct" =
   parse_and_print "pub struct Point { pub x: f64, y: f64 }";
   [%expect
     {|
-    { Ast.items =
+    { Ast.imports = [];
+      items =
       [Ast.ItemStruct {s_pub = true;
          s_name =
          { Ast.node = "Point";
@@ -144,7 +146,8 @@ let%expect_test "enum with variants" =
     "enum Shape { Circle(f64), Rectangle { width: f64, height: f64 }, Empty }";
   [%expect
     {|
-    { Ast.items =
+    { Ast.imports = [];
+      items =
       [Ast.ItemEnum {e_pub = false;
          e_name =
          { Ast.node = "Shape";
@@ -234,7 +237,8 @@ let%expect_test "match with patterns" =
 }|};
   [%expect
     {|
-    { Ast.items =
+    { Ast.imports = [];
+      items =
       [(Ast.ItemFn
           { Ast.fn_pub = false;
             fn_name =
@@ -371,7 +375,8 @@ let%expect_test "if-else" =
   parse_and_print "fn max(a: i64, b: i64) -> i64 { if a > b { a } else { b } }";
   [%expect
     {|
-    { Ast.items =
+    { Ast.imports = [];
+      items =
       [(Ast.ItemFn
           { Ast.fn_pub = false;
             fn_name =
@@ -473,7 +478,8 @@ let%expect_test "impl with self methods" =
 }|};
   [%expect
     {|
-    { Ast.items =
+    { Ast.imports = [];
+      items =
       [Ast.ItemImpl {i_generics = [];
          i_ty =
          (Ast.TyName
@@ -588,7 +594,8 @@ let%expect_test "trait with default method" =
 }|};
   [%expect
     {|
-    { Ast.items =
+    { Ast.imports = [];
+      items =
       [Ast.ItemTrait {t_pub = false;
          t_name =
          { Ast.node = "Summary";
@@ -656,7 +663,8 @@ let%expect_test "trait impl for struct" =
 }|};
   [%expect
     {|
-    { Ast.items =
+    { Ast.imports = [];
+      items =
       [Ast.ItemTraitImpl {ti_generics = [];
          ti_trait =
          { Ast.node = "Display";
@@ -712,7 +720,8 @@ impl<T> Box<T> {
 }|};
   [%expect
     {|
-    { Ast.items =
+    { Ast.imports = [];
+      items =
       [Ast.ItemStruct {s_pub = false;
          s_name =
          { Ast.node = "Box";
@@ -835,7 +844,8 @@ let%expect_test "generic bounds" =
   parse_and_print "fn print_all<T: Display + Summary>(items: Vec<T>) { }";
   [%expect
     {|
-    { Ast.items =
+    { Ast.imports = [];
+      items =
       [(Ast.ItemFn
           { Ast.fn_pub = false;
             fn_name =
@@ -904,7 +914,8 @@ let%expect_test "question mark" =
 }|};
   [%expect
     {|
-    { Ast.items =
+    { Ast.imports = [];
+      items =
       [(Ast.ItemFn
           { Ast.fn_pub = false;
             fn_name =
@@ -1014,7 +1025,8 @@ let%expect_test "array literals and repeat" =
 }|};
   [%expect
     {|
-    { Ast.items =
+    { Ast.imports = [];
+      items =
       [(Ast.ItemFn
           { Ast.fn_pub = false;
             fn_name =
@@ -1092,7 +1104,8 @@ let%expect_test "loops" =
 }|};
   [%expect
     {|
-    { Ast.items =
+    { Ast.imports = [];
+      items =
       [(Ast.ItemFn
           { Ast.fn_pub = false;
             fn_name =
@@ -1193,7 +1206,8 @@ let%expect_test "struct literal" =
 }|};
   [%expect
     {|
-    { Ast.items =
+    { Ast.imports = [];
+      items =
       [(Ast.ItemFn
           { Ast.fn_pub = false;
             fn_name =
@@ -1254,7 +1268,8 @@ let%expect_test "method call and field access" =
 }|};
   [%expect
     {|
-    { Ast.items =
+    { Ast.imports = [];
+      items =
       [(Ast.ItemFn
           { Ast.fn_pub = false;
             fn_name =
@@ -1337,7 +1352,8 @@ let%expect_test "index expression" =
   parse_and_print "fn main() { let x = v[0]; }";
   [%expect
     {|
-    { Ast.items =
+    { Ast.imports = [];
+      items =
       [(Ast.ItemFn
           { Ast.fn_pub = false;
             fn_name =
@@ -1381,7 +1397,8 @@ let%expect_test "return and break" =
 }|};
   [%expect
     {|
-    { Ast.items =
+    { Ast.imports = [];
+      items =
       [(Ast.ItemFn
           { Ast.fn_pub = false;
             fn_name =
@@ -1425,7 +1442,8 @@ let%expect_test "let wildcard" =
   parse_and_print "fn main() { let _ = foo(); }";
   [%expect
     {|
-    { Ast.items =
+    { Ast.imports = [];
+      items =
       [(Ast.ItemFn
           { Ast.fn_pub = false;
             fn_name =
@@ -1465,3 +1483,67 @@ let%expect_test "error: bad token" =
 let%expect_test "error: missing fn body" =
   parse_and_print "fn foo()";
   [%expect {| Parse error at line 1, col 9: syntax error |}]
+
+let%expect_test "use net::http import" =
+  parse_and_print
+    "use net::http;\nfn main() { let x = http::listen_and_serve; }";
+  [%expect
+    {|
+    { Ast.imports =
+      [{ Ast.imp_segments =
+         [{ Ast.node = "net";
+            span =
+            { Ast.start = { Ast.line = 1; col = 5 };
+              stop = { Ast.line = 1; col = 8 } }
+            };
+           { Ast.node = "http";
+             span =
+             { Ast.start = { Ast.line = 1; col = 10 };
+               stop = { Ast.line = 1; col = 14 } }
+             }
+           ];
+         imp_span =
+         { Ast.start = { Ast.line = 1; col = 1 };
+           stop = { Ast.line = 1; col = 15 } }
+         }
+        ];
+      items =
+      [(Ast.ItemFn
+          { Ast.fn_pub = false;
+            fn_name =
+            { Ast.node = "main";
+              span =
+              { Ast.start = { Ast.line = 2; col = 4 };
+                stop = { Ast.line = 2; col = 8 } }
+              };
+            fn_generics = []; fn_self = None; fn_params = []; fn_ret = None;
+            fn_body =
+            { Ast.stmts =
+              [Ast.StmtLet {is_mut = false;
+                 pat =
+                 (Ast.PatBind
+                    { Ast.node = "x";
+                      span =
+                      { Ast.start = { Ast.line = 2; col = 17 };
+                        stop = { Ast.line = 2; col = 18 } }
+                      });
+                 ty = None;
+                 init =
+                 (Ast.ExprPath (
+                    { Ast.node = "http";
+                      span =
+                      { Ast.start = { Ast.line = 2; col = 21 };
+                        stop = { Ast.line = 2; col = 25 } }
+                      },
+                    { Ast.node = "listen_and_serve";
+                      span =
+                      { Ast.start = { Ast.line = 2; col = 27 };
+                        stop = { Ast.line = 2; col = 43 } }
+                      }
+                    ))}
+                ];
+              final_expr = None }
+            })
+        ]
+      }
+    |}]

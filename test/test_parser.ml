@@ -370,6 +370,40 @@ let negative_tests =
       test_case "multiline error" `Quick test_error_multiline;
     ]
 
+(* --- import parsing --- *)
+
+let test_use_net_http () =
+  let prog = parse "use net::http;\nfn main() {}" in
+  Alcotest.(check int) "one import" 1 (List.length prog.imports);
+  let imp = List.hd prog.imports in
+  Alcotest.(check int) "two segments" 2 (List.length imp.imp_segments);
+  let seg_names =
+    List.map
+      (fun (s : Rgo.Ast.ident Rgo.Ast.located) -> s.node)
+      imp.imp_segments
+  in
+  Alcotest.(check (list string)) "segments" [ "net"; "http" ] seg_names
+
+let test_use_malformed_slash () =
+  (* use net/http; should fail to parse because / is division *)
+  match parse "use net/http;\nfn main() {}" with
+  | exception Rgo.Parse_driver.Parse_error _ -> ()
+  | _ -> Alcotest.fail "expected parse error for use net/http"
+
+let test_use_trailing_colons () =
+  (* use net::http::; should fail because trailing :: expects ident *)
+  match parse "use net::http::;\nfn main() {}" with
+  | exception Rgo.Parse_driver.Parse_error _ -> ()
+  | _ -> Alcotest.fail "expected parse error for trailing ::"
+
+let import_tests =
+  Alcotest.
+    [
+      test_case "use net::http" `Quick test_use_net_http;
+      test_case "use net/http fails" `Quick test_use_malformed_slash;
+      test_case "use trailing :: fails" `Quick test_use_trailing_colons;
+    ]
+
 let corpus_tests =
   Alcotest.[ test_case "example corpus" `Quick test_example_corpus ]
 
@@ -378,5 +412,6 @@ let () =
     [
       ("positive", positive_tests);
       ("negative", negative_tests);
+      ("import", import_tests);
       ("corpus", corpus_tests);
     ]

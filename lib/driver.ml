@@ -68,6 +68,14 @@ let compile_string ?(filename = "<input>") (source : string) :
       Error (Parse_error { msg; line; col })
   | Resolver.Resolve_error { msg; line; col } ->
       Error (Resolve_error { msg; line; col })
+  | Resolver.Import_error { kind; span } ->
+      Error
+        (Resolve_error
+           {
+             msg = Resolver.format_import_error kind;
+             line = span.start.line;
+             col = span.start.col;
+           })
   | Typecheck.Typecheck_error { msg; line; col } ->
       Error (Typecheck_error { msg; line; col })
   | Exhaust.Exhaust_error { msg; line; col } ->

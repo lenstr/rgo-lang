@@ -1333,6 +1333,53 @@ let negative_tests =
       fail ~expect:"type mismatch" invalid_default_method_body );
   ]
 
+(* ---- Import-aware typecheck tests ---- *)
+
+let valid_import_passthrough = {|
+use net::http;
+fn main() {}
+|}
+
+let import_unknown_member_value =
+  {|
+use net::http;
+fn main() {
+    let x = http::missing_symbol;
+}
+|}
+
+let import_unknown_member_call =
+  {|
+use net::http;
+fn main() {
+    http::missing_fn();
+}
+|}
+
+let import_positive_tests =
+  [
+    ( "use net::http without usage passes typecheck",
+      `Quick,
+      pass valid_import_passthrough );
+  ]
+
+let import_negative_tests =
+  [
+    ( "unknown member in imported package (value)",
+      `Quick,
+      fail ~expect:"undefined member 'missing_symbol' in imported package"
+        import_unknown_member_value );
+    ( "unknown member in imported package (call)",
+      `Quick,
+      fail ~expect:"undefined member 'missing_fn' in imported package"
+        import_unknown_member_call );
+  ]
+
 let () =
   Alcotest.run "typecheck"
-    [ ("positive", positive_tests); ("negative", negative_tests) ]
+    [
+      ("positive", positive_tests);
+      ("negative", negative_tests);
+      ("import-positive", import_positive_tests);
+      ("import-negative", import_negative_tests);
+    ]
