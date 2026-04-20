@@ -27,6 +27,8 @@ type method_info = { mi_params : ty list; mi_ret : ty; mi_is_mut : bool }
 type impl_info = {
   ii_methods : method_info SMap.t;
   ii_assoc_fns : fn_info SMap.t;
+  ii_type_params : string list;
+  ii_self_ty : ty;
 }
 
 type trait_method_sig = {
@@ -452,6 +454,58 @@ and concrete_type_for_name env name =
       else if SMap.mem name env.enums then TEnum (name, [])
       else TVoid
 
+(* Infer bindings for impl type parameters by matching formal param types
+   against actual argument types. Returns a (string * ty) list mapping
+   TParam names to concrete types. *)
+and infer_tparam_bindings formals actuals =
+  let bindings = Hashtbl.create 4 in
+  let rec unify formal actual =
+    match (formal, actual) with
+    | TParam p, _ -> (
+        match Hashtbl.find_opt bindings p with
+        | None -> Hashtbl.replace bindings p actual
+        | Some _ -> ())
+    | TOption f, TOption a -> unify f a
+    | TResult (f1, f2), TResult (a1, a2) ->
+        unify f1 a1;
+        unify f2 a2
+    | TVec f, TVec a -> unify f a
+    | THashMap (fk, fv), THashMap (ak, av) ->
+        unify fk ak;
+        unify fv av
+    | TRef f, TRef a -> unify f a
+    | TTuple fs, TTuple ats when List.length fs = List.length ats ->
+        List.iter2 unify fs ats
+    | TStruct (n1, args1), TStruct (n2, args2)
+      when n1 = n2 && List.length args1 = List.length args2 ->
+        List.iter2 unify args1 args2
+    | TEnum (n1, args1), TEnum (n2, args2)
+      when n1 = n2 && List.length args1 = List.length args2 ->
+        List.iter2 unify args1 args2
+    | _ -> ()
+  in
+  List.iter2 unify formals actuals;
+  Hashtbl.fold (fun k v acc -> (k, v) :: acc) bindings []
+
+(* Substitute TParam names in a type using the given bindings. *)
+and subst_tparams bindings t =
+  match t with
+  | TParam p -> (
+      match List.assoc_opt p bindings with Some t' -> t' | None -> t)
+  | TOption inner -> TOption (subst_tparams bindings inner)
+  | TResult (ok, err) ->
+      TResult (subst_tparams bindings ok, subst_tparams bindings err)
+  | TVec inner -> TVec (subst_tparams bindings inner)
+  | THashMap (k, v) ->
+      THashMap (subst_tparams bindings k, subst_tparams bindings v)
+  | TRef inner -> TRef (subst_tparams bindings inner)
+  | TTuple ts -> TTuple (List.map (subst_tparams bindings) ts)
+  | TStruct (n, args) -> TStruct (n, List.map (subst_tparams bindings) args)
+  | TEnum (n, args) -> TEnum (n, List.map (subst_tparams bindings) args)
+  | TFn (ps, r) ->
+      TFn (List.map (subst_tparams bindings) ps, subst_tparams bindings r)
+  | _ -> t
+
 and check_impl_assoc_fn env type_name fn_name arg_types =
   match SMap.find_opt type_name.node env.impls with
   | Some ii -> (
@@ -463,7 +517,32 @@ and check_impl_assoc_fn env type_name fn_name arg_types =
              We derive the concrete type from type_name so this works
              even outside impl blocks (e.g. Type::new().method()). *)
           let concrete_self = concrete_type_for_name env type_name.node in
-          subst_self concrete_self fi.fi_ret
+          let result = subst_self concrete_self fi.fi_ret in
+          (* If the result has empty type args but the impl is generic,
+             infer concrete type arguments from the call arguments. *)
+          let result =
+            match (result, ii.ii_type_params) with
+            | (TStruct (n, []) | TEnum (n, [])), _ :: _ ->
+                (* Infer type param bindings from function args *)
+                let bindings =
+                  if
+                    List.length fi.fi_params = List.length arg_types
+                    && List.length arg_types > 0
+                  then infer_tparam_bindings fi.fi_params arg_types
+                  else []
+                in
+                if bindings <> [] then
+                  (* Instantiate the impl's self_ty with inferred bindings *)
+                  let instantiated = subst_tparams bindings ii.ii_self_ty in
+                  (* Ensure the type name matches *)
+                  match instantiated with
+                  | TStruct (n', _) when n' = n -> instantiated
+                  | TEnum (n', _) when n' = n -> instantiated
+                  | _ -> result
+                else result
+            | _ -> result
+          in
+          result
       | None ->
           error_at fn_name.span "no associated function '%s' on type '%s'"
             fn_name.node type_name.node)
@@ -1094,7 +1173,13 @@ and collect_impl env impl_generics i_ty impl_items =
   let existing =
     match SMap.find_opt type_name env.impls with
     | Some ii -> ii
-    | None -> { ii_methods = SMap.empty; ii_assoc_fns = SMap.empty }
+    | None ->
+        {
+          ii_methods = SMap.empty;
+          ii_assoc_fns = SMap.empty;
+          ii_type_params = generics;
+          ii_self_ty = self_ty;
+        }
   in
   let env_for_methods = { env_with_generics with self_ty = Some self_ty } in
   let updated =

@@ -821,10 +821,9 @@ fn main() {
 }
 |}
 
-(* Invalid: bare generic struct name (no type args) is not compatible
-   with an instantiated form like Box<i32>.  Returning a bare Box from
-   a function declared to return Box<i32> must be rejected. *)
-let invalid_bare_vs_instantiated =
+(* Regression: generic constructor outside impl infers concrete type args.
+   Box::new(42) should produce Box<i32>, satisfying the return type. *)
+let valid_generic_constructor_outside_impl =
   {|
 struct Box<T> {
     value: T,
@@ -840,6 +839,81 @@ fn make() -> Box<i32> {
 }
 fn main() {
     let _ = make();
+}
+|}
+
+(* Regression: generic pair constructor outside impl infers from multiple args *)
+let valid_generic_pair_constructor =
+  {|
+struct Pair<A, B> {
+    first: A,
+    second: B,
+}
+impl<A, B> Pair<A, B> {
+    pub fn new(a: A, b: B) -> Self {
+        Pair { first: a, second: b }
+    }
+}
+fn make() -> Pair<i32, str> {
+    Pair::new(1, "hello")
+}
+fn main() {
+    let _ = make();
+}
+|}
+
+(* Regression: generic constructor result flows into Option return *)
+let valid_generic_constructor_option_return =
+  {|
+struct Box<T> {
+    value: T,
+}
+impl<T> Box<T> {
+    pub fn new(v: T) -> Self {
+        Box { value: v }
+    }
+}
+fn wrap() -> Option<Box<i32>> {
+    Some(Box::new(42))
+}
+fn main() {
+    let _ = wrap();
+}
+|}
+
+(* Regression: generic constructor result flows into Result return *)
+let valid_generic_constructor_result_return =
+  {|
+struct Box<T> {
+    value: T,
+}
+impl<T> Box<T> {
+    pub fn new(v: T) -> Self {
+        Box { value: v }
+    }
+}
+fn wrap() -> Result<Box<i32>, str> {
+    Ok(Box::new(42))
+}
+fn main() {
+    let _ = wrap();
+}
+|}
+
+(* Regression: generic constructor with typed let binding *)
+let valid_generic_constructor_typed_let =
+  {|
+struct Box<T> {
+    value: T,
+}
+impl<T> Box<T> {
+    pub fn new(v: T) -> Self {
+        Box { value: v }
+    }
+}
+fn main() {
+    let b: Box<i32> = Box::new(42);
+    let _ = b;
 }
 |}
 
@@ -888,6 +962,19 @@ let positive_tests =
     ("valid trait impl", `Quick, pass valid_trait_impl);
     ("valid trait recv value", `Quick, pass valid_trait_recv_value);
     ("valid trait recv &mut self", `Quick, pass valid_trait_recv_mutref);
+    ( "generic constructor outside impl",
+      `Quick,
+      pass valid_generic_constructor_outside_impl );
+    ("generic pair constructor", `Quick, pass valid_generic_pair_constructor);
+    ( "generic constructor option return",
+      `Quick,
+      pass valid_generic_constructor_option_return );
+    ( "generic constructor result return",
+      `Quick,
+      pass valid_generic_constructor_result_return );
+    ( "generic constructor typed let",
+      `Quick,
+      pass valid_generic_constructor_typed_let );
   ]
 
 let negative_tests =
@@ -970,9 +1057,6 @@ let negative_tests =
     ( "generic assign type mismatch",
       `Quick,
       fail ~expect:"type mismatch" invalid_generic_assign );
-    ( "bare vs instantiated generic mismatch",
-      `Quick,
-      fail ~expect:"type mismatch" invalid_bare_vs_instantiated );
   ]
 
 let () =
