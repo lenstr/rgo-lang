@@ -1,34 +1,21 @@
 {
   "featureId": "import-use-syntax-and-import-diagnostics",
-  "reviewedAt": "2026-04-20T23:26:41.268160+00:00",
-  "commitId": "aea80a4",
+  "reviewedAt": "2026-04-20T23:55:36.179852+00:00",
+  "commitId": "b05b023",
   "transcriptSkeletonReviewed": true,
   "diffReviewed": true,
-  "status": "fail",
+  "status": "pass",
   "codeReview": {
-    "summary": "The feature adds the `use net::http` surface and most of the requested diagnostics, but it does not fully cover the contracted import error behavior. In particular, qualified imported types like `http::Request` cannot reach import-aware diagnostics at all, and file-scope alias reservation is incomplete because traits named `http` are still accepted.",
-    "issues": [
-      {
-        "file": "lib/parser.mly",
-        "line": 120,
-        "severity": "blocking",
-        "description": "The type grammar only accepts a single `located_type_name`/generic in `ty_atom`; it never parses `package::Type` paths. As a result, a contracted case like `fn f(req: http::Request) {}` cannot produce the promised import-aware diagnostic from VAL-IMPORT-004 when `use net::http` is missing — it fails earlier as a parse error instead."
-      },
-      {
-        "file": "lib/resolver.ml",
-        "line": 404,
-        "severity": "blocking",
-        "description": "Imported aliases are not actually reserved across all top-level file-scope declarations. `collect_globals` rejects collisions for functions, structs, and enums, but `ItemTrait` is added without any collision check, and `resolve_imports` also does not check `env.traits`. `use net::http; trait http { ... }` therefore succeeds silently, violating the feature requirement that imported aliases fail explicitly on file-scope collisions."
-      }
-    ]
+    "summary": "The current implementation closes both prior blocking gaps and now satisfies the import-surface assertions tied to this feature. `use net::http` imports are parsed as first-class syntax, qualified imported types such as `http::Request` now reach import-aware diagnostics in type position, imported aliases are reserved across the contracted top-level item kinds including traits, and imported-package member lookup yields member-aware errors instead of unrelated local-name failures.",
+    "issues": []
   },
   "sharedStateObservations": [
     {
       "area": "skills",
-      "observation": "The `compiler-worker` skill says to write tests first, but this worker implemented production changes before editing any tests; the handoff still reported `followedProcedure: true`. Either the skill guidance or the expected handoff feedback standard should be clarified so reviews can rely on it.",
-      "evidence": "Transcript skeleton shows edits to `lib/ast.ml`, `lib/parser.mly`, and `lib/resolver.ml` immediately after invoking `compiler-worker`, while the first test-file edits (`test/test_resolver.ml`, `test/test_parser.ml`, etc.) happened later."
+      "observation": "The `compiler-worker` skill still says to write tests first, but this fix session edited production code before adding the new regression tests and the handoff still reported `followedProcedure: true`. The skill guidance or the handoff expectation should be clarified so scrutiny can treat `followedProcedure` as reliable evidence.",
+      "evidence": "`.factory/skills/compiler-worker/SKILL.md:22` says \"Write tests first\". The latest transcript skeleton for worker session `64010c1a-d6a6-44dc-b8c8-334561b28747` shows an edit to `lib/resolver.ml` before later edits to `test/test_resolver.ml` and `test/e2e/test_e2e.ml`, while the handoff JSON reports `skillFeedback.followedProcedure: true`."
     }
   ],
-  "addressesFailureFrom": null,
-  "summary": "Review failed. The commit covers most import-surface behavior, but it misses qualified-type import diagnostics (`http::Request`) and leaves a file-scope collision hole for trait declarations named after imported aliases."
+  "addressesFailureFrom": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/import-surface/scrutiny/reviews/import-use-syntax-and-import-diagnostics.json",
+  "summary": "Pass. The prior failures are fixed: `parser.mly` now parses `pkg::Type` in type position, `resolver.ml` raises missing-import diagnostics for `TyPath`, trait declarations now participate in import-alias collision checks, and the repo has focused parser/resolver/typecheck/e2e coverage for VAL-IMPORT-004 through VAL-IMPORT-008. I did not find any new blocking issues in the current implementation for this feature."
 }

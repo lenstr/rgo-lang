@@ -1,34 +1,21 @@
 {
   "featureId": "net-http-namespace-and-naming-bridge",
-  "reviewedAt": "2026-04-20T23:27:00.846461+00:00",
-  "commitId": "d5ed6d5",
+  "reviewedAt": "2026-04-21T02:55:38+03:00",
+  "commitId": "2b1d4c9",
   "transcriptSkeletonReviewed": true,
   "diffReviewed": true,
-  "status": "fail",
+  "status": "pass",
   "codeReview": {
-    "summary": "The feature implements the intended net/http namespace slice, but it has two blocking correctness gaps: codegen treats any `http::...` path as stdlib even without an import, and imported stdlib types are incorrectly accepted in expression position and lower to invalid Go.",
-    "issues": [
-      {
-        "file": "lib/codegen.ml",
-        "line": 277,
-        "severity": "blocking",
-        "description": "`is_imported_package` is hardcoded to `name = \"http\"`, so codegen reinterprets any local `http::...` path as the stdlib package instead of consulting resolver/typecheck import state. A local declaration such as `enum http { Ok }` compiles to Go that imports `net/http` and emits `http.Ok`, which then fails downstream (`/tmp/review_http_local_enum.go`: `http already declared through import of package http`, `undefined: http.Ok`). This breaks the namespace-collision contract for non-imported local symbols."
-      },
-      {
-        "file": "lib/typecheck.ml",
-        "line": 606,
-        "severity": "blocking",
-        "description": "`check_stdlib_path` returns `TImported` for `StdlibType`, so imported types are accepted as value expressions instead of being rejected outside type position. `use net::http; let x = http::Request;` currently compiles and codegen lowers it to `x := http.Request`, which Go rejects as `http.Request (type) is not an expression` (`/tmp/review_http_type_value.go`). This means the feature still accepts programs that cannot lower to valid Go."
-      }
-    ]
+    "summary": "The rerun fixes both prior blockers. Codegen now keys imported-package lowering off collected import metadata instead of a hardcoded `http` alias (`lib/codegen.ml:106,284,493-526,826-836,1048-1056,2883-2893`), and typechecking now rejects imported stdlib types in value position with a direct diagnostic (`lib/typecheck.ml:599-613`). Existing and newly added tests cover the contracted positive/negative namespace and naming cases for VAL-IMPORT-001/002/003, VAL-STDLIB-001/002, and VAL-CROSS-001 (`test/test_codegen.ml:1957-2017,2069-2095,2290-2305`, `test/test_typecheck.ml:1359-1450`, `test/test_resolver.ml:396-417`). I did not find a remaining blocking correctness issue in this feature's current state.",
+    "issues": []
   },
   "sharedStateObservations": [
     {
       "area": "skills",
-      "observation": "`compiler-worker` should explicitly require a regression where a local declaration shares the stdlib alias without importing it, so naming-bridge work proves it is driven by resolved import state rather than raw identifier text.",
-      "evidence": "The handoff/test list only mentions positive net/http coverage plus wrong-case, unqualified, and unknown-member fixtures. There is no fixture for a local `http` type/enum without `use net::http`, and the current implementation miscompiles `enum http { Ok } ... http::Ok` because `lib/codegen.ml:277` hardcodes the alias."
+      "observation": "`compiler-worker` says to write tests first, but this worker implemented the fixes before adding the regression tests while still reporting `followedProcedure: true`; the skill or the meaning of `followedProcedure` remains unclear.",
+      "evidence": "Skill step 3 says \"Write tests first\" (`.factory/skills/compiler-worker/SKILL.md:22`). In the transcript skeleton for worker session `9ef439d9-1e42-4b07-98e3-c0067d2f1f5a`, the code edits to `lib/typecheck.ml` and `lib/codegen.ml` occur well before the later \"Now let me add regression tests\" step, yet the handoff records `skillFeedback.followedProcedure: true`."
     }
   ],
-  "addressesFailureFrom": null,
-  "summary": "Reviewed handoff, transcript skeleton, skill, and commit `d5ed6d5`. Result: fail. The feature mostly wires the intended stdlib namespace slice, but two blocking bugs remain: local `http::...` paths are mis-lowered as net/http even without an import, and imported stdlib types are incorrectly allowed in expression position, producing invalid Go."
+  "addressesFailureFrom": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/import-surface/scrutiny/reviews/net-http-namespace-and-naming-bridge.json",
+  "summary": "Reviewed the rerun handoff, transcript skeleton, prior review, skill, and commit `2b1d4c9`. Result: pass. The previous blocking findings are addressed: imported stdlib types are now rejected in expression position, and net/http lowering is driven by imported-package metadata rather than a hardcoded `http` alias, with regression coverage added for both fixes."
 }

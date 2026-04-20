@@ -1,0 +1,70 @@
+{
+  "milestone": "import-surface",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "nix develop -c dune runtest -j 16",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "nix develop -c dune build -j 16",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "nix develop -c dune build @fmt",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 2,
+    "passed": 0,
+    "failed": 2,
+    "failedFeatures": [
+      "import-use-syntax-and-import-diagnostics",
+      "net-http-namespace-and-naming-bridge"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "import-use-syntax-and-import-diagnostics",
+      "severity": "blocking",
+      "description": "Qualified imported types are not parsed in type position, so contracted cases like `http::Request` fail at parse time instead of reaching the import-aware diagnostics required by VAL-IMPORT-004."
+    },
+    {
+      "featureId": "import-use-syntax-and-import-diagnostics",
+      "severity": "blocking",
+      "description": "Imported aliases are not fully reserved at file scope because traits named `http` bypass collision checks, so `use net::http; trait http { ... }` succeeds instead of reporting an explicit collision."
+    },
+    {
+      "featureId": "net-http-namespace-and-naming-bridge",
+      "severity": "blocking",
+      "description": "Codegen hardcodes `http` as an imported package alias, so local `http::...` paths are mis-lowered as `net/http` even when no `use net::http` import exists."
+    },
+    {
+      "featureId": "net-http-namespace-and-naming-bridge",
+      "severity": "blocking",
+      "description": "Imported stdlib types are incorrectly accepted in expression position; `http::Request` can typecheck as a value and then lowers to invalid Go (`http.Request` used as an expression)."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "skill:compiler-worker",
+      "suggestion": "Clarify the tests-first requirement and/or the meaning of `followedProcedure` in handoff feedback so scrutiny reviewers can treat that field as reliable evidence.",
+      "evidence": "The review for `import-use-syntax-and-import-diagnostics` found the worker edited production files before tests, but the handoff still reported `followedProcedure: true` despite the skill stating tests should be written first.",
+      "isSystemic": false
+    },
+    {
+      "target": "skill:compiler-worker",
+      "suggestion": "Require a regression where a local declaration shares a stdlib alias without importing it, so naming-bridge work proves lowering is driven by resolved import state rather than raw identifier text.",
+      "evidence": "The review for `net-http-namespace-and-naming-bridge` found `lib/codegen.ml` hardcodes `http` as stdlib; a local `enum http { Ok }` case was not covered by the feature's regression suite.",
+      "isSystemic": false
+    }
+  ],
+  "rejectedObservations": [],
+  "previousRound": null
+}

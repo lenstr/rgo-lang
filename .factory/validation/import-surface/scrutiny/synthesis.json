@@ -1,7 +1,7 @@
 {
   "milestone": "import-surface",
-  "round": 1,
-  "status": "fail",
+  "round": 2,
+  "status": "pass",
   "validatorsRun": {
     "test": {
       "passed": true,
@@ -21,50 +21,20 @@
   },
   "reviewsSummary": {
     "total": 2,
-    "passed": 0,
-    "failed": 2,
-    "failedFeatures": [
-      "import-use-syntax-and-import-diagnostics",
-      "net-http-namespace-and-naming-bridge"
-    ]
+    "passed": 2,
+    "failed": 0,
+    "failedFeatures": []
   },
-  "blockingIssues": [
-    {
-      "featureId": "import-use-syntax-and-import-diagnostics",
-      "severity": "blocking",
-      "description": "Qualified imported types are not parsed in type position, so contracted cases like `http::Request` fail at parse time instead of reaching the import-aware diagnostics required by VAL-IMPORT-004."
-    },
-    {
-      "featureId": "import-use-syntax-and-import-diagnostics",
-      "severity": "blocking",
-      "description": "Imported aliases are not fully reserved at file scope because traits named `http` bypass collision checks, so `use net::http; trait http { ... }` succeeds instead of reporting an explicit collision."
-    },
-    {
-      "featureId": "net-http-namespace-and-naming-bridge",
-      "severity": "blocking",
-      "description": "Codegen hardcodes `http` as an imported package alias, so local `http::...` paths are mis-lowered as `net/http` even when no `use net::http` import exists."
-    },
-    {
-      "featureId": "net-http-namespace-and-naming-bridge",
-      "severity": "blocking",
-      "description": "Imported stdlib types are incorrectly accepted in expression position; `http::Request` can typecheck as a value and then lowers to invalid Go (`http.Request` used as an expression)."
-    }
-  ],
+  "blockingIssues": [],
   "appliedUpdates": [],
   "suggestedGuidanceUpdates": [
     {
       "target": "skill:compiler-worker",
-      "suggestion": "Clarify the tests-first requirement and/or the meaning of `followedProcedure` in handoff feedback so scrutiny reviewers can treat that field as reliable evidence.",
-      "evidence": "The review for `import-use-syntax-and-import-diagnostics` found the worker edited production files before tests, but the handoff still reported `followedProcedure: true` despite the skill stating tests should be written first.",
-      "isSystemic": false
-    },
-    {
-      "target": "skill:compiler-worker",
-      "suggestion": "Require a regression where a local declaration shares a stdlib alias without importing it, so naming-bridge work proves lowering is driven by resolved import state rather than raw identifier text.",
-      "evidence": "The review for `net-http-namespace-and-naming-bridge` found `lib/codegen.ml` hardcodes `http` as stdlib; a local `enum http { Ok }` case was not covered by the feature's regression suite.",
-      "isSystemic": false
+      "suggestion": "Clarify whether \"Write tests first\" is mandatory or whether `skillFeedback.followedProcedure` may still be true when a worker fixes code before adding regressions; scrutiny reviewers need that field to reflect the actual procedure reliably.",
+      "evidence": "Both import-surface rerun reviews observed the same mismatch: worker sessions `64010c1a-d6a6-44dc-b8c8-334561b28747` and `9ef439d9-1e42-4b07-98e3-c0067d2f1f5a` edited production files before adding regression tests, yet each handoff reported `skillFeedback.followedProcedure: true` while `.factory/skills/compiler-worker/SKILL.md` says \"Write tests first\".",
+      "isSystemic": true
     }
   ],
   "rejectedObservations": [],
-  "previousRound": null
+  "previousRound": ".factory/validation/import-surface/scrutiny/synthesis.round1.json"
 }
