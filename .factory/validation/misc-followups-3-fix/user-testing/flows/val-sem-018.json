@@ -1,0 +1,32 @@
+{
+  "assertions": [
+    "VAL-SEM-018"
+  ],
+  "status": "pass",
+  "summary": "VAL-SEM-018 passes: the targeted typecheck suite includes positive regressions for generic Self constructors and generic enum struct variant literals, and both pass under nix develop -c dune exec ./test/test_typecheck.exe --; full nix develop -c dune runtest also succeeds.",
+  "evidence": [
+    {
+      "type": "command",
+      "command": "nix develop -c dune exec ./test/test_typecheck.exe --",
+      "exitCode": 0,
+      "observation": "Targeted typecheck execution ran 60 tests successfully. Relevant passing positives were 'generic Self substitution', 'generic Self chained', 'generic enum struct variant in impl', and 'generic enum struct variant in array', matching the VAL-SEM-018 requirement that concrete instantiated types like Box<T> or Container<T> are preserved in impl contexts. Test definitions live in test/test_typecheck.ml."
+    },
+    {
+      "type": "command",
+      "command": "nix develop -c dune runtest",
+      "exitCode": 0,
+      "observation": "Broader confirmation passed from the real CLI validation surface. The full test entrypoint exited 0 in the flake environment, so the regression coverage for VAL-SEM-018 also passes in the repository-authoritative validation command."
+    }
+  ],
+  "frictions": [
+    {
+      "description": "Initial attempt to scope dune runtest directly to test/test_typecheck.exe failed because dune runtest expects a known test alias/target name, not the executable path.",
+      "resolved": true,
+      "resolution": "Used nix develop -c dune exec ./test/test_typecheck.exe -- for the narrow targeted run, then nix develop -c dune runtest for broader confirmation."
+    }
+  ],
+  "blockers": [],
+  "toolsUsed": [
+    "shell"
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "milestone": "phase-6-exhaustiveness",
+  "surface": "CLI/compiler validation",
+  "assertions": [
+    {
+      "id": "VAL-SEM-011",
+      "status": "pass",
+      "evidence": "Dedicated exhaustiveness suite passed including exhaustive, wildcard, binding catchall, tuple, struct, nested, and regression-positive cases."
+    },
+    {
+      "id": "VAL-SEM-012",
+      "status": "pass",
+      "evidence": "Dedicated exhaustiveness suite passed negative cases and CLI rejected a non-exhaustive enum match with an exhaustiveness diagnostic while leaving no output artifact."
+    }
+  ],
+  "toolsUsed": [
+    "nix develop -c dune exec test/test_exhaust.exe",
+    "nix develop -c dune exec rgoc -- <fixture> -o <out.go>"
+  ],
+  "frictions": [
+    "Current CLI cannot produce Go for enum programs yet; exhaustive enum fixture fails later in codegen with \"unsupported top-level item\", so positive exhaustiveness was validated through the dedicated semantic exhaustiveness suite rather than a successful end-to-end codegen run."
+  ],
+  "blockers": [],
+  "observations": {
+    "testExitCode": 0,
+    "negativeCliExitCode": 1,
+    "positiveCliExitCode": 1,
+    "negativeOutputExists": false,
+    "positiveOutputExists": false,
+    "negativeCliSnippet": "rgo nix dev shell\n  go:    go1.26.1\n  ocaml: 5.4.1\n  dune:  3.21.1\n  opam:  2.5.0\nwarning: Git tree '/home/lenstr/workspace/personal/hack/rgo-lang' is dirty\nerror: /home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/phase-6-exhaustiveness/user-testing/non_exhaustive_cli.rg:7:11: non-exhaustive match: missing pattern(s) Color::Blue\n",
+    "positiveCliSnippet": "rgo nix dev shell\n  go:    go1.26.1\n  ocaml: 5.4.1\n  dune:  3.21.1\n  opam:  2.5.0\nwarning: Git tree '/home/lenstr/workspace/personal/hack/rgo-lang' is dirty\nerror: codegen: unsupported top-level item\n"
+  }
+}

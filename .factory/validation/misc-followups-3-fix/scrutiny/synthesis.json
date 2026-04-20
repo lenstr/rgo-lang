@@ -1,6 +1,6 @@
 {
-  "milestone": "phase-6-exhaustiveness-type-propagation-fix",
-  "round": 2,
+  "milestone": "misc-followups-3-fix",
+  "round": 1,
   "status": "pass",
   "validatorsRun": {
     "test": {
@@ -20,8 +20,8 @@
     }
   },
   "reviewsSummary": {
-    "total": 1,
-    "passed": 1,
+    "total": 2,
+    "passed": 2,
     "failed": 0,
     "failedFeatures": []
   },
@@ -29,5 +29,5 @@
   "appliedUpdates": [],
   "suggestedGuidanceUpdates": [],
   "rejectedObservations": [],
-  "previousRound": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/phase-6-exhaustiveness-type-propagation-fix/scrutiny/synthesis.json"
+  "previousRound": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/misc-followups-3/scrutiny/synthesis.json"
 }

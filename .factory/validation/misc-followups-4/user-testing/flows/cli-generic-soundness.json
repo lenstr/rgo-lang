@@ -1,0 +1,46 @@
+{
+  "surface": "CLI/compiler via `nix develop -c dune ...`",
+  "assertions": [
+    {
+      "id": "misc-followups-4.generic-param-to-concrete-rejected",
+      "status": "passed",
+      "reason": "The real typecheck CLI surface rejects the regression case where an in-scope generic parameter is passed to a concrete `i32` parameter, so generic parameters no longer behave as unconstrained wildcards at that call site.",
+      "evidence": [
+        "Fixture: `test/test_typecheck.ml` defines `invalid_generic_param_to_concrete` and registers it as negative test 28 expecting `type mismatch`.",
+        "Command: `cd /home/lenstr/workspace/personal/hack/rgo-lang && export DUNE_BUILD_DIR=/home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/misc-followups-4/cli-generic-soundness/dune-build && nix develop -c dune exec ./test/test_typecheck.exe -- test negative 28,29` -> exit 0 with `[OK] negative 28 generic param to concrete rejected`.",
+        "Evidence log: `/home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/misc-followups-4/cli-generic-soundness/focused-negative.log`."
+      ]
+    },
+    {
+      "id": "misc-followups-4.generic-cross-param-return-rejected",
+      "status": "passed",
+      "reason": "The real typecheck CLI surface rejects returning `B` from a function declared to return `A`, confirming distinct in-scope caller type parameters are now rigid rather than mutually compatible wildcards.",
+      "evidence": [
+        "Fixture: `test/test_typecheck.ml` defines `invalid_generic_param_cross_return` and registers it as negative test 29 expecting `type mismatch`.",
+        "Command: `cd /home/lenstr/workspace/personal/hack/rgo-lang && export DUNE_BUILD_DIR=/home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/misc-followups-4/cli-generic-soundness/dune-build && nix develop -c dune exec ./test/test_typecheck.exe -- test negative 28,29` -> exit 0 with `[OK] negative 29 generic cross-param return rejected`.",
+        "Evidence log: `/home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/misc-followups-4/cli-generic-soundness/focused-negative.log`."
+      ]
+    },
+    {
+      "id": "misc-followups-4.generic-self-and-constructor-regressions-still-pass",
+      "status": "passed",
+      "reason": "Previously-landed valid generic `Self` and generic constructor behaviors still pass on the same CLI surface, so the soundness fix did not regress the preserved positive generic flows.",
+      "evidence": [
+        "Fixture registration: `test/test_typecheck.ml` positive tests 22, 23, and 31-35 cover `generic Self substitution`, `generic Self chained`, `generic constructor outside impl`, `generic pair constructor`, `generic constructor option return`, `generic constructor result return`, and `generic constructor typed let`.",
+        "Command: `cd /home/lenstr/workspace/personal/hack/rgo-lang && export DUNE_BUILD_DIR=/home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/misc-followups-4/cli-generic-soundness/dune-build && nix develop -c dune exec ./test/test_typecheck.exe -- test positive 22,23,31-35` -> exit 0 with 7 focused positive tests passing.",
+        "Evidence log: `/home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/misc-followups-4/cli-generic-soundness/focused-positive.log`.",
+        "Broader confirmation: `nix develop -c dune exec ./test/test_typecheck.exe --` passed 66 tests and `nix develop -c dune runtest` passed the repository test entrypoint; logs saved at `/home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/misc-followups-4/cli-generic-soundness/full-typecheck.log` and `/home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/misc-followups-4/cli-generic-soundness/dune-runtest.log`."
+      ]
+    }
+  ],
+  "toolsUsed": [
+    "Read",
+    "Grep",
+    "Execute"
+  ],
+  "frictions": [
+    "Focused `dune exec ./test/test_typecheck.exe` runs print Alcotest result directories under repo-relative `_build/_tests/typecheck` even when `DUNE_BUILD_DIR` is set, so the stable evidence for this validation is the captured log files under the mission evidence directory."
+  ],
+  "blockers": [],
+  "summary": "Validated the generic soundness CLI repair on the real compiler surface: the two new negative generic-soundness regressions pass as rejections, the preserved generic `Self` and constructor positives still pass, the full typecheck executable passes 66 tests, and the repository `dune runtest` entrypoint also succeeds."
+}

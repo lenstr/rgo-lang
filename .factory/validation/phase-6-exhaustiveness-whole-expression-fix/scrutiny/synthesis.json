@@ -1,6 +1,6 @@
 {
-  "milestone": "phase-6-exhaustiveness-type-propagation-fix",
-  "round": 2,
+  "milestone": "phase-6-exhaustiveness-whole-expression-fix",
+  "round": 1,
   "status": "pass",
   "validatorsRun": {
     "test": {
@@ -28,6 +28,11 @@
   "blockingIssues": [],
   "appliedUpdates": [],
   "suggestedGuidanceUpdates": [],
-  "rejectedObservations": [],
-  "previousRound": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/phase-6-exhaustiveness-type-propagation-fix/scrutiny/synthesis.json"
+  "rejectedObservations": [
+    {
+      "observation": "The mission prompt instructs reviewers to read `.factory/services.yaml`, but this repository does not contain that file, so workers instead rely on AGENTS.md for authoritative validator commands.",
+      "reason": "wrong: `.factory/services.yaml` exists in the repository and already defines the authoritative validator commands, so no guidance change is needed."
+    }
+  ],
+  "previousRound": null
 }

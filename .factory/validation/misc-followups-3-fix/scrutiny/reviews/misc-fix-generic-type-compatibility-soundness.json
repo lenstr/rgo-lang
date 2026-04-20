@@ -1,0 +1,15 @@
+{
+  "featureId": "misc-fix-generic-type-compatibility-soundness",
+  "reviewedAt": "2026-04-20T07:14:24.314293+00:00",
+  "commitId": "1323fae",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix removes the two unsound compatibility shortcuts introduced by the prior generic Self repair while preserving the targeted generic Self constructor and chained-call behavior. `types_compatible` now gates `TParam` wildcarding on in-scope generic names, rejects bare-vs-instantiated nominal generic matches unless arity and arguments line up, and adds regression coverage for the previously missing negative cases alongside the preserved positive generic Self tests.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/misc-followups-3/scrutiny/reviews/misc-fix-generic-self-type-parameter-substitution.json",
+  "summary": "Reviewed the fix handoff, transcript skeleton, prior failed review, and both commits (`6a0fb86` and `1323fae`). The new implementation closes the prior soundness hole where out-of-scope `TParam` values behaved as universal wildcards, removes the global bare-vs-instantiated nominal generic compatibility shortcut, preserves the earlier generic `Self` constructor/method-chain regressions, and adds focused negative tests for the original failure modes. I found no new correctness regressions or missing coverage within the reviewed scope."
+}

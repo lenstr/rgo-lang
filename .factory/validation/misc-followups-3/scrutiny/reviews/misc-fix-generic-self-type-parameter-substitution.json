@@ -1,0 +1,28 @@
+{
+  "featureId": "misc-fix-generic-self-type-parameter-substitution",
+  "reviewedAt": "2026-04-20T07:20:37.428431+00:00",
+  "commitId": "6a0fb86",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The commit fixes the targeted generic `Self` regression paths and adds focused regression coverage, but it does so by weakening `types_compatible` globally. Those new compatibility rules accept invalid generic programs outside the `Self` substitution case, so the feature is not semantically sound.",
+    "issues": [
+      {
+        "file": "lib/typecheck.ml",
+        "line": 167,
+        "severity": "blocking",
+        "description": "`types_compatible` now treats every `TParam` as compatible with every type in both directions. That means generic type parameters stop enforcing any constraint at all: e.g. the existing negative tests `invalid_generic_return` and `invalid_generic_assign` in `test/test_typecheck.ml` rely on `TParam` not matching arbitrary concrete types, but under this rule `TParam \"T\"` will accept `i32`, `str`, etc. The requested fix was to preserve concrete generic arguments during `Self` substitution, not to make generic parameters universal wildcards."
+      },
+      {
+        "file": "lib/typecheck.ml",
+        "line": 171,
+        "severity": "blocking",
+        "description": "The new struct/enum compatibility rule accepts nominal generic types with matching names whenever either side has an empty argument list. That makes bare `Box` compatible with `Box<i32>`, `Box<str>`, etc. everywhere, not just in the specific bare-literal/associated-function `Self` substitution path this feature was meant to repair. Existing negative coverage such as `invalid_bare_vs_instantiated` in `test/test_typecheck.ml` shows this distinction matters."
+      }
+    ]
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed the feature metadata, worker handoff/transcript skeleton, commit `6a0fb86`, and the affected typechecker/tests. The implementation does address the reported generic `Self` substitution regression and adds relevant regression tests, but it introduces globally unsound generic compatibility in `types_compatible`, so the review remains a fail."
+}

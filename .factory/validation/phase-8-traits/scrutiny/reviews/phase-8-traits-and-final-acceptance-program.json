@@ -1,0 +1,34 @@
+{
+  "featureId": "phase-8-traits-and-final-acceptance-program",
+  "reviewedAt": "2026-04-20T16:55:56+00:00",
+  "commitId": "01772da908ec6584b0d24b0772bd72ee5bccd780",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The feature adds substantial Phase 8 trait coverage, but the typechecker still resolves method calls on generic type parameters without consulting the parameter's declared trait bounds, which makes bounded-generic method dispatch unsound and misses generic ambiguity cases. Default trait bodies are also never typechecked inside trait declarations.",
+    "issues": [
+      {
+        "file": "lib/typecheck.ml",
+        "line": 668,
+        "severity": "blocking",
+        "description": "Method lookup for a generic receiver uses only `env.type_params` and then scans every trait in `env.traits` until it finds a matching method name. Because no bound map is stored for in-scope type parameters, an unconstrained `T` can call any trait method whose name exists somewhere in the program, and a bounded `T: A + B` call like `x.hello()` will silently pick the first matching trait instead of rejecting ambiguity. That violates the Phase 8 generic-bounds and ambiguous-method-resolution contract."
+      },
+      {
+        "file": "lib/typecheck.ml",
+        "line": 1593,
+        "severity": "non_blocking",
+        "description": "`check_item` skips `ItemTrait` entirely, so default trait method bodies are recorded for synthesis but never typechecked against their own signatures or bodies. Invalid default implementations therefore bypass semantic checking until much later (or forever if they are never instantiated), leaving a hole in Phase 8's default-method typechecking coverage."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `compiler-worker` skill says compiler features should add or extend tests before implementation, but this worker started editing `lib/codegen.ml` and `lib/typecheck.ml` before adding the new trait tests, while the handoff still reported `followedProcedure: true`.",
+      "evidence": "`/home/lenstr/.factory/artifacts/tool-outputs/grep_tool_cli-call_N1tgd31q2wnYjs11mNw24d7O-03942206.log` shows the first `Edit` calls targeting `lib/codegen.ml` and `lib/typecheck.ml`; test-file work appears later under the transcript section beginning with 'All tests pass. Now let me implement the tests.' `compiler-worker/SKILL.md` step 3 explicitly requires writing/extending tests first."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Review failed: commit `01772da` lands the main Phase 8 trait pipeline, but generic trait-method resolution remains unsound because it ignores the receiver type parameter's declared bounds and therefore can both admit invalid calls and miss ambiguity errors. I also noted a secondary gap where default trait bodies are not typechecked, plus a skill-procedure mismatch in the transcript ordering."
+}

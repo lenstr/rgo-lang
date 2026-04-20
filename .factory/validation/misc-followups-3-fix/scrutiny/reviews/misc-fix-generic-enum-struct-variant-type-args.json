@@ -1,0 +1,15 @@
+{
+  "featureId": "misc-fix-generic-enum-struct-variant-type-args",
+  "reviewedAt": "2026-04-20T10:20:00Z",
+  "commitId": "4337b071a7dc9ee8dbc963a57c4fe48f0882257c",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix directly addresses the prior blocking issue by preserving inherited enum type arguments from `env.self_ty` in `check_struct_variant_literal`, and it keeps the earlier array-element struct variant support covered by parser, codegen, and new typecheck regressions.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/misc-followups-3/scrutiny/reviews/misc-fix-struct-variant-literals-in-array-grammar.json",
+  "summary": "Reviewed the fix feature handoff, transcript skeleton, prior failed review, mission guidance, skill file, and both the original and fix diffs. The new `check_struct_variant_literal` logic now preserves inherited concrete enum type arguments in generic impl/`Self` contexts, and the existing parser/codegen regression for struct variant literals in arrays remains covered. I did not find new correctness regressions or missing tests within the scope of this fix."
+}

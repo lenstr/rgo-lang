@@ -1,0 +1,56 @@
+{
+  "milestone": "misc-followups-3",
+  "round": 3,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "nix develop -c dune runtest",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "nix develop -c dune build",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "nix develop -c dune build @fmt",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 2,
+    "passed": 0,
+    "failed": 2,
+    "failedFeatures": [
+      "misc-fix-generic-self-type-parameter-substitution",
+      "misc-fix-struct-variant-literals-in-array-grammar"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "misc-fix-generic-self-type-parameter-substitution",
+      "severity": "blocking",
+      "description": "`types_compatible` now treats every `TParam` as compatible with every type in both directions. That means generic type parameters stop enforcing any constraint at all: e.g. the existing negative tests `invalid_generic_return` and `invalid_generic_assign` in `test/test_typecheck.ml` rely on `TParam` not matching arbitrary concrete types, but under this rule `TParam \"T\"` will accept `i32`, `str`, etc. The requested fix was to preserve concrete generic arguments during `Self` substitution, not to make generic parameters universal wildcards."
+    },
+    {
+      "featureId": "misc-fix-generic-self-type-parameter-substitution",
+      "severity": "blocking",
+      "description": "The new struct/enum compatibility rule accepts nominal generic types with matching names whenever either side has an empty argument list. That makes bare `Box` compatible with `Box<i32>`, `Box<str>`, etc. everywhere, not just in the specific bare-literal/associated-function `Self` substitution path this feature was meant to repair. Existing negative coverage such as `invalid_bare_vs_instantiated` in `test/test_typecheck.ml` shows this distinction matters."
+    },
+    {
+      "featureId": "misc-fix-struct-variant-literals-in-array-grammar",
+      "severity": "blocking",
+      "description": "In commit `8ee29fc`, `check_struct_variant_literal` constructed `TEnum (type_name.node, [])` for every struct variant literal and returned it directly, so expressions like `[Self::Some { value }]` inside `impl Box<T>` lost `T` and typed as bare `Box` instead of `Box<T>`. That breaks valid generic enum struct variant construction and means the broader implementation did not safely satisfy the requested parser fix until the later follow-up feature `misc-fix-generic-enum-struct-variant-type-args` corrected it."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [],
+  "rejectedObservations": [],
+  "previousRound": ".factory/validation/misc-followups-3/scrutiny/synthesis.json",
+  "orchestratorOverride": {
+    "timestamp": "2026-04-20T07:24:30Z",
+    "reason": "Original misc-followups-3 scrutiny failures were superseded by follow-up milestone misc-followups-3-fix. The fixes were implemented in features misc-fix-generic-type-compatibility-soundness and misc-fix-generic-enum-struct-variant-type-args, and that follow-up milestone passed both scrutiny and user-testing."
+  }
+}

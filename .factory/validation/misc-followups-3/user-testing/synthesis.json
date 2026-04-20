@@ -1,0 +1,27 @@
+{
+  "milestone": "misc-followups-3",
+  "round": 1,
+  "status": "pass",
+  "assertionsSummary": {
+    "total": 0,
+    "passed": 0,
+    "failed": 0,
+    "blocked": 0
+  },
+  "passedAssertions": [],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "appliedUpdates": [
+    {
+      "target": "user-testing.md",
+      "description": "Added CLI-focused validation concurrency guidance and isolation rules for compiler user-testing runs.",
+      "source": "setup"
+    }
+  ],
+  "previousRound": null,
+  "notes": "No completed implementation features in milestone misc-followups-3 declared fulfills assertions, so there were no pending contract assertions to exercise. Baseline CLI validators still passed in the flake environment.",
+  "orchestratorOverride": {
+    "timestamp": "2026-04-20T07:26:50Z",
+    "reason": "misc-followups-3 had no fulfills-mapped assertions by design. The behavior that later needed contract coverage was added as VAL-SEM-018 and validated in the follow-up milestone misc-followups-3-fix, so no separate zero-assertion rerun is needed."
+  }
+}

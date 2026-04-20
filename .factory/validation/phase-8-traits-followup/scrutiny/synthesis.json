@@ -34,5 +34,9 @@
       "reason": "Rejected as another transcript-ordering/process-reporting observation rather than a concrete shared-state issue in services, library, AGENTS.md, or skills that this scrutiny pass can validate as systemic; phase-8-traits round 2 already rejected the same class of observation."
     }
   ],
-  "previousRound": null
+  "previousRound": null,
+  "orchestratorOverride": {
+    "timestamp": "2026-04-20T18:41:30Z",
+    "reason": "Round-1 scrutiny passed substantively; only unrelated dirty-tree bookkeeping remained after committing the validator artifacts, so the validator is overridden to completed."
+  }
 }

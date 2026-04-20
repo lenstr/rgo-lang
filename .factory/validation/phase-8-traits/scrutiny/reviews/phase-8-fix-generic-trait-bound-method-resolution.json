@@ -1,0 +1,28 @@
+{
+  "featureId": "phase-8-fix-generic-trait-bound-method-resolution",
+  "reviewedAt": "2026-04-20T18:07:58.042512Z",
+  "commitId": "b43379d0297aee0343f7d4777904157307dd040a",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The patch fixes top-level function-generic lookup and now typechecks default trait bodies, but it still does not carry declared trait bounds from outer impl/trait generic parameters into method-body checking, so the original generic-bound method-resolution failure is not fully resolved.",
+    "issues": [
+      {
+        "file": "lib/typecheck.ml",
+        "line": 1458,
+        "severity": "blocking",
+        "description": "`check_fn_decl` builds `param_bounds` from `fd.fn_generics` only, while the enclosing `ItemImpl`, `ItemTraitImpl`, and `ItemTrait` environments at lines 1507, 1527, and 1630 add outer generic names to `type_params` without seeding matching bounds. Because bounded generics are supported on impls and traits (`lib/parser.mly` generics in impl/trait productions and `lib/ast.ml` item definitions), a method or default body that uses an outer bounded parameter like `impl<T: Show> Box<T> { fn render(item: T) -> str { item.show() } }` still sees `T` as unbounded and rejects a valid trait call. That leaves the Phase 8 fix incomplete relative to the original blocking review finding that generic receiver method lookup must honor the receiver type parameter's declared trait bounds."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `compiler-worker` skill still says compiler features should extend tests before implementation, but this worker edited `lib/typecheck.ml` and built/tested the change before later adding the regression cases in `test/test_typecheck.ml`; the handoff still reports `followedProcedure: true` while also recording that deviation.",
+      "evidence": "`/home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/worker-transcripts.jsonl` for session `5f9d5932-31ee-41f2-af28-8bf1b6038f71` shows multiple `Edit` calls in `lib/typecheck.ml` before the later edits to `test/test_typecheck.ml`. The handoff file `/home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/handoffs/2026-04-20T17-08-07-902Z__phase-8-fix-generic-trait-bound-method-resolution__5f9d5932-31ee-41f2-af28-8bf1b6038f71.json` also records a deviation from step 3 of `/home/lenstr/workspace/personal/hack/rgo-lang/.factory/skills/compiler-worker/SKILL.md`."
+    }
+  ],
+  "addressesFailureFrom": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/phase-8-traits/scrutiny/reviews/phase-8-traits-and-final-acceptance-program.json",
+  "summary": "Review failed: commit `b43379d` fixes the original function-level bounded-generic lookup bug and the default-trait-body gap, but it still drops bounds declared on outer impl/trait generics, so the original Phase 8 blocking issue remains unresolved."
+}

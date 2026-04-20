@@ -1,0 +1,22 @@
+{
+  "featureId": "phase-5-fix-self-returning-constructor-method-resolution",
+  "reviewedAt": "2026-04-19T21:58:40.331642+00:00",
+  "commitId": "f0238dcc5b826892cc971b269a56312b3e27ea7b",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The fix correctly substitutes Self for direct constructor-result method chains, but it regresses associated-function values obtained without an immediate call: enum associated-function path expressions still expose a raw TSelf return, so later method lookup on that value fails outside impl scope.",
+    "issues": [
+      {
+        "file": "lib/typecheck.ml",
+        "line": 538,
+        "severity": "blocking",
+        "description": "`check_path` still returns `TFn (fi.fi_params, fi.fi_ret)` for associated-function values without substituting `Self` to the concrete `type_name`. As a result, code like `let make = Status::default; let ok = make().is_active();` typechecks `make()` as `TSelf`, and `check_method_call` cannot resolve the receiver because `env.self_ty` is `None` outside impl scope. The feature description and expected behavior require substituting `Self` with the concrete type during method lookup/typechecking for methods called on results of `Self`-returning associated functions, including chained calls reached through an associated-function value, but no regression test covers this path."
+      }
+    ]
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed the handoff, transcript skeleton, skill, and commit `f0238dc`. The implementation fixes direct `Type::new().method()` resolution, but it leaves `Self` unsubstituted for `Type::assoc_fn` path values, causing a blocking semantic gap for later chained calls through associated-function values."
+}

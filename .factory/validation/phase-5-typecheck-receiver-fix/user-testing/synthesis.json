@@ -1,0 +1,21 @@
+{
+  "milestone": "phase-5-typecheck-receiver-fix",
+  "round": 1,
+  "status": "pass",
+  "assertionsSummary": {
+    "total": 0,
+    "passed": 0,
+    "failed": 0,
+    "blocked": 0
+  },
+  "passedAssertions": [],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "appliedUpdates": [],
+  "previousRound": null,
+  "notes": [
+    "No validation-contract assertion IDs were mapped directly to this fix milestone because the implementation feature had an empty fulfills list.",
+    "User-testing still validated the repaired CLI behavior through the focused typecheck suite and recorded it in flows/cli-regressions.json.",
+    "The validated regression confirms trait impl receiver-kind mismatches are rejected for `self`, `&self`, and `&mut self` mismatches on the real compiler test surface."
+  ]
+}

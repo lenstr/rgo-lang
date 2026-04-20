@@ -17,5 +17,9 @@
     "No validation-contract assertion IDs are mapped directly to the mission-wrapup milestone because the only completed implementation feature in this milestone, `final-readme-refresh`, has an empty `fulfills` list.",
     "`validation-state.json` already has no pending assertions, so there was no user-surface flow work to dispatch for this bookkeeping milestone.",
     "No services were required for setup or teardown because `.factory/services.yaml` defines only flake-backed compiler commands and no long-running processes."
-  ]
+  ],
+  "orchestratorOverride": {
+    "timestamp": "2026-04-20T19:13:30Z",
+    "reason": "Mission-wrapup had no fulfills-mapped assertions, so this validator was a bookkeeping-only no-op and is overridden to completed."
+  }
 }

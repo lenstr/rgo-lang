@@ -1,7 +1,7 @@
 {
   "milestone": "phase-5-typecheck",
-  "round": 1,
-  "status": "fail",
+  "round": 2,
+  "status": "pass",
   "validatorsRun": {
     "test": {
       "passed": true,
@@ -21,28 +21,26 @@
   },
   "reviewsSummary": {
     "total": 1,
-    "passed": 0,
-    "failed": 1,
-    "failedFeatures": [
-      "phase-5-typecheck-inference-and-question-mark"
-    ]
+    "passed": 1,
+    "failed": 0,
+    "failedFeatures": []
   },
-  "blockingIssues": [
-    {
-      "featureId": "phase-5-typecheck-inference-and-question-mark",
-      "severity": "blocking",
-      "description": "Trait method signatures are recorded using only explicit parameter types and return type; `sig_self` / `fn_self` is discarded. Later impl validation compares only parameter count/types and return type, so a trait requiring `fn touch(&mut self)` is incorrectly satisfied by `impl Trait for T { fn touch(&self) { ... } }` (and vice versa). This violates the trait contract and will allow non-mutating receivers to pass typecheck where mutation capability is required."
-    }
-  ],
+  "blockingIssues": [],
   "appliedUpdates": [],
   "suggestedGuidanceUpdates": [
     {
       "target": "skill:scrutiny-validator",
       "suggestion": "Clarify that `.factory/services.yaml` is resolved relative to the repo root/working tree, not the mission home directory, so validators and reviewers do not attempt nonexistent absolute paths outside the repository.",
-      "evidence": "Attempting to read `/home/lenstr/.factory/services.yaml` returned ENOENT during review, while the repo clearly contains `.factory/library/*` under `/home/lenstr/workspace/personal/hack/rgo-lang/.factory/`.",
+      "evidence": "The original phase-5 review logged an ENOENT for `/home/lenstr/.factory/services.yaml`, while the repo stores the manifest at `/home/lenstr/workspace/personal/hack/rgo-lang/.factory/services.yaml`.",
+      "isSystemic": true
+    },
+    {
+      "target": "skills",
+      "suggestion": "Either provide the `mission-worker-base` skill in the installed skill set or remove references to it from worker procedures so transcripts do not rely on a missing reusable workflow.",
+      "evidence": "The fix review observed session `38b22a54-3f52-4fa1-8a5b-f76ad180d7e0` invoking `mission-worker-base`, but the available skills on disk did not include that skill.",
       "isSystemic": true
     }
   ],
   "rejectedObservations": [],
-  "previousRound": null
+  "previousRound": ".factory/validation/phase-5-typecheck/scrutiny/synthesis.json"
 }

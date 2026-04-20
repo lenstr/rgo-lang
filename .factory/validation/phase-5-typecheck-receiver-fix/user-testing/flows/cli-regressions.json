@@ -1,0 +1,31 @@
+{
+  "surface": "CLI/compiler via `nix develop -c dune ...`",
+  "assertions": [
+    {
+      "id": "phase-5-typecheck-receiver-fix.receiver-kind-mismatch-rejected",
+      "status": "passed",
+      "reason": "The user-visible typecheck test surface includes four regression cases that exercise trait impl receiver-kind mismatches and they all pass under the real test executable.",
+      "evidence": [
+        "test/test_typecheck.ml defines negative receiver-kind cases expecting `receiver mismatch` for `trait_recv_ref_vs_value`, `trait_recv_ref_vs_mutref`, `trait_recv_mutref_vs_ref`, and `trait_recv_value_vs_ref`.",
+        "nix develop -c dune runtest",
+        "nix develop -c dune exec ./test/test_typecheck.exe",
+        "nix develop -c dune exec ./test/test_typecheck.exe -- test negative 21",
+        "nix develop -c dune exec ./test/test_typecheck.exe -- test negative 22",
+        "nix develop -c dune exec ./test/test_typecheck.exe -- test negative 23",
+        "nix develop -c dune exec ./test/test_typecheck.exe -- test negative 24"
+      ]
+    }
+  ],
+  "toolsUsed": [
+    "Read",
+    "Grep",
+    "LS",
+    "Execute",
+    "Task"
+  ],
+  "frictions": [
+    "`dune runtest --no-buffer test/test_typecheck.exe` does not match any known test target, so validation used repo-wide `dune runtest` plus direct `dune exec ./test/test_typecheck.exe` and focused Alcotest indices."
+  ],
+  "blockers": [],
+  "summary": "Receiver-kind regression coverage is present and passing from the real CLI/compiler test surface. Matching receiver controls also pass in the same executable output."
+}

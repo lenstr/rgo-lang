@@ -1,0 +1,22 @@
+{
+  "featureId": "misc-fix-struct-variant-literals-in-array-grammar",
+  "reviewedAt": "2026-04-20T07:20:45.927305+00:00",
+  "commitId": "8ee29fc9184ccda9bea672d66dcd7725234521c2",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The parser and regression tests cover the requested array grammar case, but commit `8ee29fc` implemented the fix by introducing a broader `ExprStructVariant` expression path across resolver/typecheck/codegen. In that original implementation, the new typechecker branch returned a bare `TEnum(name, [])` and therefore regressed generic enum struct variant literals inside generic `impl` contexts.",
+    "issues": [
+      {
+        "file": "lib/typecheck.ml",
+        "line": 693,
+        "severity": "blocking",
+        "description": "In commit `8ee29fc`, `check_struct_variant_literal` constructed `TEnum (type_name.node, [])` for every struct variant literal and returned it directly, so expressions like `[Self::Some { value }]` inside `impl Box<T>` lost `T` and typed as bare `Box` instead of `Box<T>`. That breaks valid generic enum struct variant construction and means the broader implementation did not safely satisfy the requested parser fix until the later follow-up feature `misc-fix-generic-enum-struct-variant-type-args` corrected it."
+      }
+    ]
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed the existing report, mission guidance, feature metadata, worker handoff, transcript skeleton, compiler-worker skill, and commit `8ee29fc9184ccda9bea672d66dcd7725234521c2`. The added parser/codegen tests demonstrate the requested array syntax support, but the original implementation widened scope into semantic/codegen changes and introduced a blocking generic-type regression in `check_struct_variant_literal`, so this feature review remains a fail."
+}

@@ -1,0 +1,36 @@
+{
+  "milestone": "phase-6-exhaustiveness-whole-expression-fix",
+  "groupId": "cli-exhaustiveness-whole-expression",
+  "surface": "CLI/compiler via `nix develop -c dune ...`",
+  "assertions": [
+    {
+      "id": "VAL-SEM-011",
+      "status": "pass",
+      "reason": "The exhaustiveness test executable passed positive exhaustive-match coverage, showing valid enum matches are accepted through the real CLI/compiler test surface.",
+      "evidence": [
+        "nix develop -c dune exec ./test/test_exhaust.exe -> passed 26 tests total",
+        "test/test_exhaust.ml includes exhaustive-match positive coverage exercised by the passing executable"
+      ]
+    },
+    {
+      "id": "VAL-SEM-012",
+      "status": "pass",
+      "reason": "The exhaustiveness test executable passed non-exhaustive negative coverage and the whole-expression regression coverage, showing missing enum cases are rejected even when enum type information must flow from the whole expression context.",
+      "evidence": [
+        "nix develop -c dune exec ./test/test_exhaust.exe -> passed 26 tests total, including non-exhaustive negatives and whole-expression regressions",
+        "nix develop -c dune runtest --no-buffer test -> passed",
+        "test/test_exhaust.ml contains the non-exhaustive and whole-expression regression scenarios covered by the passing test run"
+      ]
+    }
+  ],
+  "status": "pass",
+  "toolsUsed": [
+    "Read",
+    "LS",
+    "Glob",
+    "Execute",
+    "TodoWrite"
+  ],
+  "frictions": [],
+  "blockers": []
+}

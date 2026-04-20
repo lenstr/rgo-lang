@@ -1,0 +1,23 @@
+{
+  "milestone": "misc-followups-2",
+  "groupId": "cli-regression-smoke",
+  "surface": "CLI/compiler validation",
+  "tool": "nix develop -c dune runtest --no-buffer",
+  "assertionsTested": [],
+  "status": "pass",
+  "results": [],
+  "frictions": [],
+  "blockers": [],
+  "toolsUsed": [
+    "nix develop -c dune runtest --no-buffer"
+  ],
+  "evidence": {
+    "commands": [
+      {
+        "command": "nix develop -c dune runtest --no-buffer",
+        "exitCode": 0,
+        "observation": "The full Dune test suite completed successfully inside the flake shell for the misc-followups-2 codebase state."
+      }
+    ]
+  }
+}

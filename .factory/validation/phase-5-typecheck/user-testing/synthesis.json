@@ -1,0 +1,26 @@
+{
+  "milestone": "phase-5-typecheck",
+  "round": 1,
+  "status": "pass",
+  "assertionsSummary": {
+    "total": 9,
+    "passed": 9,
+    "failed": 0,
+    "blocked": 0
+  },
+  "passedAssertions": [
+    "VAL-SEM-005",
+    "VAL-SEM-006",
+    "VAL-SEM-007",
+    "VAL-SEM-008",
+    "VAL-SEM-009",
+    "VAL-SEM-010",
+    "VAL-SEM-013",
+    "VAL-SEM-014",
+    "VAL-SEM-015"
+  ],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "appliedUpdates": [],
+  "previousRound": null
+}

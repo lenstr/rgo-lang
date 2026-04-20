@@ -1,0 +1,20 @@
+{
+  "milestone": "phase-8-traits",
+  "round": 1,
+  "status": "pass",
+  "assertionsSummary": {
+    "total": 0,
+    "passed": 0,
+    "failed": 0,
+    "blocked": 0
+  },
+  "passedAssertions": [],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "appliedUpdates": [],
+  "previousRound": null,
+  "orchestratorOverride": {
+    "timestamp": "2026-04-20T18:13:20Z",
+    "reason": "All Phase 8 trait assertions were already recorded as passed at phase-8-traits-fix, so this validator had no pending assertions and is overridden to completed as a bookkeeping-only no-op."
+  }
+}

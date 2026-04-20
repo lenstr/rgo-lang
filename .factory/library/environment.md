@@ -13,6 +13,7 @@ All commands must run through the repository flake:
 - `nix develop -c dune ...`
 - `nix develop -c go ...`
 - `nix develop -c ocaml ...`
+- Validation entrypoints are standardized in `.factory/services.yaml`: `build = nix develop -c dune build`, `test = nix develop -c dune runtest`, `lint = nix develop -c dune build @fmt`, `typecheck = nix develop -c dune build`, `cli_version = nix develop -c dune exec rgoc -- --version`.
 
 The flake currently provides Go 1.26+, OCaml 5.x, dune, menhir, sedlex, ppx_deriving, alcotest, ppx_expect, ocamlformat, ocaml-lsp, and bisect_ppx.
 

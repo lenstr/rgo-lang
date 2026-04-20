@@ -1,0 +1,183 @@
+{
+  "groupId": "cli-generic-soundness-round2",
+  "testedAt": "2026-04-20T13:07:42Z",
+  "isolation": {
+    "repoRoot": "/home/lenstr/workspace/personal/hack/rgo-lang",
+    "missionDir": "/home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7",
+    "milestone": "misc-followups-4",
+    "surface": "CLI/compiler",
+    "constraints": [
+      "Stayed in repository root",
+      "Used only `nix develop -c ...` for compiler/test commands",
+      "Used dedicated DUNE_BUILD_DIR under the assigned mission evidence directory",
+      "Did not start servers or use ports"
+    ],
+    "DUNE_BUILD_DIR": "/home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/misc-followups-4/cli-generic-soundness-round2/dune-build"
+  },
+  "toolsUsed": [
+    "Read",
+    "Grep",
+    "Execute",
+    "tuistory"
+  ],
+  "notes": [
+    "No validation-contract assertion IDs were assigned for this milestone because the implementation feature has no fulfills mapping.",
+    "This report records the requested real CLI/compiler surface checks as custom flow assertions."
+  ],
+  "assertions": [
+    {
+      "id": "misc-followups-4-cli-1",
+      "title": "Generic param to concrete mismatch is rejected (focused negative test 28)",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Inspect `test/test_typecheck.ml` for the negative fixture and list numbering",
+          "expected": "Negative test 28 is `generic param to concrete rejected` backed by `invalid_generic_param_to_concrete` expecting a `type mismatch`",
+          "observed": "`invalid_generic_param_to_concrete` is defined and registered as negative test 28 with `fail ~expect:\"type mismatch\"`."
+        },
+        {
+          "action": "Run `nix develop -c dune exec ./test/test_typecheck.exe -- test negative 28,29` with the dedicated DUNE_BUILD_DIR",
+          "expected": "Negative test 28 passes by rejecting the bad generic-to-concrete call",
+          "observed": "Command exited 0 and reported `[OK] negative 28 generic param to concrete rejected`."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "misc-followups-4/cli-generic-soundness-round2/tuistory-negative-snapshot.txt",
+          "misc-followups-4/cli-generic-soundness-round2/tuistory-negative-snapshot.png"
+        ],
+        "terminalRead": "misc-followups-4/cli-generic-soundness-round2/tuistory-negative-read.txt",
+        "logs": [
+          "misc-followups-4/cli-generic-soundness-round2/focused-negative.log"
+        ],
+        "command": "export DUNE_BUILD_DIR=.../cli-generic-soundness-round2/dune-build && nix develop -c dune exec ./test/test_typecheck.exe -- test negative 28,29",
+        "exitCode": 0
+      },
+      "issues": null
+    },
+    {
+      "id": "misc-followups-4-cli-2",
+      "title": "Cross-parameter generic return mismatch is rejected (focused negative test 29)",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Inspect `test/test_typecheck.ml` for the negative fixture and list numbering",
+          "expected": "Negative test 29 is `generic cross-param return rejected` backed by `invalid_generic_param_cross_return` expecting a `type mismatch`",
+          "observed": "`invalid_generic_param_cross_return` is defined and registered as negative test 29 with `fail ~expect:\"type mismatch\"`."
+        },
+        {
+          "action": "Run `nix develop -c dune exec ./test/test_typecheck.exe -- test negative 28,29` with the dedicated DUNE_BUILD_DIR",
+          "expected": "Negative test 29 passes by rejecting the cross-parameter return mismatch",
+          "observed": "Command exited 0 and reported `[OK] negative 29 generic cross-param return rejected`."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "misc-followups-4/cli-generic-soundness-round2/tuistory-negative-snapshot.txt",
+          "misc-followups-4/cli-generic-soundness-round2/tuistory-negative-snapshot.png"
+        ],
+        "terminalRead": "misc-followups-4/cli-generic-soundness-round2/tuistory-negative-read.txt",
+        "logs": [
+          "misc-followups-4/cli-generic-soundness-round2/focused-negative.log"
+        ],
+        "command": "export DUNE_BUILD_DIR=.../cli-generic-soundness-round2/dune-build && nix develop -c dune exec ./test/test_typecheck.exe -- test negative 28,29",
+        "exitCode": 0
+      },
+      "issues": null
+    },
+    {
+      "id": "misc-followups-4-cli-3",
+      "title": "Preserved positive generic Self / constructor flows still pass (focused positive tests 22,23,31-35)",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Inspect `test/test_typecheck.ml` for the positive fixtures and list numbering",
+          "expected": "Positive tests 22, 23, and 31-35 cover preserved generic `Self` and constructor flows",
+          "observed": "The file registers 22 `generic Self substitution`, 23 `generic Self chained`, and 31-35 for constructor preservation cases."
+        },
+        {
+          "action": "Run `nix develop -c dune exec ./test/test_typecheck.exe -- test positive 22,23,31-35` with the dedicated DUNE_BUILD_DIR",
+          "expected": "All seven targeted positive tests pass",
+          "observed": "Command exited 0 and reported `[OK]` for positive tests 22, 23, 31, 32, 33, 34, and 35."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "misc-followups-4/cli-generic-soundness-round2/tuistory-positive-snapshot.txt",
+          "misc-followups-4/cli-generic-soundness-round2/tuistory-positive-snapshot.png"
+        ],
+        "terminalRead": "misc-followups-4/cli-generic-soundness-round2/tuistory-positive-read.txt",
+        "logs": [
+          "misc-followups-4/cli-generic-soundness-round2/focused-positive.log"
+        ],
+        "command": "export DUNE_BUILD_DIR=.../cli-generic-soundness-round2/dune-build && nix develop -c dune exec ./test/test_typecheck.exe -- test positive 22,23,31-35",
+        "exitCode": 0
+      },
+      "issues": null
+    },
+    {
+      "id": "misc-followups-4-cli-4",
+      "title": "Broader repo CLI test entrypoint still passes (`nix develop -c dune runtest`)",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run `nix develop -c dune exec ./test/test_typecheck.exe --` with the dedicated DUNE_BUILD_DIR",
+          "expected": "The full typecheck CLI executable passes all registered tests",
+          "observed": "Command exited 0 and the full typecheck executable reported `Test Successful` with 66 tests run."
+        },
+        {
+          "action": "Run `nix develop -c dune runtest` with the dedicated DUNE_BUILD_DIR",
+          "expected": "The repository test entrypoint passes in the flake environment",
+          "observed": "Command exited 0. Execute-based validation succeeded, and terminal-session evidence captured successful `dune runtest` completion markers (`EXIT_CODE:0` and `ROUND2_RUNTEXIT:0`)."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "misc-followups-4/cli-generic-soundness-round2/tuistory-runtest-snapshot.png",
+          "misc-followups-4/cli-generic-soundness-round2/tuistory-runtest-snapshot-verified.txt",
+          "misc-followups-4/cli-generic-soundness-round2/tuistory-runtest-snapshot-verified.png"
+        ],
+        "terminalRead": [
+          "misc-followups-4/cli-generic-soundness-round2/tuistory-runtest-read.txt",
+          "misc-followups-4/cli-generic-soundness-round2/tuistory-runtest-read-verified.txt"
+        ],
+        "logs": [
+          "misc-followups-4/cli-generic-soundness-round2/full-typecheck.log",
+          "misc-followups-4/cli-generic-soundness-round2/dune-runtest.log"
+        ],
+        "commands": [
+          "export DUNE_BUILD_DIR=.../cli-generic-soundness-round2/dune-build && nix develop -c dune exec ./test/test_typecheck.exe --",
+          "export DUNE_BUILD_DIR=.../cli-generic-soundness-round2/dune-build && nix develop -c dune runtest"
+        ],
+        "exitCodes": {
+          "fullTypecheck": 0,
+          "duneRuntest": 0
+        }
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [
+    {
+      "description": "`tuistory` was not installed on the host at session start, so terminal-snapshot capture required a local user-level install via `bun add -g tuistory` before CLI evidence could be recorded.",
+      "resolved": true,
+      "resolution": "Installed `tuistory@0.1.0` in the user Bun global directory, then reused one terminal session for all CLI snapshots.",
+      "affectedAssertions": [
+        "misc-followups-4-cli-1",
+        "misc-followups-4-cli-2",
+        "misc-followups-4-cli-3",
+        "misc-followups-4-cli-4"
+      ]
+    },
+    {
+      "description": "The shell-redirected `dune-runtest.log` captured only the initial Nix-shell banner, while the detailed test stream was visible in the terminal session instead.",
+      "resolved": true,
+      "resolution": "Kept the Execute exit code as the authoritative pass/fail signal and supplemented it with tuistory transcript/snapshot evidence including explicit completion markers.",
+      "affectedAssertions": [
+        "misc-followups-4-cli-4"
+      ]
+    }
+  ],
+  "blockers": [],
+  "summary": "Ran the requested misc-followups-4 CLI soundness rerun on the real compiler surface. Focused negative tests 28 and 29 passed as rejections, focused positive tests 22,23,31-35 stayed green, the full typecheck executable passed 66 tests, and `nix develop -c dune runtest` exited 0 in the dedicated mission build directory."
+}

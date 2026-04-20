@@ -1,0 +1,15 @@
+{
+  "featureId": "phase-6-fix-whole-expression-enum-inference",
+  "reviewedAt": "2026-04-19T20:55:33.652782+00:00",
+  "commitId": "1b82807",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix directly removes the unsound ExprIf and ExprMatch branch-sampling that the prior review flagged in lib/exhaust.ml and replaces it with authoritative-only enum propagation. The remaining inference paths are limited to identifiers already in the type environment, direct enum paths, function return types, and block final expressions, so let-bound if/match results are no longer cached under a guessed enum. The added regression tests cover both corrected behavior (no bogus enum caching for unannotated if/match initializers) and preserved behavior (annotated whole-expression enum values still trigger exhaustiveness checks, while pattern-based fallback still catches non-exhaustive matches when patterns reveal the enum). I did not find an obvious regression in the reviewed scope.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/phase-6-exhaustiveness-type-propagation-fix/scrutiny/reviews/phase-6-fix-enum-type-propagation-for-block-scrutinees.json",
+  "summary": "Reviewed handoff, transcript skeleton, prior failed review, and commit 1b82807. The fix adequately addresses the earlier unsound whole-expression enum inference by eliminating ExprIf/ExprMatch sampling and adds focused regression coverage showing unannotated multi-branch expressions no longer poison exhaustiveness type propagation while annotated cases still behave correctly."
+}

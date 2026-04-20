@@ -1,0 +1,17 @@
+{
+  "milestone": "misc-followups-2",
+  "round": 1,
+  "status": "pass",
+  "assertionsSummary": {
+    "total": 0,
+    "passed": 0,
+    "failed": 0,
+    "blocked": 0
+  },
+  "passedAssertions": [],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "appliedUpdates": [],
+  "previousRound": null,
+  "note": "No implementation features in milestone misc-followups-2 declared fulfills assertions, so there were no pending contract assertions to user-test. The full dune test suite was run as a regression smoke check and passed."
+}

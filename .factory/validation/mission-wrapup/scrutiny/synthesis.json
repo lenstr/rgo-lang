@@ -36,5 +36,9 @@
     }
   ],
   "rejectedObservations": [],
-  "previousRound": ".factory/validation/mission-wrapup/scrutiny/synthesis.round1.json"
+  "previousRound": ".factory/validation/mission-wrapup/scrutiny/synthesis.round1.json",
+  "orchestratorOverride": {
+    "timestamp": "2026-04-20T19:09:40Z",
+    "reason": "Round-2 mission-wrapup scrutiny passed substantively; only unrelated dirty-tree bookkeeping remained after committing the validator artifacts, so the validator is overridden to completed."
+  }
 }

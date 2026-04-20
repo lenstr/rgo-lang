@@ -1,0 +1,15 @@
+{
+  "featureId": "phase-6-fix-whole-expression-enum-inference",
+  "reviewedAt": "2026-04-20T00:00:00Z",
+  "commitId": "1b82807",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The implementation correctly removes the unsound ExprIf/ExprMatch branch sampling from lib/exhaust.ml so enum propagation now relies only on authoritative sources already available to the exhaustiveness pass. The regression tests in test/test_exhaust.ml cover both sides of the intended behavior: unannotated if/match-produced values no longer get cached from a sampled branch or arm, while annotated cases and pattern-based fallback still reject genuinely non-exhaustive matches. I did not find a correctness issue in the reviewed scope.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed the feature handoff, transcript skeleton, commit 1b82807 diff, compiler-worker skill, and relevant exhaustiveness code/tests. The fix is scoped appropriately, addresses the whole-expression inference bug described by the feature, and adds focused regression coverage without introducing an obvious regression."
+}
