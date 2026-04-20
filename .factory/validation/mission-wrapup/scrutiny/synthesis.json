@@ -1,7 +1,7 @@
 {
   "milestone": "mission-wrapup",
-  "round": 1,
-  "status": "fail",
+  "round": 2,
+  "status": "pass",
   "validatorsRun": {
     "test": {
       "passed": true,
@@ -21,28 +21,20 @@
   },
   "reviewsSummary": {
     "total": 1,
-    "passed": 0,
-    "failed": 1,
-    "failedFeatures": [
-      "final-readme-refresh"
-    ]
+    "passed": 1,
+    "failed": 0,
+    "failedFeatures": []
   },
-  "blockingIssues": [
-    {
-      "featureId": "final-readme-refresh",
-      "severity": "blocking",
-      "description": "README.md documents the internal compiler phases instead of the requested final validation/acceptance workflow, omitting the flake-backed validation commands from .factory/services.yaml and the downstream acceptance checks exercised by the codegen suite and validation contract (`gofmt`, `go build`, `go vet`, `go run`, including the final MVP acceptance program)."
-    }
-  ],
+  "blockingIssues": [],
   "appliedUpdates": [],
   "suggestedGuidanceUpdates": [
     {
-      "target": "compiler-worker skill / mission planning",
-      "suggestion": "Avoid assigning docs-only features such as README refreshes to the `compiler-worker` skill, or document an explicit documentation-only exception in that skill so workers are not forced to violate its tests-first procedure.",
-      "evidence": "The `final-readme-refresh` feature in mission-wrapup was assigned `compiler-worker`, whose procedure requires tests-first implementation. The feature handoff explicitly noted skipping that step because the task only changed README.md, and the reviewer flagged the mismatch as a shared-state observation.",
+      "target": "skill:compiler-worker / mission planning",
+      "suggestion": "Avoid assigning documentation-only features to `compiler-worker`, or explicitly exempt documentation-only tasks from its tests-first procedure and handoff expectations.",
+      "evidence": "The `final-readme-refresh` feature was assigned `compiler-worker`, and both the original and follow-up worker handoffs had to explain that adding tests was not applicable because the task only changed README.md.",
       "isSystemic": false
     }
   ],
   "rejectedObservations": [],
-  "previousRound": null
+  "previousRound": ".factory/validation/mission-wrapup/scrutiny/synthesis.round1.json"
 }

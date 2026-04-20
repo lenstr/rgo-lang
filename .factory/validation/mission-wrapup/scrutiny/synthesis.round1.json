@@ -1,0 +1,48 @@
+{
+  "milestone": "mission-wrapup",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "nix develop -c dune runtest",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "nix develop -c dune build",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "nix develop -c dune build @fmt",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "failedFeatures": [
+      "final-readme-refresh"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "final-readme-refresh",
+      "severity": "blocking",
+      "description": "README.md documents the internal compiler phases instead of the requested final validation/acceptance workflow, omitting the flake-backed validation commands from .factory/services.yaml and the downstream acceptance checks exercised by the codegen suite and validation contract (`gofmt`, `go build`, `go vet`, `go run`, including the final MVP acceptance program)."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "compiler-worker skill / mission planning",
+      "suggestion": "Avoid assigning docs-only features such as README refreshes to the `compiler-worker` skill, or document an explicit documentation-only exception in that skill so workers are not forced to violate its tests-first procedure.",
+      "evidence": "The `final-readme-refresh` feature in mission-wrapup was assigned `compiler-worker`, whose procedure requires tests-first implementation. The feature handoff explicitly noted skipping that step because the task only changed README.md, and the reviewer flagged the mismatch as a shared-state observation.",
+      "isSystemic": false
+    }
+  ],
+  "rejectedObservations": [],
+  "previousRound": null
+}
