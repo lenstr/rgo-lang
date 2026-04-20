@@ -122,11 +122,15 @@ let lookup_value name env =
 (* ---------- AST type -> Go type string ---------- *)
 
 (* Determine if an rgo type is nullable in Go (i.e., has a nil zero value) *)
-let is_nullable_ty env (t : Ast.ty) : bool =
+let rec is_nullable_ty env (t : Ast.ty) : bool =
   match t with
   | TyRef _ -> true
   | TyGeneric ({ node = "Vec"; _ }, _) -> true
   | TyGeneric ({ node = "HashMap"; _ }, _) -> true
+  | TyGeneric ({ node = "Option"; _ }, [ arg ]) ->
+      (* Option<T> lowers to *T (nullable) when T is non-nullable,
+         or to Option[T] struct (non-nullable) when T is nullable *)
+      not (is_nullable_ty env arg)
   | TyName { node = name; _ } -> SMap.mem name env.enums
   | TyGeneric ({ node = name; _ }, _) -> SMap.mem name env.enums
   | TySelf -> (
@@ -1634,6 +1638,16 @@ and gen_option_pattern_binding env buf indent opt_name (arm : match_arm)
       Printf.bprintf buf "%s%s := %s\n" indent (escape_ident name.node) opt_name
   | _ -> ()
 
+(* Return an env with the option-match binding added so nested matches
+   can look up the unwrapped type *)
+and env_with_option_binding env (arm : match_arm) inner_ty =
+  let scope_env = push_scope env in
+  match arm.arm_pat with
+  | PatTuple (_, _, [ PatBind name ]) ->
+      add_value name.node (Some inner_ty) ~is_mut:false scope_env
+  | PatBind name -> add_value name.node (Some inner_ty) ~is_mut:false scope_env
+  | _ -> scope_env
+
 and gen_match_stmt_branch env buf indent arm default_arm bind_pattern =
   match arm with
   | Some arm ->
@@ -1734,7 +1748,15 @@ and gen_option_match env buf indent ctx scrutinee arms inner_ty =
       Printf.bprintf buf "if %s := " opt_name;
       gen_expr env buf indent CtxExpr scrutinee;
       Printf.bprintf buf "; %s {\n" cond;
-      gen_match_stmt_branch env buf (indent ^ "\t") some_arm default_arm
+      let some_env =
+        match some_arm with
+        | Some arm -> env_with_option_binding env arm inner_ty
+        | None -> (
+            match default_arm with
+            | Some arm -> env_with_option_binding env arm inner_ty
+            | None -> env)
+      in
+      gen_match_stmt_branch some_env buf (indent ^ "\t") some_arm default_arm
         (fun arm ->
           gen_option_pattern_binding env buf (indent ^ "\t") opt_name arm
             inner_ty);
@@ -1754,7 +1776,15 @@ and gen_option_match env buf indent ctx scrutinee arms inner_ty =
       Printf.bprintf buf "%sif %s := " ni opt_name;
       gen_expr env buf ni CtxExpr scrutinee;
       Printf.bprintf buf "; %s {\n" cond;
-      gen_match_return_branch env buf (ni ^ "\t") some_arm default_arm
+      let some_env =
+        match some_arm with
+        | Some arm -> env_with_option_binding env arm inner_ty
+        | None -> (
+            match default_arm with
+            | Some arm -> env_with_option_binding env arm inner_ty
+            | None -> env)
+      in
+      gen_match_return_branch some_env buf (ni ^ "\t") some_arm default_arm
         (fun arm ->
           gen_option_pattern_binding env buf (ni ^ "\t") opt_name arm inner_ty);
       Printf.bprintf buf "%s} else {\n" ni;
@@ -1775,7 +1805,15 @@ and gen_option_match_as_return env buf indent scrutinee arms inner_ty =
   Printf.bprintf buf "%sif %s := " indent opt_name;
   gen_expr env buf indent CtxExpr scrutinee;
   Printf.bprintf buf "; %s {\n" cond;
-  gen_match_return_branch env buf (indent ^ "\t") some_arm default_arm
+  let some_env =
+    match some_arm with
+    | Some arm -> env_with_option_binding env arm inner_ty
+    | None -> (
+        match default_arm with
+        | Some arm -> env_with_option_binding env arm inner_ty
+        | None -> env)
+  in
+  gen_match_return_branch some_env buf (indent ^ "\t") some_arm default_arm
     (fun arm ->
       gen_option_pattern_binding env buf (indent ^ "\t") opt_name arm inner_ty);
   Printf.bprintf buf "%s} else {\n" indent;

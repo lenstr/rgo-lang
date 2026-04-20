@@ -356,6 +356,47 @@ fn main() {
   Alcotest.(check bool)
     "negative float literal is typed" true (contains go "float32(")
 
+(* Regression: Option<Option<i64>> must lower to valid Go, not **int64 *)
+let test_option_nested () =
+  let src =
+    {|
+fn inner_find(x: i64) -> Option<i64> {
+    if x > 0 {
+        return Some(x);
+    }
+    None
+}
+
+fn maybe_find(x: i64) -> Option<Option<i64>> {
+    if x > 0 {
+        let inner = inner_find(x);
+        return Some(inner);
+    }
+    None
+}
+
+fn main() {
+    let outer = maybe_find(42);
+    match outer {
+        Option::Some(inner) => {
+            match inner {
+                Option::Some(v) => println(v),
+                Option::None => println("inner none"),
+            }
+        },
+        Option::None => println("outer none"),
+    }
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"42\n" src in
+  (* Outer option wraps a non-nullable inner (pointer-backed *int64),
+     so outer should use the struct-backed Option[*int64] representation *)
+  Alcotest.(check bool)
+    "uses Option struct for outer" true
+    (contains go "Option[*int64]");
+  Alcotest.(check bool) "no double pointer" true (not (contains go "**int64"))
+
 (* ---------- Result tests ---------- *)
 
 let test_result_basic () =
@@ -1422,6 +1463,8 @@ let () =
             test_option_negative_int_literal;
           Alcotest.test_case "negative float literal option" `Quick
             test_option_negative_float_literal;
+          Alcotest.test_case "nested Option<Option<T>>" `Quick
+            test_option_nested;
         ] );
       ( "result",
         [
