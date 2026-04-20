@@ -22,33 +22,23 @@ fn head_plus_one(v: Vec<i64>) -> Option<i64> {
     Some(n + 1)
 }
 
-fn show_divide() -> Result<i64, str> {
-    let v = divide(10, 2)?;
-    println(v);
-    Ok(v)
+fn demo_result() -> Result<i64, str> {
+    let r = divide(10, 2)?;
+    println(r);
+    let h = half_divide(100, 4)?;
+    println(h);
+    Ok(0)
 }
 
-fn show_half_divide() -> Result<i64, str> {
-    let v = half_divide(100, 4)?;
-    println(v);
-    Ok(v)
-}
-
-fn show_first() -> Option<i64> {
-    let v = first([1, 2, 3])?;
-    println(v);
-    Some(v)
-}
-
-fn show_head_plus_one() -> Option<i64> {
-    let v = head_plus_one([10, 20])?;
-    println(v);
-    Some(v)
+fn demo_option() -> Option<i64> {
+    let f = first([1, 2, 3])?;
+    println(f);
+    let p = head_plus_one([10, 20])?;
+    println(p);
+    Some(p)
 }
 
 fn main() {
-    show_divide();
-    show_half_divide();
-    show_first();
-    show_head_plus_one();
+    demo_result();
+    demo_option();
 }
