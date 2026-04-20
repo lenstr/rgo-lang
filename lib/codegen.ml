@@ -1733,7 +1733,8 @@ and gen_stmt env buf indent (s : Ast.stmt) : cg_env =
       Printf.bprintf buf "\n%s_ = %s" indent esc_name;
       add_value name.node binding_ty ~is_mut env
   | StmtLet { pat = PatWild; init; _ } ->
-      Buffer.add_string buf "_ = ";
+      if init_is_result env init then Buffer.add_string buf "_, _ = "
+      else Buffer.add_string buf "_ = ";
       gen_expr env buf indent CtxExpr init;
       env
   | StmtLet _ -> failwith "codegen: unsupported let pattern"

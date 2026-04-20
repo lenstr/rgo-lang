@@ -1122,6 +1122,28 @@ let test_generic_fn_codegen () =
     "generic fn decl" true
     (contains go "func identity[T any](x T) T")
 
+let test_let_wildcard_result () =
+  let src =
+    {|
+fn fallible(ok: bool) -> Result<i64, str> {
+    if ok {
+        Ok(42)
+    } else {
+        Err("fail")
+    }
+}
+
+fn main() {
+    let _ = fallible(true);
+    println("done");
+}
+    |}
+  in
+  let go = compile_and_check ~expected_output:"done\n" src in
+  Alcotest.(check bool)
+    "wildcard result emits two-value discard" true
+    (contains go "_, _ = fallible")
+
 let () =
   Alcotest.run "codegen"
     [
@@ -1146,7 +1168,11 @@ let () =
             test_option_non_nullable;
           Alcotest.test_case "nullable option" `Quick test_option_nullable;
         ] );
-      ("result", [ Alcotest.test_case "basic result" `Quick test_result_basic ]);
+      ( "result",
+        [
+          Alcotest.test_case "basic result" `Quick test_result_basic;
+          Alcotest.test_case "let _ = result fn" `Quick test_let_wildcard_result;
+        ] );
       ( "question-mark",
         [
           Alcotest.test_case "? on result" `Quick test_question_mark_result;
