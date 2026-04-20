@@ -615,7 +615,7 @@ fn main() {
 
 let test_result_option_example () =
   let src = read_file "../examples/result_option.rg" in
-  let _go = compile_and_check src in
+  let _go = compile_and_check ~expected_output:"5\n12\n1\n11\n" src in
   ()
 
 (* ---------- Struct impl tests (VAL-CODEGEN-010) ---------- *)
@@ -1237,7 +1237,7 @@ let () =
       );
       ( "example-fixtures",
         [
-          Alcotest.test_case "result_option.rg compiles" `Quick
+          Alcotest.test_case "result_option.rg runs" `Quick
             test_result_option_example;
           Alcotest.test_case "impl_methods.rg runs" `Quick
             test_impl_methods_example;
