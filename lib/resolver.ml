@@ -162,12 +162,22 @@ let rec resolve_pat env (p : pat) =
         env field_pats
 
 and resolve_enum_variant_ref env enum_name variant_name =
-  match lookup_type enum_name.node env with
-  | None -> error_at enum_name.span "undefined type '%s'" enum_name.node
-  | Some ti ->
-      if not (List.mem variant_name.node ti.ti_variants) then
+  match enum_name.node with
+  | "Option" ->
+      if not (List.mem variant_name.node [ "Some"; "None" ]) then
         error_at variant_name.span "undefined variant '%s' in '%s'"
           variant_name.node enum_name.node
+  | "Result" ->
+      if not (List.mem variant_name.node [ "Ok"; "Err" ]) then
+        error_at variant_name.span "undefined variant '%s' in '%s'"
+          variant_name.node enum_name.node
+  | _ -> (
+      match lookup_type enum_name.node env with
+      | None -> error_at enum_name.span "undefined type '%s'" enum_name.node
+      | Some ti ->
+          if not (List.mem variant_name.node ti.ti_variants) then
+            error_at variant_name.span "undefined variant '%s' in '%s'"
+              variant_name.node enum_name.node)
 
 and resolve_path_ref env type_name _member_name =
   (* Type::Member can be either an enum variant or an associated function.

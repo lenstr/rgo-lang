@@ -823,6 +823,32 @@ and bind_pattern env scrutinee_ty (p : pat) : env =
   | PatWild -> env
   | PatBind name -> add_value name.node scrutinee_ty ~is_mut:false env
   | PatLit _ -> env
+  | PatTuple (enum_name, variant_name, pats)
+    when enum_name.node = "Result" || enum_name.node = "Option" -> (
+      match (enum_name.node, variant_name.node, scrutinee_ty, pats) with
+      | "Result", "Ok", TResult (ok_ty, _), [ inner_pat ] ->
+          bind_pattern env ok_ty inner_pat
+      | "Result", "Ok", TResult _, [] -> env
+      | "Result", "Err", TResult (_, err_ty), [ inner_pat ] ->
+          bind_pattern env err_ty inner_pat
+      | "Result", "Err", TResult _, [] -> env
+      | "Option", "Some", TOption inner_ty, [ inner_pat ] ->
+          bind_pattern env inner_ty inner_pat
+      | "Option", "Some", TOption _, [] -> env
+      | "Option", "None", TOption _, [] -> env
+      | "Result", ("Ok" | "Err"), TResult _, _ ->
+          error_at variant_name.span "variant '%s::%s' expects at most 1 field"
+            enum_name.node variant_name.node
+      | "Option", "Some", TOption _, _ ->
+          error_at variant_name.span
+            "variant 'Option::Some' expects at most 1 field"
+      | "Option", "None", TOption _, _ ->
+          error_at variant_name.span "variant 'Option::None' expects 0 fields"
+      | "Result", _, _, _ | "Option", _, _, _ ->
+          error_at enum_name.span
+            "pattern '%s::%s' does not match scrutinee type %s" enum_name.node
+            variant_name.node (show_ty scrutinee_ty)
+      | _ -> env)
   | PatTuple (enum_name, variant_name, pats) -> (
       match SMap.find_opt enum_name.node env.enums with
       | Some ei -> (

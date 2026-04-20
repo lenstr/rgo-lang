@@ -23,32 +23,23 @@ fn head_plus_one(v: Vec<i64>) -> Option<i64> {
 }
 
 fn main() {
-    show_divide();
-    show_half_divide();
-    show_first();
-    show_head_plus_one();
-}
+    match divide(10, 2) {
+        Result::Ok(v) => println(v),
+        Result::Err(_) => println(0),
+    };
 
-fn show_divide() -> Result<i64, str> {
-    let v = divide(10, 2)?;
-    println(v);
-    Ok(v)
-}
+    match half_divide(100, 4) {
+        Result::Ok(v) => println(v),
+        Result::Err(_) => println(0),
+    };
 
-fn show_half_divide() -> Result<i64, str> {
-    let v = half_divide(100, 4)?;
-    println(v);
-    Ok(v)
-}
+    match first([1, 2, 3]) {
+        Option::Some(v) => println(v),
+        Option::None => println(0),
+    };
 
-fn show_first() -> Option<i64> {
-    let v = first([1, 2, 3])?;
-    println(v);
-    Some(v)
-}
-
-fn show_head_plus_one() -> Option<i64> {
-    let v = head_plus_one([10, 20])?;
-    println(v);
-    Some(v)
+    match head_plus_one([10, 20]) {
+        Option::Some(v) => println(v),
+        Option::None => println(0),
+    };
 }

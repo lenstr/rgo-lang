@@ -1303,44 +1303,54 @@ and gen_if env buf indent ctx cond then_blk else_blk =
       Printf.bprintf buf "%s}()" indent
 
 and gen_match env buf indent ctx scrutinee arms =
-  let enum_name =
-    match infer_expr_type env scrutinee with
-    | Some (TyName { node = n; _ }) -> Some n
-    | Some (TyGeneric ({ node = n; _ }, _)) -> Some n
-    | _ -> None
-  in
-  match ctx with
-  | CtxStmt ->
-      Buffer.add_string buf "switch __v := ";
-      gen_expr env buf indent CtxExpr scrutinee;
-      Buffer.add_string buf ".(type) {\n";
-      List.iter
-        (fun (arm : match_arm) -> gen_match_arm env buf indent enum_name arm)
-        arms;
-      Printf.bprintf buf "%sdefault:\n" indent;
-      Printf.bprintf buf "%s\tpanic(\"unreachable: non-exhaustive match\")\n"
-        indent;
-      Printf.bprintf buf "%s}" indent
-  | CtxExpr ->
-      let ret_ty =
-        match arms with
-        | arm :: _ -> infer_expr_type env arm.arm_expr
-        | [] -> None
+  match infer_expr_type env scrutinee with
+  | Some (TyGeneric ({ node = "Result"; _ }, [ ok_ty; err_ty ])) ->
+      gen_result_match env buf indent ctx scrutinee arms ok_ty err_ty
+  | Some (TyGeneric ({ node = "Option"; _ }, [ inner_ty ])) ->
+      gen_option_match env buf indent ctx scrutinee arms inner_ty
+  | _ -> (
+      let enum_name =
+        match infer_expr_type env scrutinee with
+        | Some (TyName { node = n; _ }) -> Some n
+        | Some (TyGeneric ({ node = n; _ }, _)) -> Some n
+        | _ -> None
       in
-      let gt = match ret_ty with Some t -> go_type env t | None -> "any" in
-      Printf.bprintf buf "func() %s {\n" gt;
-      let ni = indent ^ "\t" in
-      Printf.bprintf buf "%sswitch __v := " ni;
-      gen_expr env buf ni CtxExpr scrutinee;
-      Buffer.add_string buf ".(type) {\n";
-      List.iter
-        (fun (arm : match_arm) ->
-          gen_match_arm_with_return env buf ni enum_name arm)
-        arms;
-      Printf.bprintf buf "%sdefault:\n" ni;
-      Printf.bprintf buf "%s\tpanic(\"unreachable: non-exhaustive match\")\n" ni;
-      Printf.bprintf buf "%s}\n" ni;
-      Printf.bprintf buf "%s}()" indent
+      match ctx with
+      | CtxStmt ->
+          Buffer.add_string buf "switch __v := ";
+          gen_expr env buf indent CtxExpr scrutinee;
+          Buffer.add_string buf ".(type) {\n";
+          List.iter
+            (fun (arm : match_arm) ->
+              gen_match_arm env buf indent enum_name arm)
+            arms;
+          Printf.bprintf buf "%sdefault:\n" indent;
+          Printf.bprintf buf
+            "%s\tpanic(\"unreachable: non-exhaustive match\")\n" indent;
+          Printf.bprintf buf "%s}" indent
+      | CtxExpr ->
+          let ret_ty =
+            match arms with
+            | arm :: _ -> infer_expr_type env arm.arm_expr
+            | [] -> None
+          in
+          let gt =
+            match ret_ty with Some t -> go_type env t | None -> "any"
+          in
+          Printf.bprintf buf "func() %s {\n" gt;
+          let ni = indent ^ "\t" in
+          Printf.bprintf buf "%sswitch __v := " ni;
+          gen_expr env buf ni CtxExpr scrutinee;
+          Buffer.add_string buf ".(type) {\n";
+          List.iter
+            (fun (arm : match_arm) ->
+              gen_match_arm_with_return env buf ni enum_name arm)
+            arms;
+          Printf.bprintf buf "%sdefault:\n" ni;
+          Printf.bprintf buf
+            "%s\tpanic(\"unreachable: non-exhaustive match\")\n" ni;
+          Printf.bprintf buf "%s}\n" ni;
+          Printf.bprintf buf "%s}()" indent)
 
 and gen_match_arm env buf indent enum_name (arm : match_arm) =
   let ni = indent ^ "\t" in
@@ -1561,21 +1571,216 @@ and gen_final_expr_as_return env buf indent e =
             Buffer.add_char buf '\n')
 
 and gen_match_as_return env buf indent scrutinee arms =
-  let enum_name =
-    match infer_expr_type env scrutinee with
-    | Some (TyName { node = n; _ }) -> Some n
-    | Some (TyGeneric ({ node = n; _ }, _)) -> Some n
-    | _ -> None
-  in
-  Printf.bprintf buf "%sswitch __v := " indent;
-  gen_expr env buf indent CtxExpr scrutinee;
-  Buffer.add_string buf ".(type) {\n";
-  List.iter
+  match infer_expr_type env scrutinee with
+  | Some (TyGeneric ({ node = "Result"; _ }, [ ok_ty; err_ty ])) ->
+      gen_result_match_as_return env buf indent scrutinee arms ok_ty err_ty
+  | Some (TyGeneric ({ node = "Option"; _ }, [ inner_ty ])) ->
+      gen_option_match_as_return env buf indent scrutinee arms inner_ty
+  | _ ->
+      let enum_name =
+        match infer_expr_type env scrutinee with
+        | Some (TyName { node = n; _ }) -> Some n
+        | Some (TyGeneric ({ node = n; _ }, _)) -> Some n
+        | _ -> None
+      in
+      Printf.bprintf buf "%sswitch __v := " indent;
+      gen_expr env buf indent CtxExpr scrutinee;
+      Buffer.add_string buf ".(type) {\n";
+      List.iter
+        (fun (arm : match_arm) ->
+          gen_match_arm_with_return env buf indent enum_name arm)
+        arms;
+      Printf.bprintf buf "%sdefault:\n" indent;
+      Printf.bprintf buf "%s\tpanic(\"unreachable: non-exhaustive match\")\n"
+        indent;
+      Printf.bprintf buf "%s}\n" indent
+
+and find_builtin_variant_arm variant_name arms =
+  List.find_opt
     (fun (arm : match_arm) ->
-      gen_match_arm_with_return env buf indent enum_name arm)
-    arms;
-  Printf.bprintf buf "%sdefault:\n" indent;
-  Printf.bprintf buf "%s\tpanic(\"unreachable: non-exhaustive match\")\n" indent;
+      match arm.arm_pat with
+      | PatTuple (_, variant_name', _) -> variant_name'.node = variant_name
+      | _ -> false)
+    arms
+
+and find_builtin_default_arm arms =
+  List.find_opt
+    (fun (arm : match_arm) ->
+      match arm.arm_pat with PatWild | PatBind _ -> true | _ -> false)
+    arms
+
+and gen_result_pattern_binding buf indent value_name err_name is_ok
+    (arm : match_arm) =
+  match arm.arm_pat with
+  | PatTuple (_, _, [ PatBind name ]) ->
+      let source = if is_ok then value_name else err_name in
+      Printf.bprintf buf "%s%s := %s\n" indent (escape_ident name.node) source
+  | PatBind name ->
+      let source = if is_ok then value_name else err_name in
+      Printf.bprintf buf "%s%s := %s\n" indent (escape_ident name.node) source
+  | _ -> ()
+
+and gen_option_pattern_binding env buf indent opt_name (arm : match_arm)
+    inner_ty =
+  match arm.arm_pat with
+  | PatTuple (_, _, [ PatBind name ]) ->
+      if is_nullable_ty env inner_ty then
+        Printf.bprintf buf "%s%s := %s.value\n" indent (escape_ident name.node)
+          opt_name
+      else
+        Printf.bprintf buf "%s%s := *%s\n" indent (escape_ident name.node)
+          opt_name
+  | PatBind name ->
+      Printf.bprintf buf "%s%s := %s\n" indent (escape_ident name.node) opt_name
+  | _ -> ()
+
+and gen_match_stmt_branch env buf indent arm default_arm bind_pattern =
+  match arm with
+  | Some arm ->
+      bind_pattern arm;
+      gen_arm_body_stmts env buf indent arm.arm_expr
+  | None -> (
+      match default_arm with
+      | Some arm ->
+          bind_pattern arm;
+          gen_arm_body_stmts env buf indent arm.arm_expr
+      | None ->
+          Printf.bprintf buf "%spanic(\"unreachable: non-exhaustive match\")\n"
+            indent)
+
+and gen_match_return_branch env buf indent arm default_arm bind_pattern =
+  match arm with
+  | Some arm ->
+      bind_pattern arm;
+      Printf.bprintf buf "%sreturn " indent;
+      gen_expr env buf indent CtxExpr arm.arm_expr;
+      Buffer.add_char buf '\n'
+  | None -> (
+      match default_arm with
+      | Some arm ->
+          bind_pattern arm;
+          Printf.bprintf buf "%sreturn " indent;
+          gen_expr env buf indent CtxExpr arm.arm_expr;
+          Buffer.add_char buf '\n'
+      | None ->
+          Printf.bprintf buf "%spanic(\"unreachable: non-exhaustive match\")\n"
+            indent)
+
+and gen_result_match env buf indent ctx scrutinee arms _ok_ty _err_ty =
+  let ok_arm = find_builtin_variant_arm "Ok" arms in
+  let err_arm = find_builtin_variant_arm "Err" arms in
+  let default_arm = find_builtin_default_arm arms in
+  let value_name = fresh_tmp env "match_val" in
+  let err_name = fresh_tmp env "match_err" in
+  match ctx with
+  | CtxStmt ->
+      Printf.bprintf buf "if %s, %s := " value_name err_name;
+      gen_expr env buf indent CtxExpr scrutinee;
+      Printf.bprintf buf "; %s == nil {\n" err_name;
+      gen_match_stmt_branch env buf (indent ^ "\t") ok_arm default_arm
+        (gen_result_pattern_binding buf (indent ^ "\t") value_name err_name true);
+      Printf.bprintf buf "%s} else {\n" indent;
+      gen_match_stmt_branch env buf (indent ^ "\t") err_arm default_arm
+        (gen_result_pattern_binding buf (indent ^ "\t") value_name err_name
+           false);
+      Printf.bprintf buf "%s}" indent
+  | CtxExpr ->
+      let ret_ty =
+        match arms with
+        | arm :: _ -> infer_expr_type env arm.arm_expr
+        | [] -> None
+      in
+      let gt = match ret_ty with Some t -> go_type env t | None -> "any" in
+      Printf.bprintf buf "func() %s {\n" gt;
+      let ni = indent ^ "\t" in
+      Printf.bprintf buf "%sif %s, %s := " ni value_name err_name;
+      gen_expr env buf ni CtxExpr scrutinee;
+      Printf.bprintf buf "; %s == nil {\n" err_name;
+      gen_match_return_branch env buf (ni ^ "\t") ok_arm default_arm
+        (gen_result_pattern_binding buf (ni ^ "\t") value_name err_name true);
+      Printf.bprintf buf "%s} else {\n" ni;
+      gen_match_return_branch env buf (ni ^ "\t") err_arm default_arm
+        (gen_result_pattern_binding buf (ni ^ "\t") value_name err_name false);
+      Printf.bprintf buf "%s}\n" ni;
+      Printf.bprintf buf "%s}()" indent
+
+and gen_result_match_as_return env buf indent scrutinee arms _ok_ty _err_ty =
+  let ok_arm = find_builtin_variant_arm "Ok" arms in
+  let err_arm = find_builtin_variant_arm "Err" arms in
+  let default_arm = find_builtin_default_arm arms in
+  let value_name = fresh_tmp env "match_val" in
+  let err_name = fresh_tmp env "match_err" in
+  Printf.bprintf buf "%sif %s, %s := " indent value_name err_name;
+  gen_expr env buf indent CtxExpr scrutinee;
+  Printf.bprintf buf "; %s == nil {\n" err_name;
+  gen_match_return_branch env buf (indent ^ "\t") ok_arm default_arm
+    (gen_result_pattern_binding buf (indent ^ "\t") value_name err_name true);
+  Printf.bprintf buf "%s} else {\n" indent;
+  gen_match_return_branch env buf (indent ^ "\t") err_arm default_arm
+    (gen_result_pattern_binding buf (indent ^ "\t") value_name err_name false);
+  Printf.bprintf buf "%s}\n" indent
+
+and gen_option_match env buf indent ctx scrutinee arms inner_ty =
+  let some_arm = find_builtin_variant_arm "Some" arms in
+  let none_arm = find_builtin_variant_arm "None" arms in
+  let default_arm = find_builtin_default_arm arms in
+  let opt_name = fresh_tmp env "match_opt" in
+  let cond =
+    if is_nullable_ty env inner_ty then opt_name ^ ".some"
+    else opt_name ^ " != nil"
+  in
+  match ctx with
+  | CtxStmt ->
+      Printf.bprintf buf "if %s := " opt_name;
+      gen_expr env buf indent CtxExpr scrutinee;
+      Printf.bprintf buf "; %s {\n" cond;
+      gen_match_stmt_branch env buf (indent ^ "\t") some_arm default_arm
+        (fun arm ->
+          gen_option_pattern_binding env buf (indent ^ "\t") opt_name arm
+            inner_ty);
+      Printf.bprintf buf "%s} else {\n" indent;
+      gen_match_stmt_branch env buf (indent ^ "\t") none_arm default_arm
+        (fun _ -> ());
+      Printf.bprintf buf "%s}" indent
+  | CtxExpr ->
+      let ret_ty =
+        match arms with
+        | arm :: _ -> infer_expr_type env arm.arm_expr
+        | [] -> None
+      in
+      let gt = match ret_ty with Some t -> go_type env t | None -> "any" in
+      Printf.bprintf buf "func() %s {\n" gt;
+      let ni = indent ^ "\t" in
+      Printf.bprintf buf "%sif %s := " ni opt_name;
+      gen_expr env buf ni CtxExpr scrutinee;
+      Printf.bprintf buf "; %s {\n" cond;
+      gen_match_return_branch env buf (ni ^ "\t") some_arm default_arm
+        (fun arm ->
+          gen_option_pattern_binding env buf (ni ^ "\t") opt_name arm inner_ty);
+      Printf.bprintf buf "%s} else {\n" ni;
+      gen_match_return_branch env buf (ni ^ "\t") none_arm default_arm (fun _ ->
+          ());
+      Printf.bprintf buf "%s}\n" ni;
+      Printf.bprintf buf "%s}()" indent
+
+and gen_option_match_as_return env buf indent scrutinee arms inner_ty =
+  let some_arm = find_builtin_variant_arm "Some" arms in
+  let none_arm = find_builtin_variant_arm "None" arms in
+  let default_arm = find_builtin_default_arm arms in
+  let opt_name = fresh_tmp env "match_opt" in
+  let cond =
+    if is_nullable_ty env inner_ty then opt_name ^ ".some"
+    else opt_name ^ " != nil"
+  in
+  Printf.bprintf buf "%sif %s := " indent opt_name;
+  gen_expr env buf indent CtxExpr scrutinee;
+  Printf.bprintf buf "; %s {\n" cond;
+  gen_match_return_branch env buf (indent ^ "\t") some_arm default_arm
+    (fun arm ->
+      gen_option_pattern_binding env buf (indent ^ "\t") opt_name arm inner_ty);
+  Printf.bprintf buf "%s} else {\n" indent;
+  gen_match_return_branch env buf (indent ^ "\t") none_arm default_arm (fun _ ->
+      ());
   Printf.bprintf buf "%s}\n" indent
 
 and gen_block_with_return env buf indent blk =
