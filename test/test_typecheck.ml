@@ -1397,6 +1397,24 @@ fn main() {
 }
 |}
 
+(* Negative: imported type in expression position *)
+let stdlib_type_in_expr =
+  {|
+use net::http;
+fn main() {
+    let x = http::Request;
+}
+|}
+
+(* Negative: imported type as function call *)
+let stdlib_type_called =
+  {|
+use net::http;
+fn main() {
+    let x = http::Request();
+}
+|}
+
 let import_positive_tests =
   [
     ( "use net::http without usage passes typecheck",
@@ -1424,6 +1442,12 @@ let import_negative_tests =
     ( "wrong-case type rejected",
       `Quick,
       fail ~expect:"wrong case" wrong_case_type );
+    ( "stdlib type in expression position rejected",
+      `Quick,
+      fail ~expect:"is a type, not a value expression" stdlib_type_in_expr );
+    ( "stdlib type called as function rejected",
+      `Quick,
+      fail ~expect:"is a type, not a callable" stdlib_type_called );
   ]
 
 let () =

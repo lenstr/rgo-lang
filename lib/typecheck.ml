@@ -596,13 +596,6 @@ and stdlib_fn_type (pkg_alias : string) (member_name : string) : fn_info option
         }
   | _ -> None
 
-and stdlib_type_ty (pkg_alias : string) (type_name : string) : ty option =
-  match (pkg_alias, type_name) with
-  | "http", "Request" -> Some (TImported ("http", "Request"))
-  | "http", "ResponseWriter" -> Some (TImported ("http", "ResponseWriter"))
-  | "http", "ServeMux" -> Some (TImported ("http", "ServeMux"))
-  | _ -> None
-
 and check_stdlib_path _env type_name member =
   let pkg = type_name.node in
   let name = member.node in
@@ -610,12 +603,11 @@ and check_stdlib_path _env type_name member =
   match lookup_stdlib_member pkg name with
   | Some sm -> (
       match sm.sm_kind with
-      | StdlibType -> (
-          match stdlib_type_ty pkg name with
-          | Some ty -> ty
-          | None ->
-              error_at member.span
-                "undefined member '%s' in imported package '%s'" name pkg)
+      | StdlibType ->
+          (* Imported types are not valid in expression/value position;
+             use them in type annotations instead. *)
+          error_at member.span "'%s::%s' is a type, not a value expression" pkg
+            name
       | StdlibFn -> (
           match stdlib_fn_type pkg name with
           | Some fi -> TFn (fi.fi_params, fi.fi_ret)

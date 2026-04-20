@@ -2065,6 +2065,38 @@ fn main() {
 |}
     ()
 
+(* Negative: stdlib types rejected in expression position *)
+let test_stdlib_type_in_expr_rejected () =
+  compile_expect_error ~expect:"is a type, not a value expression"
+    {|
+use net::http;
+
+fn main() {
+    let x = http::Request;
+}
+|}
+    ()
+
+(* Regression: local `http` without import does not miscompile as net/http *)
+let test_local_http_without_import () =
+  let src =
+    {|
+fn http() -> i64 {
+    42
+}
+
+fn main() {
+    let x = http();
+    println("done");
+}
+|}
+  in
+  let go = compile_and_check src in
+  (* Must NOT contain net/http import *)
+  Alcotest.(check bool) "no net/http import" false (contains go "\"net/http\"");
+  (* Must NOT contain http. qualified references *)
+  Alcotest.(check bool) "no http.* qualified calls" false (contains go "http.")
+
 let () =
   Alcotest.run "codegen"
     [
@@ -2267,5 +2299,9 @@ let () =
             test_stdlib_unqualified_rejected;
           Alcotest.test_case "unknown stdlib member rejected" `Quick
             test_stdlib_unknown_member;
+          Alcotest.test_case "stdlib type in expression rejected" `Quick
+            test_stdlib_type_in_expr_rejected;
+          Alcotest.test_case "local http without import" `Quick
+            test_local_http_without_import;
         ] );
     ]

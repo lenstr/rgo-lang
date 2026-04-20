@@ -102,6 +102,8 @@ type cg_env = {
   type_params : string list;
   (* Value bindings: name -> (ast_ty option, is_mut) *)
   values : (Ast.ty option * bool) SMap.t list;
+  (* Import metadata: alias -> (go_import_path, go_package_name) *)
+  imported_packages : (string * string) SMap.t;
   (* Shared mutable state *)
   shared : cg_shared;
 }
@@ -199,14 +201,19 @@ let rec go_type env (t : Ast.ty) : string =
       | Some t -> go_type env t
       | None -> ( match env.self_type_name with Some n -> n | None -> "Self"))
   | TyPath (pkg, member) ->
-      (* Package-qualified stdlib type *)
+      (* Package-qualified stdlib type — resolve Go package name from imports *)
       env.shared.needs_net_http <- true;
+      let go_pkg =
+        match SMap.find_opt pkg.node env.imported_packages with
+        | Some (_, go_pkg_name) -> go_pkg_name
+        | None -> pkg.node
+      in
       let go_type_name =
-        match (pkg.node, member.node) with
-        | "http", "Request" -> "*http.Request"
-        | "http", "ResponseWriter" -> "http.ResponseWriter"
-        | "http", "ServeMux" -> "*http.ServeMux"
-        | _ -> pkg.node ^ "." ^ member.node
+        match member.node with
+        | "Request" -> "*" ^ go_pkg ^ ".Request"
+        | "ResponseWriter" -> go_pkg ^ ".ResponseWriter"
+        | "ServeMux" -> "*" ^ go_pkg ^ ".ServeMux"
+        | _ -> go_pkg ^ "." ^ member.node
       in
       go_type_name
 
@@ -274,7 +281,7 @@ let dummy_loc n =
   }
 
 (* Check if a name is an imported stdlib package alias *)
-let is_imported_package name _env = name = "http"
+let is_imported_package name env = SMap.mem name env.imported_packages
 
 (* snake_case to PascalCase conversion for Go function names *)
 let snake_to_pascal (s : string) : string =
@@ -483,6 +490,25 @@ let collect_env (prog : Ast.program) : cg_env =
       self_ref_traits = [];
     }
   in
+  (* Build imported_packages from program imports.
+     Maps alias -> (go_import_path, go_package_name).
+     e.g. "http" -> ("net/http", "http") *)
+  let imported_pkgs =
+    List.fold_left
+      (fun acc (imp : Ast.import_path) ->
+        let segments =
+          List.map (fun (s : ident located) -> s.node) imp.imp_segments
+        in
+        let alias =
+          match Resolver.alias_for_path segments with
+          | Some a -> a
+          | None -> List.nth segments (List.length segments - 1)
+        in
+        let go_import_path = String.concat "/" segments in
+        let go_pkg_name = List.nth segments (List.length segments - 1) in
+        SMap.add alias (go_import_path, go_pkg_name) acc)
+      SMap.empty prog.imports
+  in
   let env =
     {
       structs = SMap.empty;
@@ -497,6 +523,7 @@ let collect_env (prog : Ast.program) : cg_env =
       impl_type_params = [];
       type_params = [];
       values = [ SMap.empty ];
+      imported_packages = imported_pkgs;
       shared;
     }
   in
@@ -800,8 +827,13 @@ let rec gen_expr env buf indent (ctx : expr_ctx) (e : Ast.expr) : unit =
       if is_imported_package type_name.node env then begin
         (* Imported stdlib member in value position (e.g., function value) *)
         env.shared.needs_net_http <- true;
+        let go_pkg =
+          match SMap.find_opt type_name.node env.imported_packages with
+          | Some (_, go_pkg_name) -> go_pkg_name
+          | None -> type_name.node
+        in
         let go_name = snake_to_pascal member_name.node in
-        Buffer.add_string buf ("http." ^ go_name)
+        Buffer.add_string buf (go_pkg ^ "." ^ go_name)
       end
       else
         (* Unit enum variant: EnumVariant{} *)
@@ -1013,10 +1045,15 @@ and gen_some_for_type env buf indent (inner_ty : Ast.ty) arg =
 
 (* ---------- stdlib codegen helpers ---------- *)
 
-and gen_stdlib_call env buf indent _type_name fn_name args =
+and gen_stdlib_call env buf indent type_name fn_name args =
   env.shared.needs_net_http <- true;
+  let go_pkg =
+    match SMap.find_opt type_name.node env.imported_packages with
+    | Some (_, go_pkg_name) -> go_pkg_name
+    | None -> type_name.node
+  in
   let go_name = snake_to_pascal fn_name.node in
-  Printf.bprintf buf "http.%s(" go_name;
+  Printf.bprintf buf "%s.%s(" go_pkg go_name;
   gen_args env buf indent args;
   Buffer.add_char buf ')'
 
@@ -2848,7 +2885,12 @@ let gen_imports buf env =
   if env.shared.needs_fmt then imports := "\"fmt\"" :: !imports;
   if env.shared.needs_errors then imports := "\"errors\"" :: !imports;
   if env.shared.needs_math then imports := "\"math\"" :: !imports;
-  if env.shared.needs_net_http then imports := "\"net/http\"" :: !imports;
+  (* Add imports from resolved import metadata, only if actually used *)
+  if env.shared.needs_net_http then
+    SMap.iter
+      (fun _alias (go_path, _go_pkg) ->
+        imports := ("\"" ^ go_path ^ "\"") :: !imports)
+      env.imported_packages;
   let sorted = List.sort String.compare !imports in
   match sorted with
   | [] -> ()
