@@ -1,0 +1,20 @@
+{
+  "milestone": "phase-7-full-codegen-fix",
+  "round": 2,
+  "status": "pass",
+  "assertionsSummary": {
+    "total": 3,
+    "passed": 3,
+    "failed": 0,
+    "blocked": 0
+  },
+  "passedAssertions": [
+    "VAL-CODEGEN-015",
+    "VAL-CROSS-007",
+    "VAL-SEM-019"
+  ],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "appliedUpdates": [],
+  "previousRound": ".factory/validation/phase-7-full-codegen-fix/user-testing/synthesis.json"
+}

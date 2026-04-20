@@ -1,0 +1,138 @@
+{
+  "milestone": "phase-7-full-codegen-fix",
+  "groupId": "cli-phase-7-full-codegen-fix",
+  "surface": "rgoc CLI + generated Go artifacts",
+  "testedAt": "2026-04-20T14:12:53+03:00",
+  "isolation": {
+    "repoRoot": "/home/lenstr/workspace/personal/hack/rgo-lang",
+    "missionDir": "/home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7",
+    "services": "none",
+    "maxConcurrentValidators": 1,
+    "validatorInstance": "single CLI validator"
+  },
+  "toolsUsed": [
+    "Read",
+    "Grep",
+    "LS",
+    "Execute",
+    "TodoWrite"
+  ],
+  "assertions": [
+    {
+      "id": "VAL-SEM-019",
+      "title": "Generic associated constructors preserve inferred concrete type arguments",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Inspect test coverage in test/test_typecheck.ml",
+          "expected": "Positive semantic regressions cover inferred generic associated constructors outside impl contexts.",
+          "observed": "Located fixtures at test/test_typecheck.ml:826, :866, :885, and :904 with registrations at :967, :971, :974, and :977."
+        },
+        {
+          "action": "Run `nix develop -c dune exec ./test/test_typecheck.exe -- test --color=never positive 31,33-35`",
+          "expected": "The focused positive regressions for generic constructor inference all pass through the real typecheck CLI surface.",
+          "observed": "Exit code 0. Cases 31, 33, 34, and 35 reported `[OK]` and Alcotest ended with `Test Successful in 0.001s. 4 tests run.`"
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "phase-7-full-codegen-fix/cli-phase-7-full-codegen-fix/val-sem-019-typecheck.log"
+        ],
+        "codeRefs": [
+          "test/test_typecheck.ml:826",
+          "test/test_typecheck.ml:866",
+          "test/test_typecheck.ml:885",
+          "test/test_typecheck.ml:904",
+          "test/test_typecheck.ml:967",
+          "test/test_typecheck.ml:971",
+          "test/test_typecheck.ml:974",
+          "test/test_typecheck.ml:977"
+        ],
+        "commands": [
+          {
+            "command": "nix develop -c dune exec ./test/test_typecheck.exe -- test --color=never positive 31,33-35",
+            "exitCode": 0
+          }
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CODEGEN-015",
+      "title": "Pointer-receiver methods work on non-addressable call sites",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Inspect pointer-receiver regression coverage in test/test_codegen.ml",
+          "expected": "A codegen regression exercises a pointer receiver call on a non-addressable expression and checks runtime behavior.",
+          "observed": "Located `test_pointer_receiver_non_addressable` at test/test_codegen.ml:752 with registration at :1479; the fixture calls `Counter::new(42).get()`, expects output `42\\n`, and asserts the generated Go contains `(self *Counter)`."
+        },
+        {
+          "action": "Run `nix develop -c dune exec ./test/test_codegen.exe -- test --color=never pointer-receiver 0`",
+          "expected": "The focused codegen regression builds and runs successfully through the real generated-Go flow.",
+          "observed": "Exit code 0. `pointer-receiver 0 non-addressable receiver` reported `[OK]` and Alcotest ended with `Test Successful in 0.212s. 1 test run.`"
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "phase-7-full-codegen-fix/cli-phase-7-full-codegen-fix/val-codegen-015-pointer-receiver.log"
+        ],
+        "codeRefs": [
+          "test/test_codegen.ml:752",
+          "test/test_codegen.ml:1479"
+        ],
+        "commands": [
+          {
+            "command": "nix develop -c dune exec ./test/test_codegen.exe -- test --color=never pointer-receiver 0",
+            "exitCode": 0
+          }
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-007",
+      "title": "Go version requirements are surfaced for trait-enabled output",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Inspect Go-version validation coverage in test/test_codegen.ml",
+          "expected": "Coverage includes both adequate-environment and clear failure/simulation paths for unsupported or unparseable Go versions.",
+          "observed": "Located tests at test/test_codegen.ml:1192, :1202, :1213, :1223, and :1230 with registrations at :1524, :1526, :1528, :1530, and :1532."
+        },
+        {
+          "action": "Run `nix develop -c dune exec ./test/test_codegen.exe -- test --color=never go-version 0-4`",
+          "expected": "The validation surface confirms acceptable Go versions and surfaces clear errors for below-minimum or unparseable versions.",
+          "observed": "Exit code 0. Cases 0-4 all reported `[OK]`; the Nix shell reported `go:    go1.26.1`, and Alcotest ended with `Test Successful in 0.004s. 5 tests run.`"
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "phase-7-full-codegen-fix/cli-phase-7-full-codegen-fix/val-cross-007-go-version.log"
+        ],
+        "codeRefs": [
+          "test/test_codegen.ml:1192",
+          "test/test_codegen.ml:1202",
+          "test/test_codegen.ml:1213",
+          "test/test_codegen.ml:1223",
+          "test/test_codegen.ml:1230",
+          "test/test_codegen.ml:1524",
+          "test/test_codegen.ml:1526",
+          "test/test_codegen.ml:1528",
+          "test/test_codegen.ml:1530",
+          "test/test_codegen.ml:1532"
+        ],
+        "commands": [
+          {
+            "command": "nix develop -c dune exec ./test/test_codegen.exe -- test --color=never go-version 0-4",
+            "exitCode": 0
+          }
+        ]
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Retested 3 assigned CLI/generated-Go assertions. VAL-SEM-019, VAL-CODEGEN-015, and VAL-CROSS-007 all passed with focused Nix-based Alcotest runs and fresh terminal log evidence."
+}
