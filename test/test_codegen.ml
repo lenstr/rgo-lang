@@ -1032,6 +1032,16 @@ let test_loops_example () =
   let _go = compile_and_check ~expected_output:"15\n10\n" src in
   ()
 
+(* Regression: generic Self substitution through the full pipeline *)
+let test_generic_self_substitution () =
+  let src = read_file "../examples/generics.rg" in
+  (* The generics example exercises impl<T> Box<T> with Self return type.
+     This verifies the typechecker preserves generic args during Self
+     substitution. We only check compilation (snapshot), not Go execution,
+     because generic codegen doesn't yet emit fully valid Go. *)
+  let go = compile_snapshot src in
+  Alcotest.(check bool) "contains type Box" true (contains go "type Box")
+
 let () =
   Alcotest.run "codegen"
     [
@@ -1151,5 +1161,7 @@ let () =
             test_impl_methods_example;
           Alcotest.test_case "shapes.rg runs" `Quick test_shapes_example;
           Alcotest.test_case "loops.rg runs" `Quick test_loops_example;
+          Alcotest.test_case "generics.rg compiles" `Quick
+            test_generic_self_substitution;
         ] );
     ]

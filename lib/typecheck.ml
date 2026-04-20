@@ -162,6 +162,20 @@ let rec types_compatible expected actual =
     (* TVoid acts as a wildcard for builtin constructors like HashMap::new() *)
     | _, TVoid -> true
     | TVoid, _ -> true
+    (* TParam acts as a wildcard — no full unification, so any concrete type
+       satisfies a generic type parameter and vice versa *)
+    | TParam _, _ -> true
+    | _, TParam _ -> true
+    (* Struct/Enum with matching name: compatible if args are pairwise
+       compatible or one side has no args (bare name in generic context) *)
+    | TStruct (n1, args1), TStruct (n2, args2) when n1 = n2 ->
+        args1 = [] || args2 = []
+        || List.length args1 = List.length args2
+           && List.for_all2 types_compatible args1 args2
+    | TEnum (n1, args1), TEnum (n2, args2) when n1 = n2 ->
+        args1 = [] || args2 = []
+        || List.length args1 = List.length args2
+           && List.for_all2 types_compatible args1 args2
     | _ -> false
 
 let expect_type ~(span : span) ~expected ~actual =
@@ -396,9 +410,14 @@ and check_assoc_fn_call env type_name fn_name arg_types =
   | None -> check_impl_assoc_fn env type_name fn_name arg_types
 
 and concrete_type_for_name env name =
-  if SMap.mem name env.structs then TStruct (name, [])
-  else if SMap.mem name env.enums then TEnum (name, [])
-  else TVoid (* fallback; should not happen for valid programs *)
+  (* If we're inside an impl block whose Self type matches this name,
+     use the full Self type (which preserves generic arguments like Box<T>). *)
+  match env.self_ty with
+  | Some ((TStruct (n, _) | TEnum (n, _)) as st) when n = name -> st
+  | _ ->
+      if SMap.mem name env.structs then TStruct (name, [])
+      else if SMap.mem name env.enums then TEnum (name, [])
+      else TVoid
 
 and check_impl_assoc_fn env type_name fn_name arg_types =
   match SMap.find_opt type_name.node env.impls with
@@ -584,7 +603,15 @@ and check_struct_literal env ty fields =
     | TyGeneric (name, _) -> name
     | _ -> failwith "typecheck: bad struct literal type"
   in
-  let resolved = resolve_ast_ty env (ty : Ast.ty) in
+  let resolved =
+    let r = resolve_ast_ty env (ty : Ast.ty) in
+    (* If the struct literal uses a bare name like `Box { ... }` inside
+       an impl block for `Box<T>`, inherit the generic args from Self. *)
+    match (r, env.self_ty) with
+    | TStruct (n, []), Some (TStruct (sn, (_ :: _ as args))) when n = sn ->
+        TStruct (n, args)
+    | _ -> r
+  in
   (match SMap.find_opt type_name.node env.structs with
   | Some si ->
       List.iter

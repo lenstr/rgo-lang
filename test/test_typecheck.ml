@@ -367,6 +367,45 @@ fn main() {
 }
 |}
 
+(* Regression: generic Self substitution preserves type parameters *)
+let valid_generic_self_substitution =
+  {|
+struct Box<T> {
+    value: T,
+}
+impl<T> Box<T> {
+    pub fn new(v: T) -> Self {
+        Box { value: v }
+    }
+    pub fn get(&self) -> T {
+        self.value
+    }
+}
+fn main() {
+    let b = Box::new(42);
+    let v = b.get();
+}
+|}
+
+(* Regression: generic Self in chained constructor+method call *)
+let valid_generic_self_chained =
+  {|
+struct Wrapper<T> {
+    inner: T,
+}
+impl<T> Wrapper<T> {
+    pub fn wrap(v: T) -> Self {
+        Wrapper { inner: v }
+    }
+    pub fn unwrap(&self) -> T {
+        self.inner
+    }
+}
+fn main() {
+    let x = Wrapper::wrap("hello").unwrap();
+}
+|}
+
 let valid_string_concat =
   {|
 fn main() {
@@ -734,6 +773,8 @@ let positive_tests =
     ( "stored enum assoc fn Self substitution",
       `Quick,
       pass valid_stored_enum_assoc_fn_self );
+    ("generic Self substitution", `Quick, pass valid_generic_self_substitution);
+    ("generic Self chained", `Quick, pass valid_generic_self_chained);
     ("string concat", `Quick, pass valid_string_concat);
     ("empty Vec with annotation", `Quick, pass valid_vec_typed_empty);
     ("valid trait impl", `Quick, pass valid_trait_impl);
