@@ -374,6 +374,86 @@ fn main() {
   let _go = compile_and_check ~expected_output:"done\n" src in
   ()
 
+let test_question_mark_result_nested_in_call () =
+  let src =
+    {|
+fn inner(x: i64) -> Result<i64, str> {
+    if x < 0 {
+        return Err("negative");
+    }
+    Ok(x * 2)
+}
+
+fn add_ten(n: i64) -> i64 {
+    n + 10
+}
+
+fn outer(x: i64) -> Result<i64, str> {
+    let result = add_ten(inner(x)?);
+    Ok(result)
+}
+
+fn main() {
+    let _ = outer(5);
+    println("done");
+}
+|}
+  in
+  let _go = compile_and_check ~expected_output:"done\n" src in
+  ()
+
+let test_question_mark_option_nested_in_call () =
+  let src =
+    {|
+fn find(x: i64) -> Option<i64> {
+    if x > 0 {
+        return Some(x);
+    }
+    None
+}
+
+fn add_ten(n: i64) -> i64 {
+    n + 10
+}
+
+fn use_find(x: i64) -> Option<i64> {
+    let result = add_ten(find(x)?);
+    Some(result)
+}
+
+fn main() {
+    let _ = use_find(5);
+    println("done");
+}
+|}
+  in
+  let _go = compile_and_check ~expected_output:"done\n" src in
+  ()
+
+let test_question_mark_result_in_binary_expr () =
+  let src =
+    {|
+fn get_val(x: i64) -> Result<i64, str> {
+    if x < 0 {
+        return Err("negative");
+    }
+    Ok(x)
+}
+
+fn compute(x: i64) -> Result<i64, str> {
+    let sum = get_val(x)? + 10;
+    Ok(sum)
+}
+
+fn main() {
+    let _ = compute(5);
+    println("done");
+}
+|}
+  in
+  let _go = compile_and_check ~expected_output:"done\n" src in
+  ()
+
 (* ---------- Result signature without Err construction ---------- *)
 
 let test_result_sig_no_err_construction () =
@@ -1266,6 +1346,12 @@ let () =
         [
           Alcotest.test_case "? on result" `Quick test_question_mark_result;
           Alcotest.test_case "? on option" `Quick test_question_mark_option;
+          Alcotest.test_case "? result nested in call" `Quick
+            test_question_mark_result_nested_in_call;
+          Alcotest.test_case "? option nested in call" `Quick
+            test_question_mark_option_nested_in_call;
+          Alcotest.test_case "? result in binary expr" `Quick
+            test_question_mark_result_in_binary_expr;
         ] );
       ( "array",
         [

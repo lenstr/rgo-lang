@@ -1432,9 +1432,17 @@ and gen_arm_body_stmts env buf indent expr =
 and gen_final_expr_as_return env buf indent e =
   match e with
   | ExprReturn _ ->
-      Buffer.add_string buf indent;
-      gen_expr env buf indent CtxStmt e;
-      Buffer.add_char buf '\n'
+      if contains_question e then begin
+        let e' = hoist_question_exprs env buf indent e in
+        Buffer.add_string buf indent;
+        gen_expr env buf indent CtxStmt e';
+        Buffer.add_char buf '\n'
+      end
+      else begin
+        Buffer.add_string buf indent;
+        gen_expr env buf indent CtxStmt e;
+        Buffer.add_char buf '\n'
+      end
   | ExprIf (cond, then_blk, else_blk) -> (
       Buffer.add_string buf indent;
       Buffer.add_string buf "if ";
@@ -1497,15 +1505,28 @@ and gen_final_expr_as_return env buf indent e =
       gen_return_none env buf;
       Buffer.add_char buf '\n'
   | _ -> (
-      match env.ret_ty with
-      | None | Some (TyName { node = "void"; _ }) ->
-          Buffer.add_string buf indent;
-          gen_expr env buf indent CtxStmt e;
-          Buffer.add_char buf '\n'
-      | _ ->
-          Printf.bprintf buf "%sreturn " indent;
-          gen_expr env buf indent CtxExpr e;
-          Buffer.add_char buf '\n')
+      if contains_question e then begin
+        let e' = hoist_question_exprs env buf indent e in
+        match env.ret_ty with
+        | None | Some (TyName { node = "void"; _ }) ->
+            Buffer.add_string buf indent;
+            gen_expr env buf indent CtxStmt e';
+            Buffer.add_char buf '\n'
+        | _ ->
+            Printf.bprintf buf "%sreturn " indent;
+            gen_expr env buf indent CtxExpr e';
+            Buffer.add_char buf '\n'
+      end
+      else
+        match env.ret_ty with
+        | None | Some (TyName { node = "void"; _ }) ->
+            Buffer.add_string buf indent;
+            gen_expr env buf indent CtxStmt e;
+            Buffer.add_char buf '\n'
+        | _ ->
+            Printf.bprintf buf "%sreturn " indent;
+            gen_expr env buf indent CtxExpr e;
+            Buffer.add_char buf '\n')
 
 and gen_match_as_return env buf indent scrutinee arms =
   let enum_name =
@@ -1553,9 +1574,17 @@ and gen_block_stmts env buf indent blk =
   in
   match blk.final_expr with
   | Some e ->
-      Buffer.add_string buf indent;
-      gen_expr inner buf indent CtxStmt e;
-      Buffer.add_char buf '\n'
+      if contains_question e then begin
+        let e' = hoist_question_exprs inner buf indent e in
+        Buffer.add_string buf indent;
+        gen_expr inner buf indent CtxStmt e';
+        Buffer.add_char buf '\n'
+      end
+      else begin
+        Buffer.add_string buf indent;
+        gen_expr inner buf indent CtxStmt e;
+        Buffer.add_char buf '\n'
+      end
   | None -> ()
 
 and gen_block_expr env buf indent ctx blk =
@@ -1568,76 +1597,128 @@ and gen_block_expr env buf indent ctx blk =
       gen_block_with_return env buf (indent ^ "\t") blk;
       Printf.bprintf buf "%s}()" indent
 
-and gen_question env buf indent e =
-  let expr_ty = infer_expr_type env e in
-  match expr_ty with
-  | Some (TyGeneric ({ node = "Result"; _ }, _)) ->
-      (* Result ? -> emit as inline expression that produces the unwrapped value *)
-      (* This is tricky in expression position; we emit as multi-line in gen_stmt *)
-      (* For expression context, use a temp variable approach *)
-      let tmp_val = fresh_tmp env "val" in
-      let tmp_err = fresh_tmp env "err" in
-      Printf.bprintf buf "func() %s {\n"
-        (match expr_ty with
-        | Some (TyGeneric ({ node = "Result"; _ }, [ ok_ty; _ ])) ->
-            go_type env ok_ty
-        | _ -> "any");
-      let ni = indent ^ "\t" in
-      Printf.bprintf buf "%s%s, %s := " ni tmp_val tmp_err;
-      gen_expr env buf ni CtxExpr e;
+(* Check if an expression contains any nested ExprQuestion *)
+and contains_question (e : Ast.expr) : bool =
+  match e with
+  | ExprQuestion _ -> true
+  | ExprLit _ | ExprIdent _ | ExprSelf | ExprPath _ | ExprBreak | ExprContinue
+    ->
+      false
+  | ExprUnary (_, e1) -> contains_question e1
+  | ExprBinary (_, l, r) -> contains_question l || contains_question r
+  | ExprCall (callee, args) ->
+      contains_question callee || List.exists contains_question args
+  | ExprMethodCall (recv, _, args) ->
+      contains_question recv || List.exists contains_question args
+  | ExprFieldAccess (e1, _) -> contains_question e1
+  | ExprIndex (arr, idx) -> contains_question arr || contains_question idx
+  | ExprCast (e1, _) -> contains_question e1
+  | ExprAssign (_, lhs, rhs) -> contains_question lhs || contains_question rhs
+  | ExprReturn (Some e1) -> contains_question e1
+  | ExprReturn None -> false
+  | ExprArray elems -> List.exists contains_question elems
+  | ExprRepeat (elem, cnt) -> contains_question elem || contains_question cnt
+  | ExprStruct (_, fields) ->
+      List.exists
+        (fun (sf : Ast.struct_field_init) -> contains_question sf.sf_expr)
+        fields
+  | ExprStructVariant (_, _, fields) ->
+      List.exists
+        (fun (sf : Ast.struct_field_init) -> contains_question sf.sf_expr)
+        fields
+  | ExprIf _ | ExprMatch _ | ExprBlock _ | ExprLoop _ | ExprWhile _ | ExprFor _
+    ->
+      false
+
+(* Hoist ExprQuestion subexpressions out of an expression tree.
+   Emits temp variable assignments and early-return checks as statements
+   before the containing expression, returns a rewritten expression with
+   ExprIdent temps in place of the ExprQuestion nodes.
+   The caller must ensure the buffer is at the start of a line with correct
+   indent before calling. The hoisted code is emitted as full indented lines. *)
+and hoist_question_exprs env buf indent (e : Ast.expr) : Ast.expr =
+  match e with
+  | ExprQuestion inner ->
+      let tmp_name = fresh_tmp env "qm" in
+      gen_question_let env buf indent tmp_name inner;
       Buffer.add_char buf '\n';
-      Printf.bprintf buf "%sif %s != nil {\n" ni tmp_err;
-      (match env.ret_ty with
-      | Some (TyGeneric ({ node = "Result"; _ }, [ ok_ty; _ ])) ->
-          Printf.bprintf buf "%s\treturn %s, %s\n" ni (go_zero_value env ok_ty)
-            tmp_err
-      | _ -> Printf.bprintf buf "%s\treturn %s\n" ni tmp_err);
-      Printf.bprintf buf "%s}\n" ni;
-      Printf.bprintf buf "%sreturn %s\n" ni tmp_val;
-      Printf.bprintf buf "%s}()" indent
-  | Some (TyGeneric ({ node = "Option"; _ }, [ inner ])) ->
-      if is_nullable_ty env inner then begin
-        env.shared.needs_option_struct <- true;
-        let tmp = fresh_tmp env "opt" in
-        Printf.bprintf buf "func() %s {\n" (go_type env inner);
-        let ni = indent ^ "\t" in
-        Printf.bprintf buf "%s%s := " ni tmp;
-        gen_expr env buf ni CtxExpr e;
-        Buffer.add_char buf '\n';
-        Printf.bprintf buf "%sif !%s.some {\n" ni tmp;
-        (match env.ret_ty with
-        | Some (TyGeneric ({ node = "Option"; _ }, [ ret_inner ])) ->
-            if is_nullable_ty env ret_inner then
-              Printf.bprintf buf "%s\treturn rgo_none[%s]()\n" ni
-                (go_type env ret_inner)
-            else Printf.bprintf buf "%s\treturn nil\n" ni
-        | _ -> Printf.bprintf buf "%s\treturn nil\n" ni);
-        Printf.bprintf buf "%s}\n" ni;
-        Printf.bprintf buf "%sreturn %s.value\n" ni tmp;
-        Printf.bprintf buf "%s}()" indent
-      end
-      else begin
-        let tmp = fresh_tmp env "opt" in
-        Printf.bprintf buf "func() %s {\n" (go_type env inner);
-        let ni = indent ^ "\t" in
-        Printf.bprintf buf "%s%s := " ni tmp;
-        gen_expr env buf ni CtxExpr e;
-        Buffer.add_char buf '\n';
-        Printf.bprintf buf "%sif %s == nil {\n" ni tmp;
-        (match env.ret_ty with
-        | Some (TyGeneric ({ node = "Option"; _ }, [ ret_inner ])) ->
-            if is_nullable_ty env ret_inner then begin
-              env.shared.needs_option_struct <- true;
-              Printf.bprintf buf "%s\treturn rgo_none[%s]()\n" ni
-                (go_type env ret_inner)
-            end
-            else Printf.bprintf buf "%s\treturn nil\n" ni
-        | _ -> Printf.bprintf buf "%s\treturn nil\n" ni);
-        Printf.bprintf buf "%s}\n" ni;
-        Printf.bprintf buf "%sreturn *%s\n" ni tmp;
-        Printf.bprintf buf "%s}()" indent
-      end
-  | _ -> failwith "codegen: ? on non-Result/Option"
+      Printf.bprintf buf "%s_ = %s\n" indent tmp_name;
+      ExprIdent (dummy_loc tmp_name)
+  | ExprLit _ | ExprIdent _ | ExprSelf | ExprPath _ | ExprBreak | ExprContinue
+  | ExprReturn None ->
+      e
+  | ExprUnary (op, e1) ->
+      let e1' = hoist_question_exprs env buf indent e1 in
+      ExprUnary (op, e1')
+  | ExprBinary (op, l, r) ->
+      let l' = hoist_question_exprs env buf indent l in
+      let r' = hoist_question_exprs env buf indent r in
+      ExprBinary (op, l', r')
+  | ExprCall (callee, args) ->
+      let callee' = hoist_question_exprs env buf indent callee in
+      let args' = List.map (hoist_question_exprs env buf indent) args in
+      ExprCall (callee', args')
+  | ExprMethodCall (recv, meth, args) ->
+      let recv' = hoist_question_exprs env buf indent recv in
+      let args' = List.map (hoist_question_exprs env buf indent) args in
+      ExprMethodCall (recv', meth, args')
+  | ExprFieldAccess (e1, f) ->
+      let e1' = hoist_question_exprs env buf indent e1 in
+      ExprFieldAccess (e1', f)
+  | ExprIndex (arr, idx) ->
+      let arr' = hoist_question_exprs env buf indent arr in
+      let idx' = hoist_question_exprs env buf indent idx in
+      ExprIndex (arr', idx')
+  | ExprCast (e1, ty) ->
+      let e1' = hoist_question_exprs env buf indent e1 in
+      ExprCast (e1', ty)
+  | ExprAssign (op, lhs, rhs) ->
+      let lhs' = hoist_question_exprs env buf indent lhs in
+      let rhs' = hoist_question_exprs env buf indent rhs in
+      ExprAssign (op, lhs', rhs')
+  | ExprReturn (Some e1) ->
+      let e1' = hoist_question_exprs env buf indent e1 in
+      ExprReturn (Some e1')
+  | ExprArray elems ->
+      let elems' = List.map (hoist_question_exprs env buf indent) elems in
+      ExprArray elems'
+  | ExprRepeat (elem, cnt) ->
+      let elem' = hoist_question_exprs env buf indent elem in
+      let cnt' = hoist_question_exprs env buf indent cnt in
+      ExprRepeat (elem', cnt')
+  | ExprStruct (ty, fields) ->
+      let fields' =
+        List.map
+          (fun (sf : Ast.struct_field_init) ->
+            { sf with sf_expr = hoist_question_exprs env buf indent sf.sf_expr })
+          fields
+      in
+      ExprStruct (ty, fields')
+  | ExprStructVariant (tn, vn, fields) ->
+      let fields' =
+        List.map
+          (fun (sf : Ast.struct_field_init) ->
+            { sf with sf_expr = hoist_question_exprs env buf indent sf.sf_expr })
+          fields
+      in
+      ExprStructVariant (tn, vn, fields')
+  | ExprIf _ | ExprMatch _ | ExprBlock _ | ExprLoop _ | ExprWhile _ | ExprFor _
+    ->
+      (* Don't descend into blocks/control flow - ? inside those is handled
+         at their own statement boundaries *)
+      e
+
+and gen_question env buf indent e =
+  (* This should only be reached for top-level ? in expression context.
+     For nested ?, the hoist_question_exprs pass should have already
+     extracted it. Use the same pattern as gen_question_stmt but inline. *)
+  let tmp_name = fresh_tmp env "qm" in
+  gen_question_let env buf indent tmp_name e;
+  Buffer.add_char buf '\n';
+  Printf.bprintf buf "%s_ = %s\n" indent tmp_name;
+  (* Now emit just the temp name as the expression value *)
+  Buffer.add_string buf indent;
+  Buffer.add_string buf tmp_name
 
 and gen_array_literal env buf indent elems =
   match elems with
@@ -1726,6 +1807,12 @@ and gen_stmt env buf indent (s : Ast.stmt) : cg_env =
           gen_result_let_binding env buf indent esc_name init
       | _, ExprQuestion inner_e ->
           gen_question_let env buf indent esc_name inner_e
+      | _ when contains_question init ->
+          let init' = hoist_question_exprs env buf indent init in
+          Buffer.add_string buf indent;
+          Buffer.add_string buf esc_name;
+          Buffer.add_string buf " := ";
+          gen_let_init env buf indent ty init'
       | _ ->
           Buffer.add_string buf esc_name;
           Buffer.add_string buf " := ";
@@ -1742,10 +1829,20 @@ and gen_stmt env buf indent (s : Ast.stmt) : cg_env =
       gen_question_stmt env buf indent e;
       env
   | StmtExpr (ExprReturn _ as ret) ->
-      gen_expr env buf indent CtxStmt ret;
+      if contains_question ret then begin
+        let ret' = hoist_question_exprs env buf indent ret in
+        Buffer.add_string buf indent;
+        gen_expr env buf indent CtxStmt ret'
+      end
+      else gen_expr env buf indent CtxStmt ret;
       env
   | StmtExpr e ->
-      gen_expr env buf indent CtxStmt e;
+      if contains_question e then begin
+        let e' = hoist_question_exprs env buf indent e in
+        Buffer.add_string buf indent;
+        gen_expr env buf indent CtxStmt e'
+      end
+      else gen_expr env buf indent CtxStmt e;
       env
 
 and init_is_enum env (init : Ast.expr) : bool =
