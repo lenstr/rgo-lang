@@ -1,0 +1,15 @@
+{
+  "featureId": "misc-fix-generic-type-parameter-soundness-scope",
+  "reviewedAt": "2026-04-20T12:43:16Z",
+  "commitId": "91be93d",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The implementation tightens generic compatibility at the right call sites without regressing the earlier generic constructor and generic `Self` fixes. `types_compatible` no longer treats distinct in-scope caller type parameters as universal wildcards, `expect_type` and `check_question` now require rigid caller-side generic equality, and `check_fn_args` limits wildcard behavior to the callee signature's own type parameters. The new negative regressions cover both requested unsound programs, while the existing positive generic constructor and generic `Self` tests remain in the suite and were preserved by the committed change.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed the feature metadata, worker handoff, transcript skeleton, compiler-worker skill, and commit `91be93d`. The change set in `lib/typecheck.ml` closes the reported soundness hole by making caller-side generic parameters rigid while still allowing callee generic instantiation, and `test/test_typecheck.ml` adds the two requested negative regressions without disturbing the pre-existing positive generic coverage. I found no blocking correctness, regression, or scope issues within the reviewed feature."
+}
