@@ -1306,6 +1306,12 @@ and gen_if env buf indent ctx cond then_blk else_blk =
       | None -> Buffer.add_char buf '\n');
       Printf.bprintf buf "%s}()" indent
 
+and has_wildcard_or_bind_arm (arms : match_arm list) : bool =
+  List.exists
+    (fun (arm : match_arm) ->
+      match arm.arm_pat with PatWild | PatBind _ -> true | _ -> false)
+    arms
+
 and gen_match env buf indent ctx scrutinee arms =
   match infer_expr_type env scrutinee with
   | Some (TyGeneric ({ node = "Result"; _ }, [ ok_ty; err_ty ])) ->
@@ -1328,9 +1334,11 @@ and gen_match env buf indent ctx scrutinee arms =
             (fun (arm : match_arm) ->
               gen_match_arm env buf indent enum_name arm)
             arms;
-          Printf.bprintf buf "%sdefault:\n" indent;
-          Printf.bprintf buf
-            "%s\tpanic(\"unreachable: non-exhaustive match\")\n" indent;
+          if not (has_wildcard_or_bind_arm arms) then begin
+            Printf.bprintf buf "%sdefault:\n" indent;
+            Printf.bprintf buf
+              "%s\tpanic(\"unreachable: non-exhaustive match\")\n" indent
+          end;
           Printf.bprintf buf "%s}" indent
       | CtxExpr ->
           let ret_ty =
@@ -1350,9 +1358,11 @@ and gen_match env buf indent ctx scrutinee arms =
             (fun (arm : match_arm) ->
               gen_match_arm_with_return env buf ni enum_name arm)
             arms;
-          Printf.bprintf buf "%sdefault:\n" ni;
-          Printf.bprintf buf
-            "%s\tpanic(\"unreachable: non-exhaustive match\")\n" ni;
+          if not (has_wildcard_or_bind_arm arms) then begin
+            Printf.bprintf buf "%sdefault:\n" ni;
+            Printf.bprintf buf
+              "%s\tpanic(\"unreachable: non-exhaustive match\")\n" ni
+          end;
           Printf.bprintf buf "%s}\n" ni;
           Printf.bprintf buf "%s}()" indent)
 
@@ -1366,6 +1376,7 @@ and gen_match_arm env buf indent enum_name (arm : match_arm) =
   | PatBind name ->
       Printf.bprintf buf "%sdefault:\n" indent;
       Printf.bprintf buf "%s%s := __v\n" ni (escape_ident name.node);
+      Printf.bprintf buf "%s_ = %s\n" ni (escape_ident name.node);
       gen_arm_body_stmts env buf ni arm.arm_expr
   | PatLit l ->
       Printf.bprintf buf "%scase " indent;
@@ -1403,6 +1414,7 @@ and gen_match_arm_with_return env buf indent enum_name (arm : match_arm) =
   | PatBind name ->
       Printf.bprintf buf "%sdefault:\n" indent;
       Printf.bprintf buf "%s%s := __v\n" ni (escape_ident name.node);
+      Printf.bprintf buf "%s_ = %s\n" ni (escape_ident name.node);
       Printf.bprintf buf "%sreturn " ni;
       gen_expr env buf ni CtxExpr arm.arm_expr;
       Buffer.add_char buf '\n'
@@ -1594,9 +1606,11 @@ and gen_match_as_return env buf indent scrutinee arms =
         (fun (arm : match_arm) ->
           gen_match_arm_with_return env buf indent enum_name arm)
         arms;
-      Printf.bprintf buf "%sdefault:\n" indent;
-      Printf.bprintf buf "%s\tpanic(\"unreachable: non-exhaustive match\")\n"
-        indent;
+      if not (has_wildcard_or_bind_arm arms) then begin
+        Printf.bprintf buf "%sdefault:\n" indent;
+        Printf.bprintf buf "%s\tpanic(\"unreachable: non-exhaustive match\")\n"
+          indent
+      end;
       Printf.bprintf buf "%s}\n" indent
 
 and find_builtin_variant_arm variant_name arms =

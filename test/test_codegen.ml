@@ -254,6 +254,85 @@ fn main() {
   let _go = compile_and_check ~expected_output:"g\n" src in
   ()
 
+let test_match_wildcard_arm () =
+  let src =
+    {|
+enum Shape {
+    Circle,
+    Square,
+    Triangle,
+}
+
+fn describe(s: Shape) -> str {
+    match s {
+        Shape::Circle => "circle",
+        _ => "other",
+    }
+}
+
+fn main() {
+    println(describe(Shape::Circle));
+    println(describe(Shape::Square));
+    println(describe(Shape::Triangle));
+}
+|}
+  in
+  let _go = compile_and_check ~expected_output:"circle\nother\nother\n" src in
+  ()
+
+let test_match_wildcard_arm_expression () =
+  let src =
+    {|
+enum Coin {
+    Penny,
+    Nickel,
+    Dime,
+    Quarter,
+}
+
+fn value(c: Coin) -> i64 {
+    match c {
+        Coin::Quarter => 25,
+        Coin::Dime => 10,
+        _ => 1,
+    }
+}
+
+fn main() {
+    println(value(Coin::Quarter));
+    println(value(Coin::Dime));
+    println(value(Coin::Penny));
+}
+|}
+  in
+  let _go = compile_and_check ~expected_output:"25\n10\n1\n" src in
+  ()
+
+let test_match_bind_arm () =
+  let src =
+    {|
+enum Animal {
+    Cat,
+    Dog,
+    Bird,
+}
+
+fn greet(a: Animal) -> str {
+    match a {
+        Animal::Cat => "meow",
+        other => "unknown",
+    }
+}
+
+fn main() {
+    println(greet(Animal::Cat));
+    println(greet(Animal::Dog));
+}
+|}
+  in
+  let _go = compile_and_check ~expected_output:"meow\nunknown\n" src in
+  ()
+
 (* ---------- Option tests ---------- *)
 
 let test_option_non_nullable () =
@@ -1452,6 +1531,10 @@ let () =
         [
           Alcotest.test_case "match expression" `Quick test_match_expression;
           Alcotest.test_case "match statement" `Quick test_match_statement;
+          Alcotest.test_case "wildcard arm stmt" `Quick test_match_wildcard_arm;
+          Alcotest.test_case "wildcard arm expr" `Quick
+            test_match_wildcard_arm_expression;
+          Alcotest.test_case "bind arm" `Quick test_match_bind_arm;
         ] );
       ( "option",
         [
