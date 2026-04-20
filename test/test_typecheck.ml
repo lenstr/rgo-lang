@@ -421,6 +421,42 @@ fn main() {
 }
 |}
 
+(* Regression: generic enum struct variant literal preserves type args in impl *)
+let valid_generic_enum_struct_variant =
+  {|
+enum Container<T> {
+    Empty,
+    Item { value: T },
+}
+impl<T> Container<T> {
+    pub fn make(v: T) -> Self {
+        Container::Item { value: v }
+    }
+}
+fn main() {
+    let c = Container::make(42);
+}
+|}
+
+(* Regression: generic enum struct variant literal in array element position *)
+let valid_generic_enum_struct_variant_in_array =
+  {|
+enum Wrapper<T> {
+    None,
+    Val { inner: T },
+}
+impl<T> Wrapper<T> {
+    pub fn wrap(v: T) -> Self {
+        Wrapper::Val { inner: v }
+    }
+}
+fn main() {
+    let a = Wrapper::wrap(1);
+    let b = Wrapper::wrap(2);
+    let items = [a, b];
+}
+|}
+
 (* ======== Negative fixtures ======== *)
 
 (* VAL-SEM-006: Mismatched call arguments are rejected *)
@@ -843,6 +879,12 @@ let positive_tests =
     ("generic Self chained", `Quick, pass valid_generic_self_chained);
     ("string concat", `Quick, pass valid_string_concat);
     ("empty Vec with annotation", `Quick, pass valid_vec_typed_empty);
+    ( "generic enum struct variant in impl",
+      `Quick,
+      pass valid_generic_enum_struct_variant );
+    ( "generic enum struct variant in array",
+      `Quick,
+      pass valid_generic_enum_struct_variant_in_array );
     ("valid trait impl", `Quick, pass valid_trait_impl);
     ("valid trait recv value", `Quick, pass valid_trait_recv_value);
     ("valid trait recv &mut self", `Quick, pass valid_trait_recv_mutref);

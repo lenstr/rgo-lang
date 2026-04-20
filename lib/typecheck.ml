@@ -672,7 +672,7 @@ and check_struct_variant_literal env type_name variant_name fields =
   match SMap.find_opt type_name.node env.enums with
   | Some ei -> (
       match List.assoc_opt variant_name.node ei.ei_variants with
-      | Some (VStruct expected_fields) ->
+      | Some (VStruct expected_fields) -> (
           List.iter
             (fun (sf : struct_field_init) ->
               match
@@ -687,7 +687,14 @@ and check_struct_variant_literal env type_name variant_name fields =
                   error_at sf.sf_name.span "no field '%s' in variant '%s::%s'"
                     sf.sf_name.node type_name.node variant_name.node)
             fields;
-          TEnum (type_name.node, [])
+          (* If the struct variant literal uses a bare enum name inside
+             an impl block for a generic enum like Box<T>, inherit the
+             type arguments from Self so the result is Box<T> not Box. *)
+          let base = TEnum (type_name.node, []) in
+          match (base, env.self_ty) with
+          | TEnum (n, []), Some (TEnum (sn, (_ :: _ as args))) when n = sn ->
+              TEnum (n, args)
+          | _ -> base)
       | Some VUnit ->
           error_at variant_name.span
             "unit variant '%s::%s' does not have named fields" type_name.node
