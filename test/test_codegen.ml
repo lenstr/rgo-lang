@@ -472,6 +472,34 @@ fn main() {
   let _go = compile_and_check ~expected_output:"done\n" src in
   ()
 
+let test_question_mark_wildcard_let_nested () =
+  let src =
+    {|
+fn inner(x: i64) -> Result<i64, str> {
+    if x < 0 {
+        return Err("negative");
+    }
+    Ok(x * 2)
+}
+
+fn add_ten(n: i64) -> i64 {
+    n + 10
+}
+
+fn outer(x: i64) -> Result<i64, str> {
+    let _ = add_ten(inner(x)?);
+    Ok(x)
+}
+
+fn main() {
+    let _ = outer(5);
+    println("done");
+}
+|}
+  in
+  let _go = compile_and_check ~expected_output:"done\n" src in
+  ()
+
 (* ---------- Result signature without Err construction ---------- *)
 
 let test_result_sig_no_err_construction () =
@@ -1371,6 +1399,8 @@ let () =
             test_question_mark_option_nested_in_call;
           Alcotest.test_case "? result in binary expr" `Quick
             test_question_mark_result_in_binary_expr;
+          Alcotest.test_case "? wildcard let nested" `Quick
+            test_question_mark_wildcard_let_nested;
         ] );
       ( "array",
         [

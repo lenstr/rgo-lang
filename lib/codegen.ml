@@ -1840,6 +1840,16 @@ and gen_stmt env buf indent (s : Ast.stmt) : cg_env =
           gen_let_init env buf indent ty init);
       Printf.bprintf buf "\n%s_ = %s" indent esc_name;
       add_value name.node binding_ty ~is_mut env
+  | StmtLet { pat = PatWild; init = ExprQuestion inner_e; _ } ->
+      gen_question_stmt env buf indent inner_e;
+      env
+  | StmtLet { pat = PatWild; init; _ } when contains_question init ->
+      let init' = hoist_question_exprs env buf indent init in
+      Buffer.add_string buf indent;
+      if init_is_result env init then Buffer.add_string buf "_, _ = "
+      else Buffer.add_string buf "_ = ";
+      gen_expr env buf indent CtxExpr init';
+      env
   | StmtLet { pat = PatWild; init; _ } ->
       if init_is_result env init then Buffer.add_string buf "_, _ = "
       else Buffer.add_string buf "_ = ";
