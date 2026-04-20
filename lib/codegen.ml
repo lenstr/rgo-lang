@@ -209,8 +209,9 @@ let rec go_zero_value env (t : Ast.ty) : string =
       else "nil"
   | TyGeneric ({ node = "Vec"; _ }, _) -> "nil"
   | TyGeneric ({ node = "HashMap"; _ }, _) -> "nil"
-  | TyGeneric ({ node = name; _ }, _) ->
-      if SMap.mem name env.enums then "nil" else name ^ "{}"
+  | TyGeneric ({ node = name; _ }, args) ->
+      if SMap.mem name env.enums then "nil"
+      else name ^ "[" ^ String.concat ", " (List.map (go_type env) args) ^ "]{}"
   | TyRef _ -> "nil"
   | TyTuple _ -> "nil"
   | TySelf -> (

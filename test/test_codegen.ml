@@ -1178,6 +1178,37 @@ let test_generic_fn_codegen () =
     "generic fn decl" true
     (contains go "func identity[T any](x T) T")
 
+(* Regression: generic nominal type zero values on error paths *)
+let test_generic_zero_value_result_error_path () =
+  let src =
+    {|
+    struct Pair<A, B> {
+      pub first: A,
+      pub second: B,
+    }
+
+    impl<A, B> Pair<A, B> {
+      pub fn try_new(a: A, b: B, ok: bool) -> Result<Self, str> {
+        if !ok {
+          return Err("nope");
+        }
+        Ok(Pair { first: a, second: b })
+      }
+    }
+
+    fn main() {
+      let _ = Pair::try_new(1, "hello", true);
+      println("ok");
+    }
+    |}
+  in
+  let go = compile_and_check ~expected_output:"ok\n" src in
+  (* Verify the zero value uses the full generic type, not bare Pair{} *)
+  Alcotest.(check bool)
+    "generic zero value has type args" true
+    (contains go "Pair[A, B]{}");
+  Alcotest.(check bool) "no bare Pair{}" false (contains go "Pair{}")
+
 let test_let_wildcard_result () =
   let src =
     {|
@@ -1343,5 +1374,7 @@ let () =
           Alcotest.test_case "multi-param generic struct" `Quick
             test_generic_struct_codegen;
           Alcotest.test_case "generic free fn" `Quick test_generic_fn_codegen;
+          Alcotest.test_case "generic zero value on error path" `Quick
+            test_generic_zero_value_result_error_path;
         ] );
     ]
