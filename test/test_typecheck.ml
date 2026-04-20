@@ -1077,6 +1077,62 @@ trait Broken {
 fn main() {}
 |}
 
+(* --- Regression: outer generic bounds from impl are visible --- *)
+let valid_outer_bound_impl_method =
+  {|
+trait Show {
+  fn show(&self) -> str;
+}
+
+struct Printer<T> { val: T }
+
+impl<T: Show> Printer<T> {
+  fn print_val(&self) -> str {
+    self.val.show()
+  }
+}
+
+fn main() {}
+|}
+
+(* --- Regression: outer generic bounds from trait impl are visible --- *)
+let valid_outer_bound_trait_impl_method =
+  {|
+trait Show {
+  fn show(&self) -> str;
+}
+
+trait Wrapper {
+  fn describe(&self) -> str;
+}
+
+struct MyBox<T> { val: T }
+
+impl<T: Show> Wrapper for MyBox<T> {
+  fn describe(&self) -> str {
+    self.val.show()
+  }
+}
+
+fn main() {}
+|}
+
+(* --- Regression: outer generic bounds from trait decl are visible in default body --- *)
+let valid_outer_bound_trait_default_body =
+  {|
+trait Show {
+  fn show(&self) -> str;
+}
+
+trait Formatter<T: Show> {
+  fn format(&self, item: T) -> str {
+    item.show()
+  }
+}
+
+fn main() {}
+|}
+
 (* ======== Test registration ======== *)
 
 let positive_tests =
@@ -1136,6 +1192,13 @@ let positive_tests =
       `Quick,
       pass valid_generic_constructor_typed_let );
     ("bounded generic method call", `Quick, pass valid_bounded_generic_method);
+    ("outer bound impl method", `Quick, pass valid_outer_bound_impl_method);
+    ( "outer bound trait impl method",
+      `Quick,
+      pass valid_outer_bound_trait_impl_method );
+    ( "outer bound trait default body",
+      `Quick,
+      pass valid_outer_bound_trait_default_body );
   ]
 
 let negative_tests =

@@ -1451,6 +1451,17 @@ and collect_impl env impl_generics i_ty impl_items =
   in
   { env with impls = SMap.add type_name updated env.impls }
 
+let bounds_of_generics base (generics : type_param list) =
+  List.fold_left
+    (fun acc (tp : type_param) ->
+      match tp.tp_bound with
+      | None | Some [] -> acc
+      | Some bs ->
+          SMap.add tp.tp_name.node
+            (List.map (fun (b : ident located) -> b.node) bs)
+            acc)
+    base generics
+
 let check_fn_decl env (fd : fn_decl) =
   let generics =
     List.map (fun (tp : type_param) -> tp.tp_name.node) fd.fn_generics
@@ -1504,7 +1515,14 @@ let check_item env (item : item) =
       let generics =
         List.map (fun (tp : type_param) -> tp.tp_name.node) i_generics
       in
-      let impl_env = { env with type_params = generics @ env.type_params } in
+      let outer_bounds = bounds_of_generics env.param_bounds i_generics in
+      let impl_env =
+        {
+          env with
+          type_params = generics @ env.type_params;
+          param_bounds = outer_bounds;
+        }
+      in
       let self_ty = resolve_ast_ty impl_env i_ty in
       let impl_env = { impl_env with self_ty = Some self_ty } in
       List.iter
@@ -1524,7 +1542,14 @@ let check_item env (item : item) =
       let generics =
         List.map (fun (tp : type_param) -> tp.tp_name.node) ti_generics
       in
-      let impl_env = { env with type_params = generics @ env.type_params } in
+      let outer_bounds = bounds_of_generics env.param_bounds ti_generics in
+      let impl_env =
+        {
+          env with
+          type_params = generics @ env.type_params;
+          param_bounds = outer_bounds;
+        }
+      in
       let self_ty = resolve_ast_ty impl_env ti_ty in
       let impl_env = { impl_env with self_ty = Some self_ty } in
       (* Type-check method bodies *)
@@ -1627,10 +1652,12 @@ let check_item env (item : item) =
       let generics =
         List.map (fun (tp : type_param) -> tp.tp_name.node) t_generics
       in
+      let outer_bounds = bounds_of_generics env.param_bounds t_generics in
       let trait_env =
         {
           env with
           type_params = generics @ env.type_params;
+          param_bounds = outer_bounds;
           self_ty = Some TSelf;
         }
       in
