@@ -1,0 +1,34 @@
+{
+  "featureId": "final-readme-refresh",
+  "reviewedAt": "2026-04-20T18:55:20Z",
+  "commitId": "7e2fa2dcb3a5d30bf62d0b2ef783a000eefaa1ea",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The change is nicely scoped to README.md and most of the refreshed overview matches the repository's final compiler state, but the new validation section does not actually document the requested final validation/acceptance workflow and it also introduces one concrete technical inaccuracy about the parser output.",
+    "issues": [
+      {
+        "file": "README.md",
+        "line": 190,
+        "severity": "blocking",
+        "description": "The feature description explicitly required the final validation/acceptance workflow, but this section documents the internal compiler phases instead of the repository's actual validation flow. It omits the flake-backed validation commands from `.factory/services.yaml` (`dune build`, `dune runtest`, `dune build @fmt`, `rgoc --version`) and the downstream acceptance checks exercised by the codegen suite/validation contract (`gofmt`, `go build`, `go vet`, `go run`, including the final MVP acceptance program), so the README still does not cover that required workflow."
+      },
+      {
+        "file": "README.md",
+        "line": 195,
+        "severity": "non_blocking",
+        "description": "The parsing bullet says parsing 'produce[s] a typed AST', but the compiler architecture separates parsing from typechecking: parsing builds the AST, and typed information is added later during semantic/typechecking phases. This makes the workflow description factually inaccurate."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "This docs-only feature was assigned the `compiler-worker` skill even though that skill is written for code changes and requires tests-first implementation; the mismatch already forced an explicit handoff deviation for this README task.",
+      "evidence": "`/home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/features.json:2286-2288` assigns `final-readme-refresh` to `compiler-worker`; `/home/lenstr/workspace/personal/hack/rgo-lang/.factory/skills/compiler-worker/SKILL.md:22` requires 'Write or extend tests first'; `/home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/handoffs/2026-04-20T18-22-41-727Z__final-readme-refresh__0c824018-f0ce-4f4f-9ebf-e42b4d8c6bbe.json:45-49` records `followedProcedure: true` while also noting the worker 'Skipped test-first since this is a documentation-only feature'."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Review failed: commit `7e2fa2d` refreshes the README cleanly, but it does not actually document the final validation/acceptance workflow requested by the feature and it inaccurately states that parsing produces a typed AST."
+}
