@@ -21,6 +21,7 @@ type ty =
   | TVar of tvar
   | TParam of string
   | TSelf
+  | TImported of string * string
 
 val pp_ty : Format.formatter -> ty -> unit
 val show_ty : ty -> string

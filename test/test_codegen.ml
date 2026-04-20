@@ -1931,6 +1931,140 @@ fn main() {
     src
   |> ignore
 
+(* ======== stdlib namespace and naming bridge tests ======== *)
+
+(* Helper: compile rgo source and expect a compilation error containing a substring *)
+let compile_expect_error ~expect source () =
+  match Rgo.Driver.compile_string ~filename:"test.rg" source with
+  | Ok go_src ->
+      Alcotest.fail
+        ("expected compilation error, but got success.\nGenerated Go:\n"
+       ^ go_src)
+  | Error _ ->
+      let msg =
+        match Rgo.Driver.compile_string ~filename:"test.rg" source with
+        | Error (Rgo.Driver.Resolve_error { msg; _ }) -> msg
+        | Error (Rgo.Driver.Typecheck_error { msg; _ }) -> msg
+        | Error (Rgo.Driver.Parse_error { msg; _ }) -> msg
+        | Error (Rgo.Driver.Lex_error { msg; _ }) -> msg
+        | Error (Rgo.Driver.Exhaust_error { msg; _ }) -> msg
+        | Error (Rgo.Driver.Codegen_error msg) -> msg
+        | Ok _ -> "unreachable"
+      in
+      if not (contains msg expect) then
+        Alcotest.failf "error %S does not contain expected %S" msg expect
+
+(* Positive: use net::http with both function calls and type annotations *)
+let test_stdlib_namespace_positive () =
+  let src =
+    {|
+use net::http;
+
+fn handle_request(w: http::ResponseWriter, r: http::Request) {
+    println("handling request");
+}
+
+fn main() {
+    let mux = http::new_serve_mux();
+    http::listen_and_serve(":8080", mux);
+    println("done");
+}
+|}
+  in
+  let go = compile_and_check src in
+  (* Check generated Go contains proper imports and symbols *)
+  Alcotest.(check bool) "has net/http import" true (contains go "\"net/http\"");
+  Alcotest.(check bool)
+    "has http.NewServeMux" true
+    (contains go "http.NewServeMux()");
+  Alcotest.(check bool)
+    "has http.ListenAndServe" true
+    (contains go "http.ListenAndServe");
+  Alcotest.(check bool)
+    "has http.ResponseWriter" true
+    (contains go "http.ResponseWriter");
+  Alcotest.(check bool) "has *http.Request" true (contains go "*http.Request")
+
+(* Positive: stdlib types in both type and value positions in same program *)
+let test_stdlib_type_and_value_positions () =
+  let src =
+    {|
+use net::http;
+
+fn handle(w: http::ResponseWriter, r: http::Request) {
+    println("handling");
+}
+
+fn main() {
+    let mux = http::new_serve_mux();
+    http::listen_and_serve(":8080", mux);
+}
+|}
+  in
+  let go = compile_and_check src in
+  (* Types in parameter annotations lower correctly *)
+  Alcotest.(check bool)
+    "has http.ResponseWriter param" true
+    (contains go "http.ResponseWriter");
+  Alcotest.(check bool)
+    "has *http.Request param" true
+    (contains go "*http.Request");
+  (* Calls lower correctly *)
+  Alcotest.(check bool)
+    "has http.NewServeMux call" true
+    (contains go "http.NewServeMux()")
+
+(* Negative: wrong-case callable (Go-cased) *)
+let test_stdlib_wrong_case_callable () =
+  compile_expect_error ~expect:"wrong case"
+    {|
+use net::http;
+
+fn main() {
+    let mux = http::NewServeMux();
+}
+|}
+    ()
+
+(* Negative: wrong-case type (snake_case) *)
+let test_stdlib_wrong_case_type () =
+  compile_expect_error ~expect:"wrong case"
+    {|
+use net::http;
+
+fn handle(w: http::response_writer, r: http::request) {
+    println("handling");
+}
+
+fn main() {
+}
+|}
+    ()
+
+(* Negative: unqualified access after import *)
+let test_stdlib_unqualified_rejected () =
+  compile_expect_error ~expect:"undefined"
+    {|
+use net::http;
+
+fn main() {
+    let mux = new_serve_mux();
+}
+|}
+    ()
+
+(* Negative: unknown stdlib member *)
+let test_stdlib_unknown_member () =
+  compile_expect_error ~expect:"undefined member"
+    {|
+use net::http;
+
+fn main() {
+    http::missing_symbol();
+}
+|}
+    ()
+
 let () =
   Alcotest.run "codegen"
     [
@@ -2118,5 +2252,20 @@ let () =
         [
           Alcotest.test_case "final MVP acceptance program" `Quick
             test_final_mvp_acceptance;
+        ] );
+      ( "stdlib-namespace",
+        [
+          Alcotest.test_case "use net::http with calls and types" `Quick
+            test_stdlib_namespace_positive;
+          Alcotest.test_case "stdlib types in type and value positions" `Quick
+            test_stdlib_type_and_value_positions;
+          Alcotest.test_case "wrong-case callable rejected" `Quick
+            test_stdlib_wrong_case_callable;
+          Alcotest.test_case "wrong-case type rejected" `Quick
+            test_stdlib_wrong_case_type;
+          Alcotest.test_case "unqualified access rejected" `Quick
+            test_stdlib_unqualified_rejected;
+          Alcotest.test_case "unknown stdlib member rejected" `Quick
+            test_stdlib_unknown_member;
         ] );
     ]

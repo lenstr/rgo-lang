@@ -10,6 +10,7 @@ type ty =
   | TyRef of ty
   | TyTuple of ty list
   | TySelf
+  | TyPath of ident located * ident located (* pkg::Type, e.g. http::Request *)
 [@@deriving show]
 
 (* ---------- patterns ---------- *)

@@ -10,6 +10,7 @@ type ty =
   | TyRef of ty
   | TyTuple of ty list
   | TySelf
+  | TyPath of ident located * ident located
 [@@deriving show]
 
 (* ---------- patterns ---------- *)

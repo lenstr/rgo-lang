@@ -13,6 +13,78 @@ let error_at (span : span) fmt =
         (Typecheck_error { msg; line = span.start.line; col = span.start.col }))
     fmt
 
+(* ---------- stdlib interop surface ---------- *)
+
+(* The minimum net/http surface contracted for this mission. *)
+type stdlib_member_kind = StdlibFn | StdlibType
+
+type stdlib_member = {
+  sm_rgo_name : string; (* rgo-facing name, e.g. "listen_and_serve" *)
+  sm_kind : stdlib_member_kind;
+}
+
+(* Package-level functions and constructors *)
+let net_http_fns =
+  [
+    { sm_rgo_name = "listen_and_serve"; sm_kind = StdlibFn };
+    { sm_rgo_name = "new_serve_mux"; sm_kind = StdlibFn };
+  ]
+
+(* Type surface *)
+let net_http_types =
+  [
+    { sm_rgo_name = "Request"; sm_kind = StdlibType };
+    { sm_rgo_name = "ResponseWriter"; sm_kind = StdlibType };
+    { sm_rgo_name = "ServeMux"; sm_kind = StdlibType };
+  ]
+
+let net_http_surface = net_http_fns @ net_http_types
+
+(* Lookup by rgo-facing name *)
+let lookup_stdlib_member (pkg_alias : string) (member : string) :
+    stdlib_member option =
+  match pkg_alias with
+  | "http" -> List.find_opt (fun sm -> sm.sm_rgo_name = member) net_http_surface
+  | _ -> None
+
+(* Check if a name looks like a Go-cased callable that we should reject *)
+let is_wrong_case_stdlib (pkg_alias : string) (member : string) : string option
+    =
+  match pkg_alias with
+  | "http" -> (
+      (* Check if member matches a Go-cased callable name *)
+      let go_cased_fns =
+        [
+          ("ListenAndServe", "listen_and_serve");
+          ("NewServeMux", "new_serve_mux");
+        ]
+      in
+      let go_cased_types_as_snake =
+        [
+          ("request", "Request");
+          ("response_writer", "ResponseWriter");
+          ("serve_mux", "ServeMux");
+        ]
+      in
+      match List.assoc_opt member go_cased_fns with
+      | Some correct -> Some correct
+      | None -> (
+          match List.assoc_opt member go_cased_types_as_snake with
+          | Some correct -> Some correct
+          | None -> None))
+  | _ -> None
+
+(* ---------- stdlib type resolution (non-recursive) ---------- *)
+
+let stdlib_type_ty_simple (pkg_alias : string) (type_name : string) :
+    Types.ty option =
+  match (pkg_alias, type_name) with
+  | "http", "Request" -> Some (Types.TImported ("http", "Request"))
+  | "http", "ResponseWriter" ->
+      Some (Types.TImported ("http", "ResponseWriter"))
+  | "http", "ServeMux" -> Some (Types.TImported ("http", "ServeMux"))
+  | _ -> None
+
 (* ---------- environment ---------- *)
 module SMap = Map.Make (String)
 
@@ -149,6 +221,31 @@ let rec resolve_ast_ty env (t : Ast.ty) : ty =
                  line = 0;
                  col = 0;
                }))
+  | TyPath (pkg, member) -> (
+      (* Package-qualified type e.g. http::Request *)
+      match lookup_stdlib_member pkg.node member.node with
+      | Some sm -> (
+          match sm.sm_kind with
+          | StdlibType -> (
+              match stdlib_type_ty_simple pkg.node member.node with
+              | Some ty -> ty
+              | None ->
+                  error_at member.span "undefined type '%s::%s'" pkg.node
+                    member.node)
+          | StdlibFn ->
+              error_at member.span "'%s::%s' is a function, not a type" pkg.node
+                member.node)
+      | None -> (
+          match is_wrong_case_stdlib pkg.node member.node with
+          | Some correct ->
+              error_at member.span
+                "wrong case: '%s::%s' should be '%s::%s' (use snake_case for \
+                 functions, PascalCase for types)"
+                pkg.node member.node pkg.node correct
+          | None ->
+              error_at member.span
+                "undefined member '%s' in imported package '%s'" member.node
+                pkg.node))
 
 (* Substitute Self with the concrete type *)
 let rec subst_self self_ty t =
@@ -163,6 +260,7 @@ let rec subst_self self_ty t =
   | TStruct (n, args) -> TStruct (n, List.map (subst_self self_ty) args)
   | TEnum (n, args) -> TEnum (n, List.map (subst_self self_ty) args)
   | TFn (ps, r) -> TFn (List.map (subst_self self_ty) ps, subst_self self_ty r)
+  | TImported _ -> t
   | _ -> t
 
 (* ---------- type compatibility ---------- *)
@@ -219,6 +317,8 @@ let rec types_compatible ?(type_params = []) expected actual =
     | TEnum (n1, args1), TEnum (n2, args2) when n1 = n2 ->
         List.length args1 = List.length args2
         && List.for_all2 (types_compatible ~type_params) args1 args2
+    (* TImported: same package+name is compatible *)
+    | TImported (p1, n1), TImported (p2, n2) -> p1 = p2 && n1 = n2
     | _ -> false
 
 let expect_type ~env:_ ~(span : span) ~expected ~actual =
@@ -472,11 +572,101 @@ and check_bounds env span bounds formals actuals =
                   required_traits))
       bounds
 
+(* ---------- stdlib interop resolution ---------- *)
+
+and stdlib_fn_type (pkg_alias : string) (member_name : string) : fn_info option
+    =
+  match (pkg_alias, member_name) with
+  | "http", "listen_and_serve" ->
+      (* http.ListenAndServe(addr string, handler *http.ServeMux) error
+         For mission purposes: (String, ServeMux) -> () *)
+      Some
+        {
+          fi_params = [ TString; TImported ("http", "ServeMux") ];
+          fi_ret = TVoid;
+          fi_bounds = [];
+        }
+  | "http", "new_serve_mux" ->
+      (* http.NewServeMux() *http.ServeMux *)
+      Some
+        {
+          fi_params = [];
+          fi_ret = TImported ("http", "ServeMux");
+          fi_bounds = [];
+        }
+  | _ -> None
+
+and stdlib_type_ty (pkg_alias : string) (type_name : string) : ty option =
+  match (pkg_alias, type_name) with
+  | "http", "Request" -> Some (TImported ("http", "Request"))
+  | "http", "ResponseWriter" -> Some (TImported ("http", "ResponseWriter"))
+  | "http", "ServeMux" -> Some (TImported ("http", "ServeMux"))
+  | _ -> None
+
+and check_stdlib_path _env type_name member =
+  let pkg = type_name.node in
+  let name = member.node in
+  (* First check if it's a valid member *)
+  match lookup_stdlib_member pkg name with
+  | Some sm -> (
+      match sm.sm_kind with
+      | StdlibType -> (
+          match stdlib_type_ty pkg name with
+          | Some ty -> ty
+          | None ->
+              error_at member.span
+                "undefined member '%s' in imported package '%s'" name pkg)
+      | StdlibFn -> (
+          match stdlib_fn_type pkg name with
+          | Some fi -> TFn (fi.fi_params, fi.fi_ret)
+          | None ->
+              error_at member.span
+                "undefined member '%s' in imported package '%s'" name pkg))
+  | None -> (
+      (* Check for wrong-case usage *)
+      match is_wrong_case_stdlib pkg name with
+      | Some correct ->
+          error_at member.span
+            "wrong case: '%s::%s' should be '%s::%s' (use snake_case for \
+             functions, PascalCase for types)"
+            pkg name pkg correct
+      | None ->
+          error_at member.span "undefined member '%s' in imported package '%s'"
+            name pkg)
+
+and check_stdlib_call env type_name fn_name arg_types =
+  let pkg = type_name.node in
+  let name = fn_name.node in
+  (* First check if it's a valid member *)
+  match lookup_stdlib_member pkg name with
+  | Some sm -> (
+      match sm.sm_kind with
+      | StdlibFn -> (
+          match stdlib_fn_type pkg name with
+          | Some fi ->
+              check_fn_args ~env ~span:fn_name.span ~name fi.fi_params arg_types;
+              fi.fi_ret
+          | None ->
+              error_at fn_name.span
+                "undefined member '%s' in imported package '%s'" name pkg)
+      | StdlibType ->
+          error_at fn_name.span "'%s::%s' is a type, not a callable" pkg name)
+  | None -> (
+      (* Check for wrong-case usage *)
+      match is_wrong_case_stdlib pkg name with
+      | Some correct ->
+          error_at fn_name.span
+            "wrong case: '%s::%s' should be '%s::%s' (use snake_case for \
+             functions, PascalCase for types)"
+            pkg name pkg correct
+      | None ->
+          error_at fn_name.span "undefined member '%s' in imported package '%s'"
+            name pkg)
+
 and check_assoc_fn_call env type_name fn_name arg_types =
-  (* If this is an imported package, give member-aware diagnostics *)
+  (* If this is an imported package, resolve stdlib member *)
   if SMap.mem type_name.node env.imported_packages then
-    error_at fn_name.span "undefined member '%s' in imported package '%s'"
-      fn_name.node type_name.node
+    check_stdlib_call env type_name fn_name arg_types
   else
     (* Check for enum variant constructors first *)
     match SMap.find_opt type_name.node env.enums with
@@ -816,10 +1006,9 @@ and check_field_access env e field =
   | _ -> error_at field.span "field access on non-struct type %s" (show_ty t)
 
 and check_path env type_name member =
-  (* If this is an imported package, give member-aware diagnostics *)
+  (* If this is an imported package, resolve stdlib member *)
   if SMap.mem type_name.node env.imported_packages then
-    error_at member.span "undefined member '%s' in imported package '%s'"
-      member.node type_name.node
+    check_stdlib_path env type_name member
   else
     (* Type::Variant or Type::assoc_fn (without call) *)
     let try_assoc_fn () =

@@ -171,6 +171,17 @@ let rec resolve_ty env (t : ty) =
   | TyRef t -> resolve_ty env t
   | TyTuple ts -> List.iter (resolve_ty env) ts
   | TySelf -> () (* validated in later phases *)
+  | TyPath (pkg, _member) ->
+      (* Package-qualified type: check the package is imported *)
+      if not (lookup_imported_package pkg.node env) then
+        let is_known_alias =
+          List.exists
+            (fun (_path, alias) -> alias = pkg.node)
+            supported_stdlib_packages
+        in
+        if is_known_alias then
+          import_error_at pkg.span (Missing_import pkg.node)
+        else error_at pkg.span "undefined type '%s'" pkg.node
 
 (* ---------- pattern resolution ---------- *)
 

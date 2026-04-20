@@ -79,6 +79,7 @@ type cg_shared = {
   mutable needs_fmt : bool;
   mutable needs_errors : bool;
   mutable needs_math : bool;
+  mutable needs_net_http : bool;
   mutable self_ref_traits : string list;
       (* Trait names that use Self in their signatures *)
 }
@@ -145,6 +146,10 @@ let rec is_nullable_ty env (t : Ast.ty) : bool =
       | Some n -> SMap.mem n env.enums
       | None -> false)
   | TyTuple _ -> false
+  | TyPath (_, { node = "Request"; _ }) -> true (* *http.Request is a pointer *)
+  | TyPath (_, { node = "ServeMux"; _ }) ->
+      true (* *http.ServeMux is a pointer *)
+  | TyPath _ -> false
 
 let rec go_type env (t : Ast.ty) : string =
   match t with
@@ -193,6 +198,17 @@ let rec go_type env (t : Ast.ty) : string =
       match env.self_type with
       | Some t -> go_type env t
       | None -> ( match env.self_type_name with Some n -> n | None -> "Self"))
+  | TyPath (pkg, member) ->
+      (* Package-qualified stdlib type *)
+      env.shared.needs_net_http <- true;
+      let go_type_name =
+        match (pkg.node, member.node) with
+        | "http", "Request" -> "*http.Request"
+        | "http", "ResponseWriter" -> "http.ResponseWriter"
+        | "http", "ServeMux" -> "*http.ServeMux"
+        | _ -> pkg.node ^ "." ^ member.node
+      in
+      go_type_name
 
 (* Go return type for printing (with leading space or parens) *)
 let go_ret_sig env (ret : Ast.ty option) : string =
@@ -232,6 +248,9 @@ let rec go_zero_value env (t : Ast.ty) : string =
           match env.self_type_name with
           | Some n -> if SMap.mem n env.enums then "nil" else n ^ "{}"
           | None -> "nil"))
+  | TyPath (_, { node = "Request"; _ }) -> "nil" (* pointer type *)
+  | TyPath (_, { node = "ServeMux"; _ }) -> "nil" (* pointer type *)
+  | TyPath _ -> "nil"
 
 (* ---------- type inference for expressions (mirrors typecheck) ---------- *)
 
@@ -253,6 +272,19 @@ let dummy_loc n =
     node = n;
     span = { start = { line = 0; col = 0 }; stop = { line = 0; col = 0 } };
   }
+
+(* Check if a name is an imported stdlib package alias *)
+let is_imported_package name _env = name = "http"
+
+(* snake_case to PascalCase conversion for Go function names *)
+let snake_to_pascal (s : string) : string =
+  s |> String.split_on_char '_'
+  |> List.map (fun part ->
+      if String.length part = 0 then ""
+      else
+        String.make 1 (Char.uppercase_ascii part.[0])
+        ^ String.sub part 1 (String.length part - 1))
+  |> String.concat ""
 
 let rec infer_expr_type env (e : Ast.expr) : Ast.ty option =
   match e with
@@ -298,23 +330,36 @@ let rec infer_expr_type env (e : Ast.expr) : Ast.ty option =
       | Some fi -> fi.fi_ret
       | None -> None)
   | ExprCall (ExprPath (type_name, fn_name), _) -> (
-      (* Enum variant constructor or associated function *)
-      match SMap.find_opt type_name.node env.enums with
-      | Some _ -> Some (TyName type_name)
-      | None -> (
-          match SMap.find_opt type_name.node env.impls with
-          | Some ii -> (
-              match SMap.find_opt fn_name.node ii.ii_assoc_fns with
-              | Some fi -> (
-                  match fi.fi_ret with
-                  | Some TySelf -> Some (TyName type_name)
-                  | other -> other)
-              | None -> None)
-          | None -> None))
-  | ExprPath (type_name, _variant) -> (
-      match SMap.find_opt type_name.node env.enums with
-      | Some _ -> Some (TyName type_name)
-      | None -> None)
+      if
+        (* Check for imported stdlib package call *)
+        is_imported_package type_name.node env
+      then
+        (* Return the inferred Go type for stdlib calls *)
+        match (type_name.node, fn_name.node) with
+        | "http", "new_serve_mux" ->
+            Some (TyPath (type_name, dummy_loc "ServeMux"))
+        | _ -> None
+      else
+        (* Enum variant constructor or associated function *)
+        match SMap.find_opt type_name.node env.enums with
+        | Some _ -> Some (TyName type_name)
+        | None -> (
+            match SMap.find_opt type_name.node env.impls with
+            | Some ii -> (
+                match SMap.find_opt fn_name.node ii.ii_assoc_fns with
+                | Some fi -> (
+                    match fi.fi_ret with
+                    | Some TySelf -> Some (TyName type_name)
+                    | other -> other)
+                | None -> None)
+            | None -> None))
+  | ExprPath (type_name, member) -> (
+      if is_imported_package type_name.node env then
+        Some (TyPath (type_name, member))
+      else
+        match SMap.find_opt type_name.node env.enums with
+        | Some _ -> Some (TyName type_name)
+        | None -> None)
   | ExprMethodCall (recv, method_name, _) ->
       infer_method_ret_type env recv method_name
   | ExprFieldAccess (recv, field) -> (
@@ -408,6 +453,7 @@ let trait_uses_self (items : Ast.trait_item list) : bool =
     | TyGeneric (_, args) -> List.exists ty_has_self args
     | TyRef inner -> ty_has_self inner
     | TyTuple ts -> List.exists ty_has_self ts
+    | TyPath _ -> false
   in
   List.exists
     (fun (ti : Ast.trait_item) ->
@@ -433,6 +479,7 @@ let collect_env (prog : Ast.program) : cg_env =
       needs_fmt = false;
       needs_errors = false;
       needs_math = false;
+      needs_net_http = false;
       self_ref_traits = [];
     }
   in
@@ -749,9 +796,16 @@ let rec gen_expr env buf indent (ctx : expr_ctx) (e : Ast.expr) : unit =
       (* Field names: capitalize for pub fields *)
       let is_pub = field_is_pub env e field.node in
       Buffer.add_string buf (go_field_name is_pub field.node)
-  | ExprPath (type_name, variant_name) ->
-      (* Unit enum variant: EnumVariant{} *)
-      Buffer.add_string buf (type_name.node ^ variant_name.node ^ "{}")
+  | ExprPath (type_name, member_name) ->
+      if is_imported_package type_name.node env then begin
+        (* Imported stdlib member in value position (e.g., function value) *)
+        env.shared.needs_net_http <- true;
+        let go_name = snake_to_pascal member_name.node in
+        Buffer.add_string buf ("http." ^ go_name)
+      end
+      else
+        (* Unit enum variant: EnumVariant{} *)
+        Buffer.add_string buf (type_name.node ^ member_name.node ^ "{}")
   | ExprStruct (ty, fields) -> gen_struct_literal env buf indent ty fields
   | ExprStructVariant (type_name, variant_name, fields) ->
       gen_struct_variant_literal env buf indent type_name variant_name fields
@@ -957,31 +1011,44 @@ and gen_some_for_type env buf indent (inner_ty : Ast.ty) arg =
   end
   else gen_new_expr env buf indent (Some inner_ty) arg
 
+(* ---------- stdlib codegen helpers ---------- *)
+
+and gen_stdlib_call env buf indent _type_name fn_name args =
+  env.shared.needs_net_http <- true;
+  let go_name = snake_to_pascal fn_name.node in
+  Printf.bprintf buf "http.%s(" go_name;
+  gen_args env buf indent args;
+  Buffer.add_char buf ')'
+
 and gen_path_call env buf indent type_name fn_name args =
-  (* Check if it's an enum variant constructor *)
-  match SMap.find_opt type_name.node env.enums with
-  | Some ei -> (
-      match List.assoc_opt fn_name.node ei.ei_variants with
-      | Some (VTuple _) ->
-          Buffer.add_string buf (type_name.node ^ fn_name.node ^ "{");
-          List.iteri
-            (fun i a ->
-              if i > 0 then Buffer.add_string buf ", ";
-              Printf.bprintf buf "Field%d: " i;
-              gen_expr env buf indent CtxExpr a)
-            args;
-          Buffer.add_char buf '}'
-      | Some VUnit ->
-          Buffer.add_string buf (type_name.node ^ fn_name.node ^ "{}")
-      | Some (VStruct _) ->
-          (* Should not happen: struct variants are constructed differently *)
-          Buffer.add_string buf (type_name.node ^ fn_name.node ^ "{}")
-      | None ->
-          (* Check impl assoc functions *)
-          gen_assoc_fn_call env buf indent type_name fn_name args)
-  | None ->
-      if not (gen_builtin_path_call buf type_name fn_name) then
-        gen_assoc_fn_call env buf indent type_name fn_name args
+  (* Check if it's an imported stdlib package call *)
+  if is_imported_package type_name.node env then
+    gen_stdlib_call env buf indent type_name fn_name args
+  else
+    (* Check if it's an enum variant constructor *)
+    match SMap.find_opt type_name.node env.enums with
+    | Some ei -> (
+        match List.assoc_opt fn_name.node ei.ei_variants with
+        | Some (VTuple _) ->
+            Buffer.add_string buf (type_name.node ^ fn_name.node ^ "{");
+            List.iteri
+              (fun i a ->
+                if i > 0 then Buffer.add_string buf ", ";
+                Printf.bprintf buf "Field%d: " i;
+                gen_expr env buf indent CtxExpr a)
+              args;
+            Buffer.add_char buf '}'
+        | Some VUnit ->
+            Buffer.add_string buf (type_name.node ^ fn_name.node ^ "{}")
+        | Some (VStruct _) ->
+            (* Should not happen: struct variants are constructed differently *)
+            Buffer.add_string buf (type_name.node ^ fn_name.node ^ "{}")
+        | None ->
+            (* Check impl assoc functions *)
+            gen_assoc_fn_call env buf indent type_name fn_name args)
+    | None ->
+        if not (gen_builtin_path_call buf type_name fn_name) then
+          gen_assoc_fn_call env buf indent type_name fn_name args
 
 and gen_builtin_path_call buf type_name fn_name =
   match (type_name.node, fn_name.node) with
@@ -2781,6 +2848,7 @@ let gen_imports buf env =
   if env.shared.needs_fmt then imports := "\"fmt\"" :: !imports;
   if env.shared.needs_errors then imports := "\"errors\"" :: !imports;
   if env.shared.needs_math then imports := "\"math\"" :: !imports;
+  if env.shared.needs_net_http then imports := "\"net/http\"" :: !imports;
   let sorted = List.sort String.compare !imports in
   match sorted with
   | [] -> ()

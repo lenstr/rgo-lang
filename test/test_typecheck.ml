@@ -1356,11 +1356,56 @@ fn main() {
 }
 |}
 
+(* Positive: stdlib function calls typecheck *)
+let valid_stdlib_call =
+  {|
+use net::http;
+fn main() {
+    let mux = http::new_serve_mux();
+    http::listen_and_serve(":8080", mux);
+}
+|}
+
+(* Positive: stdlib types in function signatures *)
+let valid_stdlib_types =
+  {|
+use net::http;
+fn handle(w: http::ResponseWriter, r: http::Request) {
+    println("ok");
+}
+fn main() {
+}
+|}
+
+(* Negative: Go-cased callable *)
+let wrong_case_callable =
+  {|
+use net::http;
+fn main() {
+    let mux = http::NewServeMux();
+}
+|}
+
+(* Negative: snake_case type *)
+let wrong_case_type =
+  {|
+use net::http;
+fn handle(w: http::response_writer, r: http::request) {
+    println("fail");
+}
+fn main() {
+}
+|}
+
 let import_positive_tests =
   [
     ( "use net::http without usage passes typecheck",
       `Quick,
       pass valid_import_passthrough );
+    ("stdlib function calls typecheck correctly", `Quick, pass valid_stdlib_call);
+    ( "stdlib types in signatures typecheck correctly",
+      `Quick,
+      pass valid_stdlib_types );
   ]
 
 let import_negative_tests =
@@ -1373,6 +1418,12 @@ let import_negative_tests =
       `Quick,
       fail ~expect:"undefined member 'missing_fn' in imported package"
         import_unknown_member_call );
+    ( "wrong-case callable rejected",
+      `Quick,
+      fail ~expect:"wrong case" wrong_case_callable );
+    ( "wrong-case type rejected",
+      `Quick,
+      fail ~expect:"wrong case" wrong_case_type );
   ]
 
 let () =

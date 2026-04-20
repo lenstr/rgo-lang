@@ -123,6 +123,8 @@ ty_atom:
     { match ts with [t] -> t | _ -> TyTuple ts }
   | n = located_type_name; LT; args = separated_nonempty_list(COMMA, ty); GT
     { TyGeneric (n, args) }
+  | a = located_ident; COLON_COLON; b = located_ident
+    { TyPath (a, b) }
   | n = located_type_name
     { TyName n }
   ;

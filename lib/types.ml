@@ -25,6 +25,8 @@ type ty =
   | TVar of tvar (* unification variable *)
   | TParam of string (* generic type parameter like T *)
   | TSelf (* Self inside impl/trait *)
+  | TImported of
+      string * string (* package alias, type name e.g. "http", "Request" *)
 
 let rec pp_ty fmt t =
   match t with
@@ -59,6 +61,7 @@ let rec pp_ty fmt t =
   | TVar n -> Format.fprintf fmt "?%d" n
   | TParam s -> Format.fprintf fmt "%s" s
   | TSelf -> Format.fprintf fmt "Self"
+  | TImported (pkg, name) -> Format.fprintf fmt "%s::%s" pkg name
 
 and pp_ty_list fmt ts =
   Format.pp_print_list
