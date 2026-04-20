@@ -1,0 +1,34 @@
+{
+  "featureId": "net-http-namespace-and-naming-bridge",
+  "reviewedAt": "2026-04-20T23:27:00.846461+00:00",
+  "commitId": "d5ed6d5",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The feature implements the intended net/http namespace slice, but it has two blocking correctness gaps: codegen treats any `http::...` path as stdlib even without an import, and imported stdlib types are incorrectly accepted in expression position and lower to invalid Go.",
+    "issues": [
+      {
+        "file": "lib/codegen.ml",
+        "line": 277,
+        "severity": "blocking",
+        "description": "`is_imported_package` is hardcoded to `name = \"http\"`, so codegen reinterprets any local `http::...` path as the stdlib package instead of consulting resolver/typecheck import state. A local declaration such as `enum http { Ok }` compiles to Go that imports `net/http` and emits `http.Ok`, which then fails downstream (`/tmp/review_http_local_enum.go`: `http already declared through import of package http`, `undefined: http.Ok`). This breaks the namespace-collision contract for non-imported local symbols."
+      },
+      {
+        "file": "lib/typecheck.ml",
+        "line": 606,
+        "severity": "blocking",
+        "description": "`check_stdlib_path` returns `TImported` for `StdlibType`, so imported types are accepted as value expressions instead of being rejected outside type position. `use net::http; let x = http::Request;` currently compiles and codegen lowers it to `x := http.Request`, which Go rejects as `http.Request (type) is not an expression` (`/tmp/review_http_type_value.go`). This means the feature still accepts programs that cannot lower to valid Go."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "`compiler-worker` should explicitly require a regression where a local declaration shares the stdlib alias without importing it, so naming-bridge work proves it is driven by resolved import state rather than raw identifier text.",
+      "evidence": "The handoff/test list only mentions positive net/http coverage plus wrong-case, unqualified, and unknown-member fixtures. There is no fixture for a local `http` type/enum without `use net::http`, and the current implementation miscompiles `enum http { Ok } ... http::Ok` because `lib/codegen.ml:277` hardcodes the alias."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed handoff, transcript skeleton, skill, and commit `d5ed6d5`. Result: fail. The feature mostly wires the intended stdlib namespace slice, but two blocking bugs remain: local `http::...` paths are mis-lowered as net/http even without an import, and imported stdlib types are incorrectly allowed in expression position, producing invalid Go."
+}

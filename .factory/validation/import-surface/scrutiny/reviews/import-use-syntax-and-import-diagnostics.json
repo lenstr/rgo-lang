@@ -1,0 +1,34 @@
+{
+  "featureId": "import-use-syntax-and-import-diagnostics",
+  "reviewedAt": "2026-04-20T23:26:41.268160+00:00",
+  "commitId": "aea80a4",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The feature adds the `use net::http` surface and most of the requested diagnostics, but it does not fully cover the contracted import error behavior. In particular, qualified imported types like `http::Request` cannot reach import-aware diagnostics at all, and file-scope alias reservation is incomplete because traits named `http` are still accepted.",
+    "issues": [
+      {
+        "file": "lib/parser.mly",
+        "line": 120,
+        "severity": "blocking",
+        "description": "The type grammar only accepts a single `located_type_name`/generic in `ty_atom`; it never parses `package::Type` paths. As a result, a contracted case like `fn f(req: http::Request) {}` cannot produce the promised import-aware diagnostic from VAL-IMPORT-004 when `use net::http` is missing — it fails earlier as a parse error instead."
+      },
+      {
+        "file": "lib/resolver.ml",
+        "line": 404,
+        "severity": "blocking",
+        "description": "Imported aliases are not actually reserved across all top-level file-scope declarations. `collect_globals` rejects collisions for functions, structs, and enums, but `ItemTrait` is added without any collision check, and `resolve_imports` also does not check `env.traits`. `use net::http; trait http { ... }` therefore succeeds silently, violating the feature requirement that imported aliases fail explicitly on file-scope collisions."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `compiler-worker` skill says to write tests first, but this worker implemented production changes before editing any tests; the handoff still reported `followedProcedure: true`. Either the skill guidance or the expected handoff feedback standard should be clarified so reviews can rely on it.",
+      "evidence": "Transcript skeleton shows edits to `lib/ast.ml`, `lib/parser.mly`, and `lib/resolver.ml` immediately after invoking `compiler-worker`, while the first test-file edits (`test/test_resolver.ml`, `test/test_parser.ml`, etc.) happened later."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Review failed. The commit covers most import-surface behavior, but it misses qualified-type import diagnostics (`http::Request`) and leaves a file-scope collision hole for trait declarations named after imported aliases."
+}
