@@ -1032,15 +1032,76 @@ let test_loops_example () =
   let _go = compile_and_check ~expected_output:"15\n10\n" src in
   ()
 
-(* Regression: generic Self substitution through the full pipeline *)
-let test_generic_self_substitution () =
+(* Regression: generic Go emission *)
+let test_generics_example_go_build () =
   let src = read_file "../examples/generics.rg" in
-  (* The generics example exercises impl<T> Box<T> with Self return type.
-     This verifies the typechecker preserves generic args during Self
-     substitution. We only check compilation (snapshot), not Go execution,
-     because generic codegen doesn't yet emit fully valid Go. *)
-  let go = compile_snapshot src in
-  Alcotest.(check bool) "contains type Box" true (contains go "type Box")
+  let go = compile_and_check ~expected_output:"42\n" src in
+  (* Verify correct generic type parameter syntax in generated Go *)
+  Alcotest.(check bool)
+    "generic struct decl" true
+    (contains go "type Box[T any] struct");
+  Alcotest.(check bool)
+    "generic assoc fn decl" true
+    (contains go "func BoxNew[T any](v T) Box[T]");
+  Alcotest.(check bool)
+    "generic receiver" true
+    (contains go "func (self *Box[T]) Get() T");
+  Alcotest.(check bool)
+    "instantiated struct literal" true
+    (contains go "Box[T]{value: v}")
+
+let test_generic_struct_codegen () =
+  let src =
+    {|
+    struct Pair<A, B> {
+      pub first: A,
+      pub second: B,
+    }
+
+    impl<A, B> Pair<A, B> {
+      pub fn new(a: A, b: B) -> Self {
+        Pair { first: a, second: b }
+      }
+
+      pub fn get_first(&self) -> A {
+        self.first
+      }
+    }
+
+    fn main() {
+      let p = Pair::new(1, "hello");
+      println(p.get_first());
+    }
+    |}
+  in
+  let go = compile_and_check ~expected_output:"1\n" src in
+  Alcotest.(check bool)
+    "multi-param generic struct" true
+    (contains go "type Pair[A any, B any] struct");
+  Alcotest.(check bool)
+    "multi-param assoc fn" true
+    (contains go "func PairNew[A any, B any](a A, b B) Pair[A, B]");
+  Alcotest.(check bool)
+    "multi-param receiver" true
+    (contains go "func (self *Pair[A, B]) Get_first() A")
+
+let test_generic_fn_codegen () =
+  let src =
+    {|
+    fn identity<T>(x: T) -> T {
+      x
+    }
+
+    fn main() {
+      let v = identity(42);
+      println(v);
+    }
+    |}
+  in
+  let go = compile_and_check ~expected_output:"42\n" src in
+  Alcotest.(check bool)
+    "generic fn decl" true
+    (contains go "func identity[T any](x T) T")
 
 let () =
   Alcotest.run "codegen"
@@ -1161,7 +1222,13 @@ let () =
             test_impl_methods_example;
           Alcotest.test_case "shapes.rg runs" `Quick test_shapes_example;
           Alcotest.test_case "loops.rg runs" `Quick test_loops_example;
-          Alcotest.test_case "generics.rg compiles" `Quick
-            test_generic_self_substitution;
+        ] );
+      ( "generics",
+        [
+          Alcotest.test_case "generics.rg builds and runs" `Quick
+            test_generics_example_go_build;
+          Alcotest.test_case "multi-param generic struct" `Quick
+            test_generic_struct_codegen;
+          Alcotest.test_case "generic free fn" `Quick test_generic_fn_codegen;
         ] );
     ]

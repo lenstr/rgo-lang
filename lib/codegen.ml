@@ -89,6 +89,8 @@ type cg_env = {
   (* Per-function context *)
   ret_ty : Ast.ty option;
   self_type_name : string option;
+  self_type : Ast.ty option;
+  impl_type_params : type_param list;
   type_params : string list;
   (* Value bindings: name -> (ast_ty option, is_mut) *)
   values : (Ast.ty option * bool) SMap.t list;
@@ -148,9 +150,18 @@ let rec go_type env (t : Ast.ty) : string =
   | TyName { node = "bool"; _ } -> "bool"
   | TyName { node = "str"; _ } | TyName { node = "String"; _ } -> "string"
   | TyName { node = "Self"; _ } -> (
-      match env.self_type_name with Some n -> n | None -> "Self")
+      match env.self_type with
+      | Some t -> go_type env t
+      | None -> ( match env.self_type_name with Some n -> n | None -> "Self"))
   | TyName { node = name; _ } ->
-      if List.mem name env.type_params then name else name
+      (* If this is the Self type used bare (e.g., Box in impl<T> Box<T>),
+         resolve to the full generic type *)
+      if
+        env.impl_type_params <> []
+        && env.self_type_name = Some name
+        && not (List.mem name env.type_params)
+      then match env.self_type with Some st -> go_type env st | None -> name
+      else name
   | TyGeneric ({ node = "Option"; _ }, [ arg ]) ->
       if is_nullable_ty env arg then begin
         env.shared.needs_option_struct <- true;
@@ -167,7 +178,10 @@ let rec go_type env (t : Ast.ty) : string =
       name ^ "[" ^ String.concat ", " (List.map (go_type env) args) ^ "]"
   | TyRef inner -> "*" ^ go_type env inner
   | TyTuple _ -> failwith "codegen: tuple types not supported in Go output"
-  | TySelf -> ( match env.self_type_name with Some n -> n | None -> "Self")
+  | TySelf -> (
+      match env.self_type with
+      | Some t -> go_type env t
+      | None -> ( match env.self_type_name with Some n -> n | None -> "Self"))
 
 (* Go return type for printing (with leading space or parens) *)
 let go_ret_sig env (ret : Ast.ty option) : string =
@@ -179,7 +193,7 @@ let go_ret_sig env (ret : Ast.ty option) : string =
   | Some t -> " " ^ go_type env t
 
 (* ---------- Go zero value for a type ---------- *)
-let go_zero_value env (t : Ast.ty) : string =
+let rec go_zero_value env (t : Ast.ty) : string =
   match t with
   | TyName { node = "i8" | "i16" | "i32" | "i64"; _ } -> "0"
   | TyName { node = "u8" | "u16" | "u32" | "u64"; _ } -> "0"
@@ -201,9 +215,12 @@ let go_zero_value env (t : Ast.ty) : string =
   | TyRef _ -> "nil"
   | TyTuple _ -> "nil"
   | TySelf -> (
-      match env.self_type_name with
-      | Some n -> if SMap.mem n env.enums then "nil" else n ^ "{}"
-      | None -> "nil")
+      match env.self_type with
+      | Some t -> go_zero_value env t
+      | None -> (
+          match env.self_type_name with
+          | Some n -> if SMap.mem n env.enums then "nil" else n ^ "{}"
+          | None -> "nil"))
 
 (* ---------- type inference for expressions (mirrors typecheck) ---------- *)
 
@@ -385,6 +402,8 @@ let collect_env (prog : Ast.program) : cg_env =
       impls = SMap.empty;
       ret_ty = None;
       self_type_name = None;
+      self_type = None;
+      impl_type_params = [];
       type_params = [];
       values = [ SMap.empty ];
       shared;
@@ -884,9 +903,16 @@ and fn_name_is_pub name env type_name =
   | None -> true
 
 and field_is_pub env recv field_name =
-  match infer_expr_type env recv with
-  | Some (TyName { node = sname; _ }) -> (
-      match SMap.find_opt sname env.structs with
+  let sname =
+    match infer_expr_type env recv with
+    | Some (TyName { node = n; _ }) -> Some n
+    | Some (TyGeneric ({ node = n; _ }, _)) -> Some n
+    | Some TySelf -> env.self_type_name
+    | _ -> None
+  in
+  match sname with
+  | Some sn -> (
+      match SMap.find_opt sn env.structs with
       | Some si -> (
           match
             List.find_opt
@@ -896,7 +922,7 @@ and field_is_pub env recv field_name =
           | Some f -> f.fd_pub
           | None -> true (* default to pub *))
       | None -> true)
-  | _ -> true (* default to pub for unknown types *)
+  | None -> true (* default to pub for unknown types *)
 
 and gen_method_call env buf indent recv method_name args =
   (* Handle built-in methods on containers *)
@@ -1957,14 +1983,25 @@ and gen_enum_decl env buf e_name e_generics e_variants _impl_methods =
     e_variants
 
 and gen_impl_methods env buf type_name generics_decl _generics_use items is_enum
-    =
+    impl_type_params =
   let self_type_name =
     match type_name with
     | TyName n -> n.node
     | TyGeneric (n, _) -> n.node
     | _ -> "unknown"
   in
-  let env = { env with self_type_name = Some self_type_name } in
+  let impl_tp_names =
+    List.map (fun (tp : type_param) -> tp.tp_name.node) impl_type_params
+  in
+  let env =
+    {
+      env with
+      self_type_name = Some self_type_name;
+      self_type = Some type_name;
+      impl_type_params;
+      type_params = impl_tp_names @ env.type_params;
+    }
+  in
   List.iter
     (fun (fd : fn_decl) ->
       match fd.fn_self with
@@ -2099,7 +2136,9 @@ and gen_enum_method env buf enum_name _generics_decl fd _self_param =
 
 and gen_assoc_fn env buf type_name _generics_decl fd =
   let fn_name_go = type_name ^ go_method_name fd.fn_pub fd.fn_name.node in
-  let fn_generics = go_generics_decl fd.fn_generics in
+  (* Merge impl type params with fn-level generics for the declaration *)
+  let all_generics = env.impl_type_params @ fd.fn_generics in
+  let fn_generics = go_generics_decl all_generics in
   let fn_env =
     {
       env with
@@ -2238,7 +2277,7 @@ let generate (prog : Ast.program) : string =
           let is_enum = SMap.mem type_name_str env.enums in
           let gd = go_generics_decl i_generics in
           let gu = go_generics_use i_generics in
-          gen_impl_methods env body_buf i_ty gd gu i_items is_enum
+          gen_impl_methods env body_buf i_ty gd gu i_items is_enum i_generics
       | ItemTraitImpl { ti_generics; ti_ty; ti_items; _ } ->
           let type_name_str =
             match ti_ty with
@@ -2249,7 +2288,7 @@ let generate (prog : Ast.program) : string =
           let is_enum = SMap.mem type_name_str env.enums in
           let gd = go_generics_decl ti_generics in
           let gu = go_generics_use ti_generics in
-          gen_impl_methods env body_buf ti_ty gd gu ti_items is_enum
+          gen_impl_methods env body_buf ti_ty gd gu ti_items is_enum ti_generics
       | ItemTrait _ -> () (* Traits are emitted in Phase 8 *))
     prog.items;
   (* Assemble final output *)
