@@ -301,6 +301,24 @@ fn main() {
     "uses Option[Status]" true
     (contains go "Option[Status]")
 
+(* Regression: Some(0) must emit new(int64(0)) not new(0) to avoid *int vs *int64 *)
+let test_option_literal_int () =
+  let src =
+    {|
+fn get_zero() -> Option<i64> {
+    Some(0)
+}
+
+fn main() {
+    let r = get_zero();
+    println("done");
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"done\n" src in
+  Alcotest.(check bool) "returns *int64" true (contains go "*int64");
+  Alcotest.(check bool) "literal is typed" true (contains go "int64(0)")
+
 (* ---------- Result tests ---------- *)
 
 let test_result_basic () =
@@ -1334,6 +1352,7 @@ let () =
           Alcotest.test_case "non-nullable option" `Quick
             test_option_non_nullable;
           Alcotest.test_case "nullable option" `Quick test_option_nullable;
+          Alcotest.test_case "literal int option" `Quick test_option_literal_int;
         ] );
       ( "result",
         [

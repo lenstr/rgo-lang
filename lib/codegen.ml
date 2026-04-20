@@ -835,6 +835,34 @@ and gen_return_none env buf =
       else Buffer.add_string buf "return nil"
   | _ -> Buffer.add_string buf "return nil"
 
+and gen_new_expr env buf indent (inner_ty : Ast.ty option) arg =
+  (* Emit new(ty(lit)) for literal args to avoid Go untyped constant issues
+     (e.g., new(0) produces *int, but we need *int64). *)
+  Buffer.add_string buf "new(";
+  let needs_cast =
+    match (inner_ty, arg) with
+    | Some ty, Ast.ExprLit (LitInt _) ->
+        let gt = go_type env ty in
+        if gt <> "int" then begin
+          Buffer.add_string buf gt;
+          Buffer.add_char buf '(';
+          true
+        end
+        else false
+    | Some ty, Ast.ExprLit (LitFloat _) ->
+        let gt = go_type env ty in
+        if gt <> "float64" then begin
+          Buffer.add_string buf gt;
+          Buffer.add_char buf '(';
+          true
+        end
+        else false
+    | _ -> false
+  in
+  gen_expr env buf indent CtxExpr arg;
+  if needs_cast then Buffer.add_char buf ')';
+  Buffer.add_char buf ')'
+
 and gen_some env buf indent arg =
   match infer_expr_type env arg with
   | Some inner when is_nullable_ty env inner ->
@@ -842,10 +870,7 @@ and gen_some env buf indent arg =
       Printf.bprintf buf "rgo_some[%s](" (go_type env inner);
       gen_expr env buf indent CtxExpr arg;
       Buffer.add_char buf ')'
-  | _ ->
-      Buffer.add_string buf "new(";
-      gen_expr env buf indent CtxExpr arg;
-      Buffer.add_char buf ')'
+  | inferred -> gen_new_expr env buf indent inferred arg
 
 and gen_some_for_type env buf indent (inner_ty : Ast.ty) arg =
   if is_nullable_ty env inner_ty then begin
@@ -854,11 +879,7 @@ and gen_some_for_type env buf indent (inner_ty : Ast.ty) arg =
     gen_expr env buf indent CtxExpr arg;
     Buffer.add_char buf ')'
   end
-  else begin
-    Buffer.add_string buf "new(";
-    gen_expr env buf indent CtxExpr arg;
-    Buffer.add_char buf ')'
-  end
+  else gen_new_expr env buf indent (Some inner_ty) arg
 
 and gen_path_call env buf indent type_name fn_name args =
   (* Check if it's an enum variant constructor *)
