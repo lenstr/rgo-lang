@@ -1133,6 +1133,29 @@ trait Formatter<T: Show> {
 fn main() {}
 |}
 
+(* --- Regression: default trait method can call sibling trait methods via self --- *)
+let valid_default_trait_self_method_call =
+  {|
+trait Summary {
+  fn summary(&self) -> str;
+  fn short(&self) -> str {
+    self.summary()
+  }
+}
+
+struct Article {
+  pub title: str,
+}
+
+impl Summary for Article {
+  fn summary(&self) -> str {
+    self.title
+  }
+}
+
+fn main() {}
+|}
+
 (* ======== Test registration ======== *)
 
 let positive_tests =
@@ -1199,6 +1222,9 @@ let positive_tests =
     ( "outer bound trait default body",
       `Quick,
       pass valid_outer_bound_trait_default_body );
+    ( "default trait self method call",
+      `Quick,
+      pass valid_default_trait_self_method_call );
   ]
 
 let negative_tests =

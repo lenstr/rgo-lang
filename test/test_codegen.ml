@@ -1390,6 +1390,11 @@ let test_loops_example () =
   let _go = compile_and_check ~expected_output:"15\n10\n" src in
   ()
 
+let test_traits_example () =
+  let src = read_file "../examples/traits.rg" in
+  let _go = compile_and_check ~expected_output:"Hello: World\nHello\n" src in
+  ()
+
 (* Regression: generic Go emission *)
 let test_generics_example_go_build () =
   let src = read_file "../examples/generics.rg" in
@@ -1679,6 +1684,36 @@ fn main() {
     |}
   in
   compile_and_check ~expected_output:"R2D2\nbye\n" src |> ignore
+
+(* VAL-TRAIT-014: Default trait methods can call sibling trait methods through Self *)
+let test_trait_default_self_method_call () =
+  let src =
+    {|
+trait Summary {
+  fn summary(&self) -> str;
+  fn short(&self) -> str {
+    self.summary()
+  }
+}
+
+struct Article {
+  pub title: str,
+  pub body: str,
+}
+
+impl Summary for Article {
+  fn summary(&self) -> str {
+    self.title
+  }
+}
+
+fn main() {
+  let a = Article { title: "Hello", body: "World" };
+  println(a.short());
+}
+    |}
+  in
+  compile_and_check ~expected_output:"Hello\n" src |> ignore
 
 (* VAL-TRAIT-006: Generic trait bounds lower correctly *)
 let test_trait_generic_bounds () =
@@ -2050,6 +2085,7 @@ let () =
             test_impl_methods_example;
           Alcotest.test_case "shapes.rg runs" `Quick test_shapes_example;
           Alcotest.test_case "loops.rg runs" `Quick test_loops_example;
+          Alcotest.test_case "traits.rg runs" `Quick test_traits_example;
         ] );
       ( "generics",
         [
@@ -2069,6 +2105,8 @@ let () =
           Alcotest.test_case "enum trait impl" `Quick test_trait_enum_impl;
           Alcotest.test_case "default method synthesis" `Quick
             test_trait_default_method;
+          Alcotest.test_case "default self method call" `Quick
+            test_trait_default_self_method_call;
           Alcotest.test_case "generic trait bounds" `Quick
             test_trait_generic_bounds;
           Alcotest.test_case "Self-based trait APIs" `Quick

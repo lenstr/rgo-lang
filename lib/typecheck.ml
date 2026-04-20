@@ -61,6 +61,8 @@ type env = {
   trait_impls : SSet.t SMap.t; (* type name -> set of trait names implemented *)
   ret_ty : ty option; (* return type of current function *)
   self_ty : ty option; (* type bound to Self in current impl/trait *)
+  current_trait : string option;
+      (* trait name when inside a trait declaration *)
   type_params : string list; (* in-scope generic type params *)
   param_bounds : string list SMap.t;
       (* type_param_name -> list of required trait names *)
@@ -77,6 +79,7 @@ let empty_env =
     trait_impls = SMap.empty;
     ret_ty = None;
     self_ty = None;
+    current_trait = None;
     type_params = [];
     param_bounds = SMap.empty;
   }
@@ -666,8 +669,28 @@ and check_user_method_call env receiver recv_ty method_name arg_types =
     | TSelf -> ( match env.self_ty with Some st -> st | None -> recv_ty)
     | other -> other
   in
-  (* For type parameters with trait bounds, resolve method from trait *)
+  (* Inside a trait declaration, Self resolves to TSelf; look up sibling methods *)
   match resolved_recv with
+  | TSelf -> (
+      match env.current_trait with
+      | Some trait_name -> (
+          match SMap.find_opt trait_name env.traits with
+          | Some tr_info -> (
+              match SMap.find_opt method_name.node tr_info.tr_methods with
+              | Some tms ->
+                  check_fn_args ~env ~span:method_name.span
+                    ~name:method_name.node tms.tms_params arg_types;
+                  tms.tms_ret
+              | None ->
+                  error_at method_name.span "no method '%s' on type %s"
+                    method_name.node (show_ty resolved_recv))
+          | None ->
+              error_at method_name.span "no method '%s' on type %s"
+                method_name.node (show_ty resolved_recv))
+      | None ->
+          error_at method_name.span "no method '%s' on type %s" method_name.node
+            (show_ty resolved_recv))
+  (* For type parameters with trait bounds, resolve method from trait *)
   | TParam p when List.mem p env.type_params -> (
       let bound_traits =
         match SMap.find_opt p env.param_bounds with Some ts -> ts | None -> []
@@ -1648,7 +1671,7 @@ let check_item env (item : item) =
                         fd.fn_name.node ti_trait.node (show_ty tms.tms_ret)
                         (show_ty impl_ret)))
             ti_items)
-  | ItemTrait { t_generics; t_items; _ } ->
+  | ItemTrait { t_name; t_generics; t_items; _ } ->
       let generics =
         List.map (fun (tp : type_param) -> tp.tp_name.node) t_generics
       in
@@ -1659,6 +1682,7 @@ let check_item env (item : item) =
           type_params = generics @ env.type_params;
           param_bounds = outer_bounds;
           self_ty = Some TSelf;
+          current_trait = Some t_name.node;
         }
       in
       List.iter
