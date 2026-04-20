@@ -1,0 +1,363 @@
+{
+  "groupId": "cli-trait-negatives-and-acceptance",
+  "testedAt": "2026-04-20T17:58:12.719098+00:00",
+  "isolation": {
+    "surface": "CLI",
+    "repoRoot": "/home/lenstr/workspace/personal/hack/rgo-lang",
+    "missionDir": "/home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7",
+    "workingTree": "repository working tree directly",
+    "concurrencyLimit": 1,
+    "evidenceDir": "/home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance",
+    "reportPath": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/phase-8-traits-fix/user-testing/flows/cli-trait-negatives-and-acceptance.json"
+  },
+  "toolsUsed": [
+    "Skill: tuistory",
+    "Read",
+    "Grep",
+    "Execute",
+    "TodoWrite"
+  ],
+  "assertions": [
+    {
+      "id": "VAL-TRAIT-008",
+      "title": "Trait impls missing required methods are rejected",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile the dedicated negative `.rg` fixture with the `rgoc` CLI.",
+          "expected": "Compilation fails and surfaces the trait-validation diagnostic required by the assertion.",
+          "observed": "`nix develop --quiet -c dune exec rgoc -- /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-missing-required-method.rg -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-missing-required-method.go` exited 1 and emitted diagnostic text containing `missing required method`; generated Go output present: false."
+        },
+        {
+          "action": "Inspect the compiler diagnostic for the assertion-specific failure mode.",
+          "expected": "Diagnostic text clearly identifies `missing required method`.",
+          "observed": "warning: Git tree '/home/lenstr/workspace/personal/hack/rgo-lang' is dirty\nerror: /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-missing-required-method.rg:6:6: missing required method 'goodbye' in impl Greet for Bob"
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-missing-required-method.log"
+        ],
+        "fixtures": [
+          "phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-missing-required-method.rg"
+        ],
+        "compilerStdout": "phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-missing-required-method.stdout",
+        "compilerStderr": "phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-missing-required-method.stderr",
+        "generatedGoPresent": false,
+        "commands": [
+          {
+            "command": "nix develop --quiet -c dune exec rgoc -- /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-missing-required-method.rg -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-missing-required-method.go",
+            "exitCode": 1
+          }
+        ],
+        "diagnosticExcerpt": "warning: Git tree '/home/lenstr/workspace/personal/hack/rgo-lang' is dirty\nerror: /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-missing-required-method.rg:6:6: missing required method 'goodbye' in impl Greet for Bob"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-TRAIT-009",
+      "title": "Trait impl signature mismatches are rejected",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile the dedicated negative `.rg` fixture with the `rgoc` CLI.",
+          "expected": "Compilation fails and surfaces the trait-validation diagnostic required by the assertion.",
+          "observed": "`nix develop --quiet -c dune exec rgoc -- /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-signature-mismatch.rg -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-signature-mismatch.go` exited 1 and emitted diagnostic text containing `signature mismatch`; generated Go output present: false."
+        },
+        {
+          "action": "Inspect the compiler diagnostic for the assertion-specific failure mode.",
+          "expected": "Diagnostic text clearly identifies `signature mismatch`.",
+          "observed": "warning: Git tree '/home/lenstr/workspace/personal/hack/rgo-lang' is dirty\nerror: /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-signature-mismatch.rg:6:8: signature mismatch for method 'hello' in impl Greet: expected 1 parameter(s), got 0"
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-signature-mismatch.log"
+        ],
+        "fixtures": [
+          "phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-signature-mismatch.rg"
+        ],
+        "compilerStdout": "phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-signature-mismatch.stdout",
+        "compilerStderr": "phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-signature-mismatch.stderr",
+        "generatedGoPresent": false,
+        "commands": [
+          {
+            "command": "nix develop --quiet -c dune exec rgoc -- /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-signature-mismatch.rg -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-signature-mismatch.go",
+            "exitCode": 1
+          }
+        ],
+        "diagnosticExcerpt": "warning: Git tree '/home/lenstr/workspace/personal/hack/rgo-lang' is dirty\nerror: /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-signature-mismatch.rg:6:8: signature mismatch for method 'hello' in impl Greet: expected 1 parameter(s), got 0"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-TRAIT-010",
+      "title": "Duplicate trait impls for the same type are rejected",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile the dedicated negative `.rg` fixture with the `rgoc` CLI.",
+          "expected": "Compilation fails and surfaces the trait-validation diagnostic required by the assertion.",
+          "observed": "`nix develop --quiet -c dune exec rgoc -- /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-duplicate-impl.rg -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-duplicate-impl.go` exited 1 and emitted diagnostic text containing `duplicate impl`; generated Go output present: false."
+        },
+        {
+          "action": "Inspect the compiler diagnostic for the assertion-specific failure mode.",
+          "expected": "Diagnostic text clearly identifies `duplicate impl`.",
+          "observed": "warning: Git tree '/home/lenstr/workspace/personal/hack/rgo-lang' is dirty\nerror: /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-duplicate-impl.rg:11:6: duplicate impl of trait 'Greet' for type 'Bot'"
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-duplicate-impl.log"
+        ],
+        "fixtures": [
+          "phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-duplicate-impl.rg"
+        ],
+        "compilerStdout": "phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-duplicate-impl.stdout",
+        "compilerStderr": "phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-duplicate-impl.stderr",
+        "generatedGoPresent": false,
+        "commands": [
+          {
+            "command": "nix develop --quiet -c dune exec rgoc -- /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-duplicate-impl.rg -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-duplicate-impl.go",
+            "exitCode": 1
+          }
+        ],
+        "diagnosticExcerpt": "warning: Git tree '/home/lenstr/workspace/personal/hack/rgo-lang' is dirty\nerror: /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-duplicate-impl.rg:11:6: duplicate impl of trait 'Greet' for type 'Bot'"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-TRAIT-011",
+      "title": "Bounded generics reject concrete types without required impls",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile the dedicated negative `.rg` fixture with the `rgoc` CLI.",
+          "expected": "Compilation fails and surfaces the trait-validation diagnostic required by the assertion.",
+          "observed": "`nix develop --quiet -c dune exec rgoc -- /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-unsatisfied-bound.rg -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-unsatisfied-bound.go` exited 1 and emitted diagnostic text containing `does not implement trait`; generated Go output present: false."
+        },
+        {
+          "action": "Inspect the compiler diagnostic for the assertion-specific failure mode.",
+          "expected": "Diagnostic text clearly identifies `does not implement trait`.",
+          "observed": "warning: Git tree '/home/lenstr/workspace/personal/hack/rgo-lang' is dirty\nerror: /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-unsatisfied-bound.rg:13:11: type Plain does not implement trait 'Show' (required by bound on T)"
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-unsatisfied-bound.log"
+        ],
+        "fixtures": [
+          "phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-unsatisfied-bound.rg"
+        ],
+        "compilerStdout": "phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-unsatisfied-bound.stdout",
+        "compilerStderr": "phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-unsatisfied-bound.stderr",
+        "generatedGoPresent": false,
+        "commands": [
+          {
+            "command": "nix develop --quiet -c dune exec rgoc -- /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-unsatisfied-bound.rg -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-unsatisfied-bound.go",
+            "exitCode": 1
+          }
+        ],
+        "diagnosticExcerpt": "warning: Git tree '/home/lenstr/workspace/personal/hack/rgo-lang' is dirty\nerror: /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-unsatisfied-bound.rg:13:11: type Plain does not implement trait 'Show' (required by bound on T)"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-TRAIT-012",
+      "title": "Ambiguous method resolution is rejected",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile the dedicated negative `.rg` fixture with the `rgoc` CLI.",
+          "expected": "Compilation fails and surfaces the trait-validation diagnostic required by the assertion.",
+          "observed": "`nix develop --quiet -c dune exec rgoc -- /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-ambiguous-method.rg -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-ambiguous-method.go` exited 1 and emitted diagnostic text containing `ambiguous method`; generated Go output present: false."
+        },
+        {
+          "action": "Inspect the compiler diagnostic for the assertion-specific failure mode.",
+          "expected": "Diagnostic text clearly identifies `ambiguous method`.",
+          "observed": "warning: Git tree '/home/lenstr/workspace/personal/hack/rgo-lang' is dirty\nerror: /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-ambiguous-method.rg:21:13: ambiguous method 'hello' on type Bot: provided by traits Greet, Welcome"
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-ambiguous-method.log"
+        ],
+        "fixtures": [
+          "phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-ambiguous-method.rg"
+        ],
+        "compilerStdout": "phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-ambiguous-method.stdout",
+        "compilerStderr": "phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-ambiguous-method.stderr",
+        "generatedGoPresent": false,
+        "commands": [
+          {
+            "command": "nix develop --quiet -c dune exec rgoc -- /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-ambiguous-method.rg -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-ambiguous-method.go",
+            "exitCode": 1
+          }
+        ],
+        "diagnosticExcerpt": "warning: Git tree '/home/lenstr/workspace/personal/hack/rgo-lang' is dirty\nerror: /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-ambiguous-method.rg:21:13: ambiguous method 'hello' on type Bot: provided by traits Greet, Welcome"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-TRAIT-013",
+      "title": "Trait-enabled generated Go remains formatter-stable and vet-clean",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile the dedicated `.rg` fixture with the `rgoc` CLI.",
+          "expected": "Compilation succeeds and writes a Go file to the requested output path.",
+          "observed": "`nix develop --quiet -c dune exec rgoc -- \u2026 -o \u2026` exited 0 and created `phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-go-cleanliness.go`."
+        },
+        {
+          "action": "Inspect the generated Go artifact for the trait-heavy lowering relevant to the assertion.",
+          "expected": "Generated Go contains the expected trait/generic lowering markers for the compiled fixture.",
+          "observed": "5: type Stringify interface {; 17: func stringify_it[T Stringify](w T) string {; 13: func (self Wrapper) To_str() string {"
+        },
+        {
+          "action": "Run downstream Go validation on the generated artifact.",
+          "expected": "`gofmt -d`, `go build`, `go vet`, and `go run` succeed; runtime output matches the fixture expectation.",
+          "observed": "`gofmt -d`, `go build -o /dev/null`, `go vet`, and `go run` all exited 0; after stripping the flake-shell banner there was no `gofmt` diff and normalized runtime stdout was `wrapped`."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-go-cleanliness.log"
+        ],
+        "fixtures": [
+          "phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-go-cleanliness.rg"
+        ],
+        "generatedGo": [
+          "phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-go-cleanliness.go"
+        ],
+        "runtimeStdout": "phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-go-cleanliness.stdout",
+        "gofmtDiff": "phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-go-cleanliness.gofmt.diff",
+        "goBuildStderr": "phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-go-cleanliness.build.stderr",
+        "goVetStderr": "phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-go-cleanliness.vet.stderr",
+        "generatedGoChecks": [
+          "5: type Stringify interface {",
+          "17: func stringify_it[T Stringify](w T) string {",
+          "13: func (self Wrapper) To_str() string {"
+        ],
+        "toolchain": {
+          "log": "phase-8-traits-fix/cli-trait-negatives-and-acceptance/toolchain.log",
+          "observedRgocVersion": "rgo nix dev shell\n  go:    go1.26.1\n  ocaml: 5.4.1\n  dune:  3.21.1\n  opam:  2.5.0\nrgoc v0.0.1",
+          "observedGoVersion": "rgo nix dev shell\n  go:    go1.26.1\n  ocaml: 5.4.1\n  dune:  3.21.1\n  opam:  2.5.0\ngo version go1.26.1 linux/amd64"
+        },
+        "commands": [
+          {
+            "command": "nix develop --quiet -c dune exec rgoc -- /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-go-cleanliness.rg -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-go-cleanliness.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c gofmt -d /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-go-cleanliness.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go build -o /dev/null /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-go-cleanliness.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go vet /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-go-cleanliness.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go run /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/trait-go-cleanliness.go",
+            "exitCode": 0
+          }
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-002",
+      "title": "Final MVP acceptance program compiles and runs as one integrated flow",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile the dedicated `.rg` fixture with the `rgoc` CLI.",
+          "expected": "Compilation succeeds and writes a Go file to the requested output path.",
+          "observed": "`nix develop --quiet -c dune exec rgoc -- \u2026 -o \u2026` exited 0 and created `phase-8-traits-fix/cli-trait-negatives-and-acceptance/final-mvp-acceptance.go`."
+        },
+        {
+          "action": "Inspect the generated Go artifact for the trait-heavy lowering relevant to the assertion.",
+          "expected": "Generated Go contains the expected trait/generic lowering markers for the compiled fixture.",
+          "observed": "8: type Describe interface {; 12: type Task struct {; 33: type Priority interface {; 78: func print_desc[T Describe](item T) {; 82: func find_task(tasks []string, target string) *string {; 127: \tscores := make(map[string]int64)"
+        },
+        {
+          "action": "Run downstream Go validation on the generated artifact.",
+          "expected": "`gofmt -d`, `go build`, `go vet`, and `go run` succeed; runtime output matches the fixture expectation.",
+          "observed": "`gofmt -d`, `go build -o /dev/null`, `go vet`, and `go run` all exited 0; after stripping the flake-shell banner there was no `gofmt` diff and normalized runtime stdout matched the expected acceptance output."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "phase-8-traits-fix/cli-trait-negatives-and-acceptance/final-mvp-acceptance.log"
+        ],
+        "fixtures": [
+          "phase-8-traits-fix/cli-trait-negatives-and-acceptance/final-mvp-acceptance.rg"
+        ],
+        "generatedGo": [
+          "phase-8-traits-fix/cli-trait-negatives-and-acceptance/final-mvp-acceptance.go"
+        ],
+        "runtimeStdout": "phase-8-traits-fix/cli-trait-negatives-and-acceptance/final-mvp-acceptance.stdout",
+        "gofmtDiff": "phase-8-traits-fix/cli-trait-negatives-and-acceptance/final-mvp-acceptance.gofmt.diff",
+        "goBuildStderr": "phase-8-traits-fix/cli-trait-negatives-and-acceptance/final-mvp-acceptance.build.stderr",
+        "goVetStderr": "phase-8-traits-fix/cli-trait-negatives-and-acceptance/final-mvp-acceptance.vet.stderr",
+        "generatedGoChecks": [
+          "8: type Describe interface {",
+          "12: type Task struct {",
+          "33: type Priority interface {",
+          "78: func print_desc[T Describe](item T) {",
+          "82: func find_task(tasks []string, target string) *string {",
+          "127: \tscores := make(map[string]int64)"
+        ],
+        "toolchain": {
+          "log": "phase-8-traits-fix/cli-trait-negatives-and-acceptance/toolchain.log",
+          "observedRgocVersion": "rgo nix dev shell\n  go:    go1.26.1\n  ocaml: 5.4.1\n  dune:  3.21.1\n  opam:  2.5.0\nrgoc v0.0.1",
+          "observedGoVersion": "rgo nix dev shell\n  go:    go1.26.1\n  ocaml: 5.4.1\n  dune:  3.21.1\n  opam:  2.5.0\ngo version go1.26.1 linux/amd64"
+        },
+        "commands": [
+          {
+            "command": "nix develop --quiet -c dune exec rgoc -- /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/final-mvp-acceptance.rg -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/final-mvp-acceptance.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c gofmt -d /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/final-mvp-acceptance.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go build -o /dev/null /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/final-mvp-acceptance.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go vet /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/final-mvp-acceptance.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go run /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-negatives-and-acceptance/final-mvp-acceptance.go",
+            "exitCode": 0
+          }
+        ]
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [
+    {
+      "description": "`nix develop --quiet -c ...` prepends the flake-shell banner on stdout and a dirty-tree warning on stderr, so raw outputs include environment noise unrelated to the compiler or Go tool results.",
+      "resolved": true,
+      "resolution": "Kept full command transcripts in `*.log`, normalized `*.stdout` files to trailing program output, and treated `gofmt` as clean when the only stdout content was the flake-shell banner.",
+      "affectedAssertions": [
+        "VAL-TRAIT-008",
+        "VAL-TRAIT-009",
+        "VAL-TRAIT-010",
+        "VAL-TRAIT-011",
+        "VAL-TRAIT-012",
+        "VAL-TRAIT-013",
+        "VAL-CROSS-002"
+      ]
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 7 assigned CLI assertions: 7 passed, 0 failed, 0 blocked. Trait-negative compiler diagnostics and the trait-heavy acceptance flows were exercised through `rgoc` plus downstream Go tooling in the Nix flake environment."
+}

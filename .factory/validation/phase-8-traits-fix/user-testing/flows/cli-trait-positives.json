@@ -1,0 +1,481 @@
+{
+  "groupId": "cli-trait-positives",
+  "testedAt": "2026-04-20T17:53:15.796126+00:00",
+  "isolation": {
+    "surface": "CLI",
+    "repoRoot": "/home/lenstr/workspace/personal/hack/rgo-lang",
+    "missionDir": "/home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7",
+    "workingTree": "repository working tree directly",
+    "concurrencyLimit": 1,
+    "evidenceDir": "/home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives",
+    "reportPath": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/phase-8-traits-fix/user-testing/flows/cli-trait-positives.json"
+  },
+  "toolsUsed": [
+    "Skill: tuistory",
+    "Read",
+    "Grep",
+    "Execute",
+    "TodoWrite"
+  ],
+  "assertions": [
+    {
+      "id": "VAL-TRAIT-001",
+      "title": "Trait declarations without Self lower to working Go interfaces",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile the dedicated `.rg` fixture with the `rgoc` CLI.",
+          "expected": "Compilation succeeds and writes a Go file to the requested output path.",
+          "observed": "`nix develop --quiet -c dune exec rgoc -- /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-no-self.rg -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-no-self.go` exited 0 and created `phase-8-traits-fix/cli-trait-positives/trait-no-self.go`."
+        },
+        {
+          "action": "Inspect the generated Go artifact for the trait-specific lowering expected by the assertion.",
+          "expected": "Generated Go shows the required interface / impl lowering for the trait feature under test.",
+          "observed": "Generated Go contains `type Greet interface {` and `func (self Person) Hello() string {`; downstream `go run` printed `Alice`."
+        },
+        {
+          "action": "Run downstream Go validation on the generated artifact.",
+          "expected": "`gofmt -d`, `go build`, `go vet`, and `go run` succeed; runtime output matches the fixture expectation.",
+          "observed": "`gofmt -d`, `go build -o /dev/null`, `go vet`, and `go run` all exited 0. Normalized runtime stdout was `Alice`."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "phase-8-traits-fix/cli-trait-positives/trait-no-self.log"
+        ],
+        "fixtures": [
+          "phase-8-traits-fix/cli-trait-positives/trait-no-self.rg"
+        ],
+        "generatedGo": [
+          "phase-8-traits-fix/cli-trait-positives/trait-no-self.go"
+        ],
+        "runtimeStdout": "phase-8-traits-fix/cli-trait-positives/trait-no-self.stdout",
+        "generatedGoChecks": [
+          "5: type Greet interface {",
+          "6: \tHello() string",
+          "13: func (self Person) Hello() string {"
+        ],
+        "commands": [
+          {
+            "command": "nix develop --quiet -c dune exec rgoc -- /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-no-self.rg -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-no-self.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c gofmt -d /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-no-self.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go build -o /dev/null /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-no-self.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go vet /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-no-self.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go run /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-no-self.go",
+            "exitCode": 0
+          }
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-TRAIT-002",
+      "title": "Trait declarations with Self lower to working Go 1.26 interfaces",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile the dedicated `.rg` fixture with the `rgoc` CLI.",
+          "expected": "Compilation succeeds and writes a Go file to the requested output path.",
+          "observed": "`nix develop --quiet -c dune exec rgoc -- /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-with-self.rg -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-with-self.go` exited 0 and created `phase-8-traits-fix/cli-trait-positives/trait-with-self.go`."
+        },
+        {
+          "action": "Inspect the generated Go artifact for the trait-specific lowering expected by the assertion.",
+          "expected": "Generated Go shows the required interface / impl lowering for the trait feature under test.",
+          "observed": "Generated Go contains `type Eq[Self any] interface {` and `Eq(other Self) bool`; `nix develop -c go version` reported `go1.26.1`; downstream `go run` printed `equal`."
+        },
+        {
+          "action": "Run downstream Go validation on the generated artifact.",
+          "expected": "`gofmt -d`, `go build`, `go vet`, and `go run` succeed; runtime output matches the fixture expectation.",
+          "observed": "`gofmt -d`, `go build -o /dev/null`, `go vet`, and `go run` all exited 0. Normalized runtime stdout was `equal`."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "phase-8-traits-fix/cli-trait-positives/trait-with-self.log"
+        ],
+        "fixtures": [
+          "phase-8-traits-fix/cli-trait-positives/trait-with-self.rg"
+        ],
+        "generatedGo": [
+          "phase-8-traits-fix/cli-trait-positives/trait-with-self.go"
+        ],
+        "runtimeStdout": "phase-8-traits-fix/cli-trait-positives/trait-with-self.stdout",
+        "generatedGoChecks": [
+          "5: type Eq[Self any] interface {",
+          "6: \tEq(other Self) bool",
+          "17: func all_equal[T Eq[T]](a T, b T) bool {"
+        ],
+        "commands": [
+          {
+            "command": "nix develop --quiet -c dune exec rgoc -- /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-with-self.rg -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-with-self.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c gofmt -d /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-with-self.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go build -o /dev/null /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-with-self.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go vet /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-with-self.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go run /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-with-self.go",
+            "exitCode": 0
+          }
+        ],
+        "toolchain": {
+          "log": "phase-8-traits-fix/cli-trait-positives/toolchain.log",
+          "observedGoVersion": "go version go1.26.1 linux/amd64"
+        }
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-TRAIT-003",
+      "title": "Struct trait impls satisfy generated interfaces",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile the dedicated `.rg` fixture with the `rgoc` CLI.",
+          "expected": "Compilation succeeds and writes a Go file to the requested output path.",
+          "observed": "`nix develop --quiet -c dune exec rgoc -- /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-struct-impl.rg -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-struct-impl.go` exited 0 and created `phase-8-traits-fix/cli-trait-positives/trait-struct-impl.go`."
+        },
+        {
+          "action": "Inspect the generated Go artifact for the trait-specific lowering expected by the assertion.",
+          "expected": "Generated Go shows the required interface / impl lowering for the trait feature under test.",
+          "observed": "Generated Go contains `type Display interface {` and `func (self Counter) Show() string {`; the trait-bounded call returned `counter` at runtime."
+        },
+        {
+          "action": "Run downstream Go validation on the generated artifact.",
+          "expected": "`gofmt -d`, `go build`, `go vet`, and `go run` succeed; runtime output matches the fixture expectation.",
+          "observed": "`gofmt -d`, `go build -o /dev/null`, `go vet`, and `go run` all exited 0. Normalized runtime stdout was `counter`."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "phase-8-traits-fix/cli-trait-positives/trait-struct-impl.log"
+        ],
+        "fixtures": [
+          "phase-8-traits-fix/cli-trait-positives/trait-struct-impl.rg"
+        ],
+        "generatedGo": [
+          "phase-8-traits-fix/cli-trait-positives/trait-struct-impl.go"
+        ],
+        "runtimeStdout": "phase-8-traits-fix/cli-trait-positives/trait-struct-impl.stdout",
+        "generatedGoChecks": [
+          "5: type Display interface {",
+          "13: func (self Counter) Show() string {",
+          "18: \treturn item.Show()"
+        ],
+        "commands": [
+          {
+            "command": "nix develop --quiet -c dune exec rgoc -- /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-struct-impl.rg -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-struct-impl.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c gofmt -d /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-struct-impl.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go build -o /dev/null /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-struct-impl.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go vet /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-struct-impl.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go run /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-struct-impl.go",
+            "exitCode": 0
+          }
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-TRAIT-004",
+      "title": "Enum trait impls satisfy generated interfaces",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile the dedicated `.rg` fixture with the `rgoc` CLI.",
+          "expected": "Compilation succeeds and writes a Go file to the requested output path.",
+          "observed": "`nix develop --quiet -c dune exec rgoc -- /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-enum-impl.rg -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-enum-impl.go` exited 0 and created `phase-8-traits-fix/cli-trait-positives/trait-enum-impl.go`."
+        },
+        {
+          "action": "Inspect the generated Go artifact for the trait-specific lowering expected by the assertion.",
+          "expected": "Generated Go shows the required interface / impl lowering for the trait feature under test.",
+          "observed": "Generated Go contains `type Describe interface {`, a `type Shape interface {` sum type, and synthesized `Describe` methods for both `ShapeCircle` and `ShapeSquare`; runtime printed `a shape`."
+        },
+        {
+          "action": "Run downstream Go validation on the generated artifact.",
+          "expected": "`gofmt -d`, `go build`, `go vet`, and `go run` succeed; runtime output matches the fixture expectation.",
+          "observed": "`gofmt -d`, `go build -o /dev/null`, `go vet`, and `go run` all exited 0. Normalized runtime stdout was `a shape`."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "phase-8-traits-fix/cli-trait-positives/trait-enum-impl.log"
+        ],
+        "fixtures": [
+          "phase-8-traits-fix/cli-trait-positives/trait-enum-impl.rg"
+        ],
+        "generatedGo": [
+          "phase-8-traits-fix/cli-trait-positives/trait-enum-impl.go"
+        ],
+        "runtimeStdout": "phase-8-traits-fix/cli-trait-positives/trait-enum-impl.stdout",
+        "generatedGoChecks": [
+          "5: type Describe interface {",
+          "9: type Shape interface {",
+          "30: func (self ShapeCircle) Describe() string {",
+          "34: func (self ShapeSquare) Describe() string {"
+        ],
+        "commands": [
+          {
+            "command": "nix develop --quiet -c dune exec rgoc -- /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-enum-impl.rg -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-enum-impl.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c gofmt -d /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-enum-impl.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go build -o /dev/null /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-enum-impl.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go vet /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-enum-impl.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go run /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-enum-impl.go",
+            "exitCode": 0
+          }
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-TRAIT-005",
+      "title": "Default trait methods are synthesized when omitted",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile the dedicated `.rg` fixture with the `rgoc` CLI.",
+          "expected": "Compilation succeeds and writes a Go file to the requested output path.",
+          "observed": "`nix develop --quiet -c dune exec rgoc -- /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-default-method.rg -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-default-method.go` exited 0 and created `phase-8-traits-fix/cli-trait-positives/trait-default-method.go`."
+        },
+        {
+          "action": "Inspect the generated Go artifact for the trait-specific lowering expected by the assertion.",
+          "expected": "Generated Go shows the required interface / impl lowering for the trait feature under test.",
+          "observed": "Generated Go materialized the omitted default method as `func (self Bot) Goodbye() string { return \"bye\" }`; runtime printed `R2D2` then `bye`."
+        },
+        {
+          "action": "Run downstream Go validation on the generated artifact.",
+          "expected": "`gofmt -d`, `go build`, `go vet`, and `go run` succeed; runtime output matches the fixture expectation.",
+          "observed": "`gofmt -d`, `go build -o /dev/null`, `go vet`, and `go run` all exited 0. Normalized runtime stdout was `R2D2\nbye`."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "phase-8-traits-fix/cli-trait-positives/trait-default-method.log"
+        ],
+        "fixtures": [
+          "phase-8-traits-fix/cli-trait-positives/trait-default-method.rg"
+        ],
+        "generatedGo": [
+          "phase-8-traits-fix/cli-trait-positives/trait-default-method.go"
+        ],
+        "runtimeStdout": "phase-8-traits-fix/cli-trait-positives/trait-default-method.stdout",
+        "generatedGoChecks": [
+          "5: type Greet interface {",
+          "18: func (self Bot) Goodbye() string {",
+          "19: \treturn \"bye\""
+        ],
+        "commands": [
+          {
+            "command": "nix develop --quiet -c dune exec rgoc -- /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-default-method.rg -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-default-method.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c gofmt -d /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-default-method.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go build -o /dev/null /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-default-method.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go vet /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-default-method.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go run /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-default-method.go",
+            "exitCode": 0
+          }
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-TRAIT-006",
+      "title": "Generic trait bounds lower correctly in Go",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile the dedicated `.rg` fixture with the `rgoc` CLI.",
+          "expected": "Compilation succeeds and writes a Go file to the requested output path.",
+          "observed": "`nix develop --quiet -c dune exec rgoc -- /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-generic-bounds.rg -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-generic-bounds.go` exited 0 and created `phase-8-traits-fix/cli-trait-positives/trait-generic-bounds.go`."
+        },
+        {
+          "action": "Inspect the generated Go artifact for the trait-specific lowering expected by the assertion.",
+          "expected": "Generated Go shows the required interface / impl lowering for the trait feature under test.",
+          "observed": "Generated Go contains separate `Show` and `Debug` interfaces plus a combined generic bound `func print_both[T interface { ... }]`; runtime printed both lines as `test`."
+        },
+        {
+          "action": "Run downstream Go validation on the generated artifact.",
+          "expected": "`gofmt -d`, `go build`, `go vet`, and `go run` succeed; runtime output matches the fixture expectation.",
+          "observed": "`gofmt -d`, `go build -o /dev/null`, `go vet`, and `go run` all exited 0. Normalized runtime stdout was `test\ntest`."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "phase-8-traits-fix/cli-trait-positives/trait-generic-bounds.log"
+        ],
+        "fixtures": [
+          "phase-8-traits-fix/cli-trait-positives/trait-generic-bounds.rg"
+        ],
+        "generatedGo": [
+          "phase-8-traits-fix/cli-trait-positives/trait-generic-bounds.go"
+        ],
+        "runtimeStdout": "phase-8-traits-fix/cli-trait-positives/trait-generic-bounds.stdout",
+        "generatedGoChecks": [
+          "5: type Show interface {",
+          "9: type Debug interface {",
+          "25: func print_both[T interface {",
+          "5: type Show interface {",
+          "9: type Debug interface {"
+        ],
+        "commands": [
+          {
+            "command": "nix develop --quiet -c dune exec rgoc -- /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-generic-bounds.rg -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-generic-bounds.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c gofmt -d /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-generic-bounds.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go build -o /dev/null /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-generic-bounds.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go vet /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-generic-bounds.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go run /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-generic-bounds.go",
+            "exitCode": 0
+          }
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-TRAIT-007",
+      "title": "Self-based trait APIs work through generic calls",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile the dedicated `.rg` fixture with the `rgoc` CLI.",
+          "expected": "Compilation succeeds and writes a Go file to the requested output path.",
+          "observed": "`nix develop --quiet -c dune exec rgoc -- /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-self-generic.rg -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-self-generic.go` exited 0 and created `phase-8-traits-fix/cli-trait-positives/trait-self-generic.go`."
+        },
+        {
+          "action": "Inspect the generated Go artifact for the trait-specific lowering expected by the assertion.",
+          "expected": "Generated Go shows the required interface / impl lowering for the trait feature under test.",
+          "observed": "Generated Go contains `type Eq[Self any] interface {` and `func are_equal[T Eq[T]](a T, b T) bool { return a.Eq(b) }`; runtime printed `yes`."
+        },
+        {
+          "action": "Run downstream Go validation on the generated artifact.",
+          "expected": "`gofmt -d`, `go build`, `go vet`, and `go run` succeed; runtime output matches the fixture expectation.",
+          "observed": "`gofmt -d`, `go build -o /dev/null`, `go vet`, and `go run` all exited 0. Normalized runtime stdout was `yes`."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "phase-8-traits-fix/cli-trait-positives/trait-self-generic.log"
+        ],
+        "fixtures": [
+          "phase-8-traits-fix/cli-trait-positives/trait-self-generic.rg"
+        ],
+        "generatedGo": [
+          "phase-8-traits-fix/cli-trait-positives/trait-self-generic.go"
+        ],
+        "runtimeStdout": "phase-8-traits-fix/cli-trait-positives/trait-self-generic.stdout",
+        "generatedGoChecks": [
+          "5: type Eq[Self any] interface {",
+          "17: func are_equal[T Eq[T]](a T, b T) bool {",
+          "18: \treturn a.Eq(b)"
+        ],
+        "commands": [
+          {
+            "command": "nix develop --quiet -c dune exec rgoc -- /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-self-generic.rg -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-self-generic.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c gofmt -d /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-self-generic.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go build -o /dev/null /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-self-generic.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go vet /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-self-generic.go",
+            "exitCode": 0
+          },
+          {
+            "command": "nix develop --quiet -c go run /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-fix/cli-trait-positives/trait-self-generic.go",
+            "exitCode": 0
+          }
+        ]
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [
+    {
+      "description": "`nix develop -c ...` prepends the flake shell banner to stdout for rgoc/go/gofmt commands, so raw command output includes environment lines before the actual program output.",
+      "resolved": true,
+      "resolution": "Saved full command transcripts in `*.log` files and normalized the dedicated `*.stdout` files to the trailing program output only when evaluating runtime expectations.",
+      "affectedAssertions": [
+        "VAL-TRAIT-001",
+        "VAL-TRAIT-002",
+        "VAL-TRAIT-003",
+        "VAL-TRAIT-004",
+        "VAL-TRAIT-005",
+        "VAL-TRAIT-006",
+        "VAL-TRAIT-007"
+      ]
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 7 trait-positive CLI assertions through `rgoc` and generated Go artifacts: 7 passed, 0 failed, 0 blocked. All seven assigned assertions passed on Go 1.26.1 with successful `gofmt -d`, `go build`, `go vet`, and `go run` checks."
+}
