@@ -62,6 +62,8 @@ type env = {
   ret_ty : ty option; (* return type of current function *)
   self_ty : ty option; (* type bound to Self in current impl/trait *)
   type_params : string list; (* in-scope generic type params *)
+  param_bounds : string list SMap.t;
+      (* type_param_name -> list of required trait names *)
 }
 
 let empty_env =
@@ -76,6 +78,7 @@ let empty_env =
     ret_ty = None;
     self_ty = None;
     type_params = [];
+    param_bounds = SMap.empty;
   }
 
 let push_scope env = { env with values = SMap.empty :: env.values }
@@ -666,23 +669,36 @@ and check_user_method_call env receiver recv_ty method_name arg_types =
   (* For type parameters with trait bounds, resolve method from trait *)
   match resolved_recv with
   | TParam p when List.mem p env.type_params -> (
-      let found_in_trait =
-        SMap.fold
-          (fun _trait_name tr_info acc ->
-            match acc with
-            | Some _ -> acc
-            | None -> SMap.find_opt method_name.node tr_info.tr_methods)
-          env.traits None
+      let bound_traits =
+        match SMap.find_opt p env.param_bounds with Some ts -> ts | None -> []
       in
-      match found_in_trait with
-      | Some tms ->
-          (* Substitute Self with the receiver type (TParam) for compatibility *)
+      (* Only search traits declared as bounds on this type parameter *)
+      let providing_traits =
+        List.filter_map
+          (fun trait_name ->
+            match SMap.find_opt trait_name env.traits with
+            | Some tr_info -> (
+                match SMap.find_opt method_name.node tr_info.tr_methods with
+                | Some tms -> Some (trait_name, tms)
+                | None -> None)
+            | None -> None)
+          bound_traits
+      in
+      match providing_traits with
+      | [ (_, tms) ] ->
           let params = List.map (subst_self resolved_recv) tms.tms_params in
           let ret = subst_self resolved_recv tms.tms_ret in
           check_fn_args ~env ~span:method_name.span ~name:method_name.node
             params arg_types;
           ret
-      | None ->
+      | _ :: _ ->
+          let names =
+            List.map fst providing_traits |> List.sort String.compare
+          in
+          error_at method_name.span
+            "ambiguous method '%s' on type %s: provided by traits %s"
+            method_name.node (show_ty resolved_recv) (String.concat ", " names)
+      | [] ->
           error_at method_name.span "no method '%s' on type %s" method_name.node
             (show_ty resolved_recv))
   | _ -> (
@@ -1439,7 +1455,24 @@ let check_fn_decl env (fd : fn_decl) =
   let generics =
     List.map (fun (tp : type_param) -> tp.tp_name.node) fd.fn_generics
   in
-  let fn_env = { env with type_params = generics @ env.type_params } in
+  let bounds_map =
+    List.fold_left
+      (fun acc (tp : type_param) ->
+        match tp.tp_bound with
+        | None | Some [] -> acc
+        | Some bs ->
+            SMap.add tp.tp_name.node
+              (List.map (fun (b : ident located) -> b.node) bs)
+              acc)
+      env.param_bounds fd.fn_generics
+  in
+  let fn_env =
+    {
+      env with
+      type_params = generics @ env.type_params;
+      param_bounds = bounds_map;
+    }
+  in
   let fn_env = push_scope fn_env in
   (* Add parameters *)
   let fn_env =
@@ -1590,7 +1623,33 @@ let check_item env (item : item) =
                         fd.fn_name.node ti_trait.node (show_ty tms.tms_ret)
                         (show_ty impl_ret)))
             ti_items)
-  | ItemTrait _ -> ()
+  | ItemTrait { t_generics; t_items; _ } ->
+      let generics =
+        List.map (fun (tp : type_param) -> tp.tp_name.node) t_generics
+      in
+      let trait_env =
+        {
+          env with
+          type_params = generics @ env.type_params;
+          self_ty = Some TSelf;
+        }
+      in
+      List.iter
+        (fun ti ->
+          match ti with
+          | TraitFnDecl fd ->
+              let method_env =
+                match fd.fn_self with
+                | Some self_p ->
+                    let is_mut =
+                      match self_p with SelfMutRef -> true | _ -> false
+                    in
+                    add_value "self" TSelf ~is_mut trait_env
+                | None -> trait_env
+              in
+              check_fn_decl method_env fd
+          | TraitFnSig _ -> ())
+        t_items
 
 (* ---------- main entry points ---------- *)
 

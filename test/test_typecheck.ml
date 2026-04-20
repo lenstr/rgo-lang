@@ -1010,6 +1010,73 @@ fn main() {
 }
 |}
 
+(* --- Regression: bounded generic method call works --- *)
+let valid_bounded_generic_method =
+  {|
+trait Show {
+  fn show(&self) -> str;
+}
+
+struct Msg { text: str }
+
+impl Show for Msg {
+  fn show(&self) -> str { self.text }
+}
+
+fn display<T: Show>(item: T) -> str {
+  item.show()
+}
+
+fn main() {
+  let m = Msg { text: "ok" };
+  let _ = display(m);
+}
+|}
+
+(* --- Regression: bounded generic ambiguous method --- *)
+let bounded_generic_ambiguous_method =
+  {|
+trait Greet {
+  fn hello(&self) -> str;
+}
+
+trait Welcome {
+  fn hello(&self) -> str;
+}
+
+fn say<T: Greet + Welcome>(item: T) -> str {
+  item.hello()
+}
+
+fn main() {}
+|}
+
+(* --- Regression: unconstrained generic cannot call trait method --- *)
+let unconstrained_generic_trait_method =
+  {|
+trait Show {
+  fn show(&self) -> str;
+}
+
+fn display<T>(item: T) -> str {
+  item.show()
+}
+
+fn main() {}
+|}
+
+(* --- Regression: default trait method body is typechecked --- *)
+let invalid_default_method_body =
+  {|
+trait Broken {
+  fn bad(&self) -> i64 {
+    "not an int"
+  }
+}
+
+fn main() {}
+|}
+
 (* ======== Test registration ======== *)
 
 let positive_tests =
@@ -1068,6 +1135,7 @@ let positive_tests =
     ( "generic constructor typed let",
       `Quick,
       pass valid_generic_constructor_typed_let );
+    ("bounded generic method call", `Quick, pass valid_bounded_generic_method);
   ]
 
 let negative_tests =
@@ -1165,6 +1233,15 @@ let negative_tests =
     ( "ambiguous method resolution",
       `Quick,
       fail ~expect:"ambiguous method" ambiguous_method );
+    ( "bounded generic ambiguous method",
+      `Quick,
+      fail ~expect:"ambiguous method" bounded_generic_ambiguous_method );
+    ( "unconstrained generic trait method",
+      `Quick,
+      fail ~expect:"no method" unconstrained_generic_trait_method );
+    ( "invalid default method body",
+      `Quick,
+      fail ~expect:"type mismatch" invalid_default_method_body );
   ]
 
 let () =
