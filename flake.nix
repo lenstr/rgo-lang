@@ -19,7 +19,6 @@
             pkgs.git
             pkgs.gnumake
             pkgs.pkg-config
-            pkgs.bubblewrap
             pkgs.m4
             pkgs.patch
             pkgs.go_1_26
@@ -36,6 +35,8 @@
             ocamlPkgs.ocamlformat
             ocamlPkgs.ocaml-lsp
             ocamlPkgs.bisect_ppx
+          ] ++ pkgs.lib.optionals pkgs.stdenv.isLinux [
+            pkgs.bubblewrap
           ];
 
           shellHook = ''
