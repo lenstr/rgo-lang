@@ -944,6 +944,72 @@ fn main() {
 }
 |}
 
+(* --- VAL-TRAIT-010: Duplicate trait impls --- *)
+let duplicate_trait_impl =
+  {|
+trait Greet {
+  fn hello(&self) -> str;
+}
+
+struct Bot { name: str }
+
+impl Greet for Bot {
+  fn hello(&self) -> str { self.name }
+}
+
+impl Greet for Bot {
+  fn hello(&self) -> str { "hi" }
+}
+
+fn main() {}
+|}
+
+(* --- VAL-TRAIT-011: Bounded generics reject types without impl --- *)
+let unsatisfied_trait_bound =
+  {|
+trait Show {
+  fn show(&self) -> str;
+}
+
+struct Plain { val: i64 }
+
+fn display<T: Show>(item: T) -> str {
+  item.show()
+}
+
+fn main() {
+  let p = Plain { val: 1 };
+  let _ = display(p);
+}
+|}
+
+(* --- VAL-TRAIT-012: Ambiguous method resolution --- *)
+let ambiguous_method =
+  {|
+trait Greet {
+  fn hello(&self) -> str;
+}
+
+trait Welcome {
+  fn hello(&self) -> str;
+}
+
+struct Bot { name: str }
+
+impl Greet for Bot {
+  fn hello(&self) -> str { "greet" }
+}
+
+impl Welcome for Bot {
+  fn hello(&self) -> str { "welcome" }
+}
+
+fn main() {
+  let b = Bot { name: "R2" };
+  let _ = b.hello();
+}
+|}
+
 (* ======== Test registration ======== *)
 
 let positive_tests =
@@ -1090,6 +1156,15 @@ let negative_tests =
     ( "generic cross-param return rejected",
       `Quick,
       fail ~expect:"type mismatch" invalid_generic_param_cross_return );
+    ( "duplicate trait impl",
+      `Quick,
+      fail ~expect:"duplicate impl" duplicate_trait_impl );
+    ( "unsatisfied trait bound",
+      `Quick,
+      fail ~expect:"does not implement trait" unsatisfied_trait_bound );
+    ( "ambiguous method resolution",
+      `Quick,
+      fail ~expect:"ambiguous method" ambiguous_method );
   ]
 
 let () =

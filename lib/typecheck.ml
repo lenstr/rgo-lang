@@ -21,7 +21,13 @@ type struct_info = { si_fields : (string * ty * bool (* pub *)) list }
 type enum_info = { ei_variants : (string * variant_shape) list }
 and variant_shape = VUnit | VTuple of ty list | VStruct of (string * ty) list
 
-type fn_info = { fi_params : ty list; fi_ret : ty }
+type fn_info = {
+  fi_params : ty list;
+  fi_ret : ty;
+  fi_bounds : (string * string list) list;
+      (* type_param_name -> list of required trait names *)
+}
+
 type method_info = { mi_params : ty list; mi_ret : ty; mi_is_mut : bool }
 
 type impl_info = {
@@ -43,6 +49,8 @@ type trait_info = {
   tr_methods : trait_method_sig SMap.t;
 }
 
+module SSet = Set.Make (String)
+
 type env = {
   values : (ty * bool (* is_mut *)) SMap.t list;
   structs : struct_info SMap.t;
@@ -50,6 +58,7 @@ type env = {
   fns : fn_info SMap.t;
   impls : impl_info SMap.t; (* type name -> impl info *)
   traits : trait_info SMap.t; (* trait name -> trait info *)
+  trait_impls : SSet.t SMap.t; (* type name -> set of trait names implemented *)
   ret_ty : ty option; (* return type of current function *)
   self_ty : ty option; (* type bound to Self in current impl/trait *)
   type_params : string list; (* in-scope generic type params *)
@@ -63,6 +72,7 @@ let empty_env =
     fns = SMap.empty;
     impls = SMap.empty;
     traits = SMap.empty;
+    trait_impls = SMap.empty;
     ret_ty = None;
     self_ty = None;
     type_params = [];
@@ -218,11 +228,12 @@ let type_of_lit (l : lit) : ty =
 (* ---------- builtin function types ---------- *)
 let builtin_fn_type name =
   match name with
-  | "println" -> Some { fi_params = [ TString ]; fi_ret = TVoid }
-  | "print" -> Some { fi_params = [ TString ]; fi_ret = TVoid }
+  | "println" ->
+      Some { fi_params = [ TString ]; fi_ret = TVoid; fi_bounds = [] }
+  | "print" -> Some { fi_params = [ TString ]; fi_ret = TVoid; fi_bounds = [] }
   | "len" -> None (* handled as method call *)
   | "to_string" -> None
-  | "panic" -> Some { fi_params = [ TString ]; fi_ret = TVoid }
+  | "panic" -> Some { fi_params = [ TString ]; fi_ret = TVoid; fi_bounds = [] }
   | _ -> None
 
 (* ---------- expression type checking ---------- *)
@@ -368,6 +379,7 @@ and check_call env callee args =
           | Some fi ->
               check_fn_args ~env ~span:name.span ~name:name.node fi.fi_params
                 arg_types;
+              check_bounds env name.span fi.fi_bounds fi.fi_params arg_types;
               maybe_subst_self env fi.fi_ret
           | None -> (
               match builtin_fn_type name.node with
@@ -417,6 +429,39 @@ and check_fn_args ~env:_ ~span ~name expected actual =
         error_at span "type mismatch: expected %s, got %s" (show_ty exp)
           (show_ty act))
     expected actual
+
+(* Check that trait bounds are satisfied when calling a bounded generic function.
+   Infers the concrete type for each type parameter from actual args and checks
+   that the concrete type has an impl for each required trait. *)
+and check_bounds env span bounds formals actuals =
+  if bounds = [] then ()
+  else
+    let bindings = infer_tparam_bindings formals actuals in
+    List.iter
+      (fun (tparam_name, required_traits) ->
+        match List.assoc_opt tparam_name bindings with
+        | None -> () (* unresolved; generic may be used without args *)
+        | Some concrete_ty -> (
+            (* If the concrete type is itself a type parameter, skip --
+               it will be checked when the outer function is called. *)
+            match concrete_ty with
+            | TParam _ -> ()
+            | _ ->
+                let concrete_name = ty_name concrete_ty in
+                let implemented =
+                  match SMap.find_opt concrete_name env.trait_impls with
+                  | Some s -> s
+                  | None -> SSet.empty
+                in
+                List.iter
+                  (fun trait_name ->
+                    if not (SSet.mem trait_name implemented) then
+                      error_at span
+                        "type %s does not implement trait '%s' (required by \
+                         bound on %s)"
+                        (show_ty concrete_ty) trait_name tparam_name)
+                  required_traits))
+      bounds
 
 and check_assoc_fn_call env type_name fn_name arg_types =
   (* Check for enum variant constructors first *)
@@ -609,15 +654,58 @@ and check_method_call env receiver method_name args =
           TVoid
       | _ -> error_at method_name.span "remove expects exactly 1 argument")
   | TString, "len" -> TInt 64
-  | _ -> (
-      (* Resolve TSelf to concrete type before looking up impls *)
-      let resolved_recv =
-        match recv_ty with
-        | TSelf -> ( match env.self_ty with Some st -> st | None -> recv_ty)
-        | other -> other
+  | _ -> check_user_method_call env receiver recv_ty method_name arg_types
+
+and check_user_method_call env receiver recv_ty method_name arg_types =
+  (* Resolve TSelf to concrete type before looking up impls *)
+  let resolved_recv =
+    match recv_ty with
+    | TSelf -> ( match env.self_ty with Some st -> st | None -> recv_ty)
+    | other -> other
+  in
+  (* For type parameters with trait bounds, resolve method from trait *)
+  match resolved_recv with
+  | TParam p when List.mem p env.type_params -> (
+      let found_in_trait =
+        SMap.fold
+          (fun _trait_name tr_info acc ->
+            match acc with
+            | Some _ -> acc
+            | None -> SMap.find_opt method_name.node tr_info.tr_methods)
+          env.traits None
       in
-      (* Look up in impls *)
+      match found_in_trait with
+      | Some tms ->
+          (* Substitute Self with the receiver type (TParam) for compatibility *)
+          let params = List.map (subst_self resolved_recv) tms.tms_params in
+          let ret = subst_self resolved_recv tms.tms_ret in
+          check_fn_args ~env ~span:method_name.span ~name:method_name.node
+            params arg_types;
+          ret
+      | None ->
+          error_at method_name.span "no method '%s' on type %s" method_name.node
+            (show_ty resolved_recv))
+  | _ -> (
       let type_name = ty_name resolved_recv in
+      (* Check for ambiguous trait method resolution *)
+      let providing_traits =
+        SMap.fold
+          (fun trait_name tr_info acc ->
+            if SMap.mem method_name.node tr_info.tr_methods then
+              let impl_set =
+                match SMap.find_opt type_name env.trait_impls with
+                | Some s -> s
+                | None -> SSet.empty
+              in
+              if SSet.mem trait_name impl_set then trait_name :: acc else acc
+            else acc)
+          env.traits []
+      in
+      if List.length providing_traits > 1 then
+        error_at method_name.span
+          "ambiguous method '%s' on type %s: provided by traits %s"
+          method_name.node (show_ty resolved_recv)
+          (String.concat ", " (List.sort String.compare providing_traits));
       match SMap.find_opt type_name env.impls with
       | Some ii -> (
           match SMap.find_opt method_name.node ii.ii_methods with
@@ -658,6 +746,12 @@ and check_mutability env receiver method_name =
 
 and check_field_access env e field =
   let t = check_expr env e in
+  (* Resolve TSelf to concrete type *)
+  let t =
+    match t with
+    | TSelf -> ( match env.self_ty with Some st -> st | None -> t)
+    | _ -> t
+  in
   match t with
   | TStruct (name, _) -> (
       match SMap.find_opt name env.structs with
@@ -1118,18 +1212,111 @@ let rec collect_type_info env (items : item list) : env =
             | Some t -> resolve_ast_ty env_with_generics t
             | None -> TVoid
           in
-          let fi = { fi_params = params; fi_ret = ret } in
+          let bounds =
+            List.filter_map
+              (fun (tp : type_param) ->
+                match tp.tp_bound with
+                | None | Some [] -> None
+                | Some bs ->
+                    Some
+                      ( tp.tp_name.node,
+                        List.map (fun (b : ident located) -> b.node) bs ))
+              fd.fn_generics
+          in
+          let fi = { fi_params = params; fi_ret = ret; fi_bounds = bounds } in
           { env with fns = SMap.add fd.fn_name.node fi env.fns }
       | ItemImpl { i_ty; i_items; i_generics } ->
           collect_impl env i_generics i_ty i_items
-      | ItemTraitImpl { ti_ty; ti_items; ti_generics; _ } ->
-          collect_impl env ti_generics ti_ty ti_items
+      | ItemTraitImpl { ti_ty; ti_items; ti_generics; ti_trait } -> (
+          (* Check for duplicate trait impl *)
+          let type_name =
+            match ti_ty with
+            | TyName name -> name.node
+            | TyGeneric (name, _) -> name.node
+            | _ -> "_"
+          in
+          let existing_traits =
+            match SMap.find_opt type_name env.trait_impls with
+            | Some s -> s
+            | None -> SSet.empty
+          in
+          if SSet.mem ti_trait.node existing_traits then
+            error_at ti_trait.span "duplicate impl of trait '%s' for type '%s'"
+              ti_trait.node type_name;
+          let updated_traits = SSet.add ti_trait.node existing_traits in
+          let env =
+            {
+              env with
+              trait_impls = SMap.add type_name updated_traits env.trait_impls;
+            }
+          in
+          (* Include default methods from the trait that aren't overridden *)
+          let provided_names =
+            List.map (fun (fd : fn_decl) -> fd.fn_name.node) ti_items
+          in
+          let default_methods =
+            match SMap.find_opt ti_trait.node env.traits with
+            | Some tr_info ->
+                SMap.fold
+                  (fun mname tms acc ->
+                    if
+                      tms.tms_has_default && not (List.mem mname provided_names)
+                    then
+                      (* Register as a method_info in the impl *)
+                      let mi =
+                        {
+                          mi_params = tms.tms_params;
+                          mi_ret = tms.tms_ret;
+                          mi_is_mut =
+                            (match tms.tms_self with
+                            | Some SelfMutRef -> true
+                            | _ -> false);
+                        }
+                      in
+                      (mname, mi) :: acc
+                    else acc)
+                  tr_info.tr_methods []
+            | None -> []
+          in
+          let env = collect_impl env ti_generics ti_ty ti_items in
+          (* Add default methods to the impl *)
+          match default_methods with
+          | [] -> env
+          | _ ->
+              let impl_type_name =
+                match ti_ty with
+                | TyName n -> n.node
+                | TyGeneric (n, _) -> n.node
+                | _ -> "_"
+              in
+              let existing =
+                match SMap.find_opt impl_type_name env.impls with
+                | Some ii -> ii
+                | None ->
+                    {
+                      ii_methods = SMap.empty;
+                      ii_assoc_fns = SMap.empty;
+                      ii_type_params = [];
+                      ii_self_ty = TVoid;
+                    }
+              in
+              let updated =
+                List.fold_left
+                  (fun ii (mname, mi) ->
+                    { ii with ii_methods = SMap.add mname mi ii.ii_methods })
+                  existing default_methods
+              in
+              { env with impls = SMap.add impl_type_name updated env.impls })
       | ItemTrait { t_name; t_generics; t_items; _ } ->
           let generics =
             List.map (fun (tp : type_param) -> tp.tp_name.node) t_generics
           in
           let env_with_generics =
-            { env with type_params = generics @ env.type_params }
+            {
+              env with
+              type_params = generics @ env.type_params;
+              self_ty = Some TSelf;
+            }
           in
           let methods =
             List.fold_left
@@ -1239,7 +1426,7 @@ and collect_impl env impl_generics i_ty impl_items =
             let mi = { mi_params = params; mi_ret = ret; mi_is_mut = is_mut } in
             { ii with ii_methods = SMap.add fd.fn_name.node mi ii.ii_methods }
         | None ->
-            let fi = { fi_params = params; fi_ret = ret } in
+            let fi = { fi_params = params; fi_ret = ret; fi_bounds = [] } in
             {
               ii with
               ii_assoc_fns = SMap.add fd.fn_name.node fi ii.ii_assoc_fns;

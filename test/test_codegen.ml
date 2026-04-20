@@ -1514,6 +1514,388 @@ fn main() {
     "wildcard result emits two-value discard" true
     (contains go "_, _ = fallible")
 
+(* ---------- trait codegen tests ---------- *)
+
+(* VAL-TRAIT-001: Trait without Self -> standard Go interface *)
+let test_trait_no_self () =
+  let src =
+    {|
+trait Greet {
+  fn hello(&self) -> str;
+}
+
+struct Person {
+  pub name: str,
+}
+
+impl Greet for Person {
+  fn hello(&self) -> str {
+    self.name
+  }
+}
+
+fn greet<T: Greet>(g: T) -> str {
+  g.hello()
+}
+
+fn main() {
+  let p = Person { name: "Alice" };
+  println(greet(p));
+}
+    |}
+  in
+  let go = compile_and_check ~expected_output:"Alice\n" src in
+  (* Verify the generated interface *)
+  Alcotest.(check bool)
+    "Greet interface generated" true
+    (contains go "type Greet interface");
+  Alcotest.(check bool) "Hello method in interface" true (contains go "Hello()")
+
+(* VAL-TRAIT-002: Trait with Self -> Go 1.26 self-referential interface *)
+let test_trait_with_self () =
+  let src =
+    {|
+trait Eq {
+  fn eq(&self, other: Self) -> bool;
+}
+
+struct Num {
+  pub val: i64,
+}
+
+impl Eq for Num {
+  fn eq(&self, other: Self) -> bool {
+    self.val == other.val
+  }
+}
+
+fn all_equal<T: Eq>(a: T, b: T) -> bool {
+  a.eq(b)
+}
+
+fn main() {
+  let n1 = Num { val: 42 };
+  let n2 = Num { val: 42 };
+  if all_equal(n1, n2) {
+    println("equal");
+  } else {
+    println("not equal");
+  }
+}
+    |}
+  in
+  let go = compile_and_check ~expected_output:"equal\n" src in
+  Alcotest.(check bool)
+    "Self-referential interface" true
+    (contains go "type Eq[Self any] interface")
+
+(* VAL-TRAIT-003: Struct trait impl satisfies interface *)
+let test_trait_struct_impl () =
+  let src =
+    {|
+trait Display {
+  fn show(&self) -> str;
+}
+
+struct Counter {
+  pub value: i64,
+}
+
+impl Display for Counter {
+  fn show(&self) -> str {
+    "counter"
+  }
+}
+
+fn display<T: Display>(item: T) -> str {
+  item.show()
+}
+
+fn main() {
+  let c = Counter { value: 5 };
+  println(display(c));
+}
+    |}
+  in
+  compile_and_check ~expected_output:"counter\n" src |> ignore
+
+(* VAL-TRAIT-004: Enum trait impl satisfies interface *)
+let test_trait_enum_impl () =
+  let src =
+    {|
+trait Describe {
+  fn describe(&self) -> str;
+}
+
+enum Shape {
+  Circle(f64),
+  Square(f64),
+}
+
+impl Describe for Shape {
+  fn describe(&self) -> str {
+    "a shape"
+  }
+}
+
+fn show_desc<T: Describe>(item: T) {
+  println(item.describe());
+}
+
+fn main() {
+  let s = Shape::Circle(3.14);
+  show_desc(s);
+}
+    |}
+  in
+  compile_and_check ~expected_output:"a shape\n" src |> ignore
+
+(* VAL-TRAIT-005: Default trait methods are synthesized when omitted *)
+let test_trait_default_method () =
+  let src =
+    {|
+trait Greet {
+  fn hello(&self) -> str;
+  fn goodbye(&self) -> str {
+    "bye"
+  }
+}
+
+struct Bot {
+  pub name: str,
+}
+
+impl Greet for Bot {
+  fn hello(&self) -> str {
+    self.name
+  }
+}
+
+fn main() {
+  let b = Bot { name: "R2D2" };
+  println(b.hello());
+  println(b.goodbye());
+}
+    |}
+  in
+  compile_and_check ~expected_output:"R2D2\nbye\n" src |> ignore
+
+(* VAL-TRAIT-006: Generic trait bounds lower correctly *)
+let test_trait_generic_bounds () =
+  let src =
+    {|
+trait Show {
+  fn show(&self) -> str;
+}
+
+trait Debug {
+  fn debug(&self) -> str;
+}
+
+struct Item {
+  pub label: str,
+}
+
+impl Show for Item {
+  fn show(&self) -> str {
+    self.label
+  }
+}
+
+impl Debug for Item {
+  fn debug(&self) -> str {
+    self.label
+  }
+}
+
+fn print_both<T: Show + Debug>(item: T) {
+  println(item.show());
+  println(item.debug());
+}
+
+fn main() {
+  let i = Item { label: "test" };
+  print_both(i);
+}
+    |}
+  in
+  compile_and_check ~expected_output:"test\ntest\n" src |> ignore
+
+(* VAL-TRAIT-007: Self-based trait APIs work through generic calls *)
+let test_trait_self_generic () =
+  let src =
+    {|
+trait Eq {
+  fn eq(&self, other: Self) -> bool;
+}
+
+struct Num {
+  pub val: i64,
+}
+
+impl Eq for Num {
+  fn eq(&self, other: Self) -> bool {
+    self.val == other.val
+  }
+}
+
+fn are_equal<T: Eq>(a: T, b: T) -> bool {
+  a.eq(b)
+}
+
+fn main() {
+  let n1 = Num { val: 42 };
+  let n2 = Num { val: 42 };
+  if are_equal(n1, n2) {
+    println("yes");
+  } else {
+    println("no");
+  }
+}
+    |}
+  in
+  compile_and_check ~expected_output:"yes\n" src |> ignore
+
+(* VAL-TRAIT-013: Trait-enabled generated Go remains gofmt-clean and vet-clean *)
+let test_trait_go_cleanliness () =
+  let src =
+    {|
+trait Stringify {
+  fn to_str(&self) -> str;
+}
+
+struct Wrapper {
+  pub inner: i64,
+}
+
+impl Stringify for Wrapper {
+  fn to_str(&self) -> str {
+    "wrapped"
+  }
+}
+
+fn stringify_it<T: Stringify>(w: T) -> str {
+  w.to_str()
+}
+
+fn main() {
+  let w = Wrapper { inner: 10 };
+  println(stringify_it(w));
+}
+    |}
+  in
+  (* compile_and_check already validates gofmt + go build + go vet *)
+  compile_and_check ~expected_output:"wrapped\n" src |> ignore
+
+(* VAL-CROSS-002: Final MVP acceptance program *)
+let test_final_mvp_acceptance () =
+  let src =
+    {|
+trait Describe {
+  fn describe(&self) -> str;
+}
+
+struct Task {
+  pub title: str,
+  pub done: bool,
+}
+
+impl Task {
+  pub fn new(title: str) -> Self {
+    Task { title: title, done: false }
+  }
+
+  pub fn complete(&mut self) {
+    self.done = true;
+  }
+}
+
+impl Describe for Task {
+  fn describe(&self) -> str {
+    if self.done {
+      self.title + " [done]"
+    } else {
+      self.title + " [todo]"
+    }
+  }
+}
+
+enum Priority {
+  High,
+  Medium,
+  Low,
+}
+
+impl Describe for Priority {
+  fn describe(&self) -> str {
+    match self {
+      Priority::High => "HIGH",
+      Priority::Medium => "MEDIUM",
+      Priority::Low => "LOW",
+    }
+  }
+}
+
+fn print_desc<T: Describe>(item: T) {
+  println(item.describe());
+}
+
+fn find_task(tasks: Vec<str>, target: str) -> Option<str> {
+  for t in tasks {
+    if t == target {
+      return Some(t);
+    }
+  }
+  None
+}
+
+fn try_parse(s: str) -> Result<i64, str> {
+  if s == "42" {
+    Ok(42)
+  } else {
+    Err("not 42")
+  }
+}
+
+fn maybe_parse(s: str) -> Result<i64, str> {
+  let v = try_parse(s)?;
+  Ok(v + 1)
+}
+
+fn main() {
+  let mut task = Task::new("write compiler");
+  print_desc(task);
+  task.complete();
+  print_desc(task);
+
+  let p = Priority::High;
+  print_desc(p);
+
+  let tasks: Vec<str> = ["alpha", "beta", "gamma"];
+  let found = find_task(tasks, "beta");
+  match found {
+    Option::Some(t) => println("found: " + t),
+    Option::None => println("not found"),
+  }
+
+  let mut scores: HashMap<str, i64> = HashMap::new();
+  scores.insert("alice", 100);
+  scores.insert("bob", 85);
+  println(scores.len());
+
+  match maybe_parse("42") {
+    Result::Ok(v) => println(v),
+    Result::Err(e) => println(e),
+  }
+}
+    |}
+  in
+  compile_and_check
+    ~expected_output:
+      "write compiler [todo]\nwrite compiler [done]\nHIGH\nfound: beta\n2\n43\n"
+    src
+  |> ignore
+
 let () =
   Alcotest.run "codegen"
     [
@@ -1678,5 +2060,25 @@ let () =
           Alcotest.test_case "generic free fn" `Quick test_generic_fn_codegen;
           Alcotest.test_case "generic zero value on error path" `Quick
             test_generic_zero_value_result_error_path;
+        ] );
+      ( "traits",
+        [
+          Alcotest.test_case "trait without Self" `Quick test_trait_no_self;
+          Alcotest.test_case "trait with Self" `Quick test_trait_with_self;
+          Alcotest.test_case "struct trait impl" `Quick test_trait_struct_impl;
+          Alcotest.test_case "enum trait impl" `Quick test_trait_enum_impl;
+          Alcotest.test_case "default method synthesis" `Quick
+            test_trait_default_method;
+          Alcotest.test_case "generic trait bounds" `Quick
+            test_trait_generic_bounds;
+          Alcotest.test_case "Self-based trait APIs" `Quick
+            test_trait_self_generic;
+          Alcotest.test_case "trait go cleanliness" `Quick
+            test_trait_go_cleanliness;
+        ] );
+      ( "acceptance",
+        [
+          Alcotest.test_case "final MVP acceptance program" `Quick
+            test_final_mvp_acceptance;
         ] );
     ]

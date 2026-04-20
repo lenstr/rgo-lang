@@ -79,13 +79,20 @@ type cg_shared = {
   mutable needs_fmt : bool;
   mutable needs_errors : bool;
   mutable needs_math : bool;
+  mutable self_ref_traits : string list;
+      (* Trait names that use Self in their signatures *)
 }
+
+(* Trait info for codegen: maps trait name -> trait items (for default method synthesis) *)
+type trait_info_cg = { tic_items : Ast.trait_item list }
 
 type cg_env = {
   structs : struct_info SMap.t;
   enums : enum_info SMap.t;
   fns : fn_info SMap.t;
   impls : impl_info_cg SMap.t;
+  traits : trait_info_cg SMap.t;
+  trait_impls : unit SMap.t; (* "TraitName:TypeName" -> () *)
   (* Per-function context *)
   ret_ty : Ast.ty option;
   self_type_name : string option;
@@ -392,6 +399,29 @@ and infer_method_ret_type env recv method_name =
       | None -> None)
   | _ -> None
 
+(* Check whether a trait uses Self in any method signature *)
+let trait_uses_self (items : Ast.trait_item list) : bool =
+  let rec ty_has_self (t : Ast.ty) : bool =
+    match t with
+    | TySelf -> true
+    | TyName _ -> false
+    | TyGeneric (_, args) -> List.exists ty_has_self args
+    | TyRef inner -> ty_has_self inner
+    | TyTuple ts -> List.exists ty_has_self ts
+  in
+  List.exists
+    (fun (ti : Ast.trait_item) ->
+      match ti with
+      | TraitFnSig sig_ -> (
+          List.exists
+            (fun (p : Ast.param) -> ty_has_self p.p_ty)
+            sig_.sig_params
+          || match sig_.sig_ret with Some t -> ty_has_self t | None -> false)
+      | TraitFnDecl fd -> (
+          List.exists (fun (p : Ast.param) -> ty_has_self p.p_ty) fd.fn_params
+          || match fd.fn_ret with Some t -> ty_has_self t | None -> false))
+    items
+
 (* ---------- collect type info from program ---------- *)
 
 let collect_env (prog : Ast.program) : cg_env =
@@ -403,6 +433,7 @@ let collect_env (prog : Ast.program) : cg_env =
       needs_fmt = false;
       needs_errors = false;
       needs_math = false;
+      self_ref_traits = [];
     }
   in
   let env =
@@ -411,6 +442,8 @@ let collect_env (prog : Ast.program) : cg_env =
       enums = SMap.empty;
       fns = SMap.empty;
       impls = SMap.empty;
+      traits = SMap.empty;
+      trait_impls = SMap.empty;
       ret_ty = None;
       self_type_name = None;
       self_type = None;
@@ -483,7 +516,7 @@ let collect_env (prog : Ast.program) : cg_env =
               existing i_items
           in
           { env with impls = SMap.add type_name updated env.impls }
-      | ItemTraitImpl { ti_ty; ti_items; _ } ->
+      | ItemTraitImpl { ti_trait; ti_ty; ti_items; _ } ->
           let type_name =
             match ti_ty with
             | TyName n -> n.node
@@ -519,8 +552,18 @@ let collect_env (prog : Ast.program) : cg_env =
                     })
               existing ti_items
           in
-          { env with impls = SMap.add type_name updated env.impls }
-      | ItemTrait _ -> env)
+          let impl_key = ti_trait.node ^ ":" ^ type_name in
+          {
+            env with
+            impls = SMap.add type_name updated env.impls;
+            trait_impls = SMap.add impl_key () env.trait_impls;
+          }
+      | ItemTrait { t_name; t_items; _ } ->
+          let tic = { tic_items = t_items } in
+          if trait_uses_self t_items then
+            env.shared.self_ref_traits <-
+              t_name.node :: env.shared.self_ref_traits;
+          { env with traits = SMap.add t_name.node tic env.traits })
     env prog.items
 
 (* ---------- expression context: statement vs expression position ---------- *)
@@ -561,7 +604,7 @@ let go_method_name is_pub name =
   if is_pub then capitalize base else base
 
 (* Type name for generics suffix: e.g. Box -> Box[T any] *)
-let go_generics_decl (tps : type_param list) : string =
+let go_generics_decl ?(self_ref_traits = []) (tps : type_param list) : string =
   if tps = [] then ""
   else
     let params =
@@ -570,8 +613,26 @@ let go_generics_decl (tps : type_param list) : string =
           let bound =
             match tp.tp_bound with
             | None | Some [] -> "any"
+            | Some [ single ] ->
+                let name = capitalize single.node in
+                (* If the trait is self-referential, instantiate with the type param *)
+                if List.mem single.node self_ref_traits then
+                  name ^ "[" ^ tp.tp_name.node ^ "]"
+                else name
             | Some bounds ->
-                String.concat " " (List.map (fun b -> capitalize b.node) bounds)
+                let bound_strs =
+                  List.map
+                    (fun b ->
+                      let name = capitalize b.node in
+                      if List.mem b.node self_ref_traits then
+                        name ^ "[" ^ tp.tp_name.node ^ "]"
+                      else name)
+                    bounds
+                in
+                "interface {\n"
+                ^ String.concat ""
+                    (List.map (fun s -> "\t" ^ s ^ "\n") bound_strs)
+                ^ "}"
           in
           tp.tp_name.node ^ " " ^ bound)
         tps
@@ -2267,7 +2328,9 @@ and gen_question_stmt env buf indent e =
 
 let rec gen_fn_decl env buf (fd : fn_decl) =
   let name = go_fn_name fd.fn_pub fd.fn_name.node in
-  let generics = go_generics_decl fd.fn_generics in
+  let generics =
+    go_generics_decl ~self_ref_traits:env.shared.self_ref_traits fd.fn_generics
+  in
   let fn_env =
     {
       env with
@@ -2424,8 +2487,8 @@ and gen_enum_decl env buf e_name e_generics e_variants _impl_methods =
       Printf.bprintf buf "\nfunc (%s) is%s() {}\n" vtype e_name.node)
     e_variants
 
-and gen_impl_methods env buf type_name generics_decl _generics_use items is_enum
-    impl_type_params =
+and gen_impl_methods ?(is_trait_impl = false) env buf type_name generics_decl
+    _generics_use items is_enum impl_type_params =
   let self_type_name =
     match type_name with
     | TyName n -> n.node
@@ -2444,18 +2507,26 @@ and gen_impl_methods env buf type_name generics_decl _generics_use items is_enum
       type_params = impl_tp_names @ env.type_params;
     }
   in
+  (* For trait impls, force methods to be exported (capitalized) *)
+  let items =
+    if is_trait_impl then
+      List.map (fun (fd : fn_decl) -> { fd with fn_pub = true }) items
+    else items
+  in
   List.iter
     (fun (fd : fn_decl) ->
       match fd.fn_self with
       | Some self_param when is_enum ->
-          (* Enum method: generate shared helper + delegator for each variant *)
           gen_enum_method env buf self_type_name generics_decl fd self_param
       | Some self_param ->
-          (* Struct method *)
-          gen_struct_method env buf type_name generics_decl fd self_param
-      | None ->
-          (* Associated function: TypeNameMethodName *)
-          gen_assoc_fn env buf self_type_name generics_decl fd)
+          (* For trait impls, &self uses value receiver for interface satisfaction *)
+          let effective_self =
+            if is_trait_impl then
+              match self_param with SelfRef -> SelfValue | other -> other
+            else self_param
+          in
+          gen_struct_method env buf type_name generics_decl fd effective_self
+      | None -> gen_assoc_fn env buf self_type_name generics_decl fd)
     items
 
 and gen_struct_method env buf type_name _generics_decl fd self_param =
@@ -2474,7 +2545,9 @@ and gen_struct_method env buf type_name _generics_decl fd self_param =
     else Printf.sprintf "(self %s)" receiver_type
   in
   let method_name = go_method_name fd.fn_pub fd.fn_name.node in
-  let fn_generics = go_generics_decl fd.fn_generics in
+  let fn_generics =
+    go_generics_decl ~self_ref_traits:env.shared.self_ref_traits fd.fn_generics
+  in
   let fn_env =
     {
       env with
@@ -2580,7 +2653,9 @@ and gen_assoc_fn env buf type_name _generics_decl fd =
   let fn_name_go = type_name ^ go_method_name fd.fn_pub fd.fn_name.node in
   (* Merge impl type params with fn-level generics for the declaration *)
   let all_generics = env.impl_type_params @ fd.fn_generics in
-  let fn_generics = go_generics_decl all_generics in
+  let fn_generics =
+    go_generics_decl ~self_ref_traits:env.shared.self_ref_traits all_generics
+  in
   let fn_env =
     {
       env with
@@ -2610,6 +2685,70 @@ and gen_assoc_fn env buf type_name _generics_decl fd =
   Buffer.add_string buf (go_ret_sig fn_env fd.fn_ret);
   Buffer.add_string buf " {\n";
   gen_fn_body fn_env buf fd.fn_body fd.fn_ret;
+  Buffer.add_string buf "}\n"
+
+(* ---------- trait interface generation ---------- *)
+
+(* Check whether a trait uses Self in any method signature *)
+(* Emit a Go type for a trait method param/return, substituting Self with
+   the Self type parameter name when the trait is self-referential. *)
+let rec go_type_trait env (self_name : string option) (t : Ast.ty) : string =
+  match t with
+  | TySelf -> ( match self_name with Some s -> s | None -> "any")
+  | TyRef inner -> "*" ^ go_type_trait env self_name inner
+  | _ -> go_type env t
+
+let gen_trait_decl env buf t_name t_generics t_items =
+  let uses_self = trait_uses_self t_items in
+  (* Build generics: include Self if self-referential, plus user-declared type params *)
+  let self_param_name = if uses_self then Some "Self" else None in
+  let all_generics_parts =
+    (if uses_self then [ "Self any" ] else [])
+    @ List.map
+        (fun (tp : Ast.type_param) ->
+          let bound =
+            match tp.tp_bound with
+            | None | Some [] -> "any"
+            | Some bounds ->
+                String.concat " "
+                  (List.map
+                     (fun (b : Ast.ident Ast.located) -> capitalize b.node)
+                     bounds)
+          in
+          tp.tp_name.node ^ " " ^ bound)
+        t_generics
+  in
+  let generics_str =
+    if all_generics_parts = [] then ""
+    else "[" ^ String.concat ", " all_generics_parts ^ "]"
+  in
+  Printf.bprintf buf "type %s%s interface {\n" (capitalize t_name.node)
+    generics_str;
+  List.iter
+    (fun (ti : Ast.trait_item) ->
+      let name, params, ret =
+        match ti with
+        | TraitFnSig sig_ -> (sig_.sig_name.node, sig_.sig_params, sig_.sig_ret)
+        | TraitFnDecl fd -> (fd.fn_name.node, fd.fn_params, fd.fn_ret)
+      in
+      let go_name = capitalize name in
+      Printf.bprintf buf "\t%s(" go_name;
+      List.iteri
+        (fun i (p : Ast.param) ->
+          if i > 0 then Buffer.add_string buf ", ";
+          Buffer.add_string buf (escape_ident p.p_name.node);
+          Buffer.add_char buf ' ';
+          Buffer.add_string buf (go_type_trait env self_param_name p.p_ty))
+        params;
+      Buffer.add_char buf ')';
+      (match ret with
+      | None -> ()
+      | Some (TyGeneric ({ node = "Result"; _ }, [ ok; _err ])) ->
+          Printf.bprintf buf " (%s, error)"
+            (go_type_trait env self_param_name ok)
+      | Some t -> Printf.bprintf buf " %s" (go_type_trait env self_param_name t));
+      Buffer.add_char buf '\n')
+    t_items;
   Buffer.add_string buf "}\n"
 
 (* ---------- prelude generation ---------- *)
@@ -2720,7 +2859,7 @@ let generate (prog : Ast.program) : string =
           let gd = go_generics_decl i_generics in
           let gu = go_generics_use i_generics in
           gen_impl_methods env body_buf i_ty gd gu i_items is_enum i_generics
-      | ItemTraitImpl { ti_generics; ti_ty; ti_items; _ } ->
+      | ItemTraitImpl { ti_generics; ti_trait; ti_ty; ti_items } ->
           let type_name_str =
             match ti_ty with
             | TyName n -> n.node
@@ -2730,8 +2869,31 @@ let generate (prog : Ast.program) : string =
           let is_enum = SMap.mem type_name_str env.enums in
           let gd = go_generics_decl ti_generics in
           let gu = go_generics_use ti_generics in
-          gen_impl_methods env body_buf ti_ty gd gu ti_items is_enum ti_generics
-      | ItemTrait _ -> () (* Traits are emitted in Phase 8 *))
+          (* Synthesize default methods that are not explicitly provided *)
+          let all_items =
+            match SMap.find_opt ti_trait.node env.traits with
+            | Some tic ->
+                let provided_names =
+                  List.map (fun (fd : fn_decl) -> fd.fn_name.node) ti_items
+                in
+                let defaults =
+                  List.filter_map
+                    (fun (ti_item : Ast.trait_item) ->
+                      match ti_item with
+                      | TraitFnDecl fd
+                        when not (List.mem fd.fn_name.node provided_names) ->
+                          Some fd
+                      | _ -> None)
+                    tic.tic_items
+                in
+                ti_items @ defaults
+            | None -> ti_items
+          in
+          gen_impl_methods ~is_trait_impl:true env body_buf ti_ty gd gu
+            all_items is_enum ti_generics
+      | ItemTrait { t_name; t_generics; t_items; _ } ->
+          Buffer.add_char body_buf '\n';
+          gen_trait_decl env body_buf t_name t_generics t_items)
     prog.items;
   (* Assemble final output *)
   let out = Buffer.create 4096 in
