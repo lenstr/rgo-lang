@@ -799,6 +799,48 @@ fn main() {
 
 let test_result_option_example () =
   let src = read_file "../examples/result_option.rg" in
+  Alcotest.(check bool)
+    "no demo_result wrapper" false
+    (contains src "fn demo_result()");
+  Alcotest.(check bool)
+    "no demo_option wrapper" false
+    (contains src "fn demo_option()");
+  Alcotest.(check bool)
+    "has show_divide wrapper" true
+    (contains src "fn show_divide()");
+  Alcotest.(check bool)
+    "has show_half_divide wrapper" true
+    (contains src "fn show_half_divide()");
+  Alcotest.(check bool)
+    "has show_first wrapper" true
+    (contains src "fn show_first()");
+  Alcotest.(check bool)
+    "has show_head_plus_one wrapper" true
+    (contains src "fn show_head_plus_one()");
+  Alcotest.(check bool)
+    "main calls show_divide" true
+    (contains src "show_divide();");
+  Alcotest.(check bool)
+    "main calls show_half_divide" true
+    (contains src "show_half_divide();");
+  Alcotest.(check bool)
+    "main calls show_first" true
+    (contains src "show_first();");
+  Alcotest.(check bool)
+    "main calls show_head_plus_one" true
+    (contains src "show_head_plus_one();");
+  Alcotest.(check bool)
+    "show_divide uses divide" true
+    (contains src "let v = divide(10, 2)?;");
+  Alcotest.(check bool)
+    "show_half_divide uses half_divide" true
+    (contains src "let v = half_divide(100, 4)?;");
+  Alcotest.(check bool)
+    "show_first uses first" true
+    (contains src "let v = first([1, 2, 3])?;");
+  Alcotest.(check bool)
+    "show_head_plus_one uses head_plus_one" true
+    (contains src "let v = head_plus_one([10, 20])?;");
   let _go = compile_and_check ~expected_output:"5\n12\n1\n11\n" src in
   ()
 
