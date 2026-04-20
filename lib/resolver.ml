@@ -203,6 +203,11 @@ let rec resolve_expr env (e : expr) =
   | ExprPath (type_name, variant_name) ->
       resolve_path_ref env type_name variant_name
   | ExprStruct (ty, fields) -> resolve_struct_constructor env ty fields
+  | ExprStructVariant (type_name, variant_name, fields) ->
+      resolve_path_ref env type_name variant_name;
+      List.iter
+        (fun (sf : struct_field_init) -> resolve_expr env sf.sf_expr)
+        fields
   | ExprIf (cond, then_blk, else_blk) ->
       resolve_expr env cond;
       resolve_block env then_blk;

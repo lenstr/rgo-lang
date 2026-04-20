@@ -318,6 +318,10 @@ let rec infer_expr_type env (e : Ast.expr) : Ast.ty option =
           | None -> None)
       | _ -> None)
   | ExprStruct (ty, _) -> Some ty
+  | ExprStructVariant (type_name, _, _) -> (
+      match SMap.find_opt type_name.node env.enums with
+      | Some _ -> Some (TyName type_name)
+      | None -> None)
   | ExprIf (_, then_blk, _) -> infer_block_type env then_blk
   | ExprMatch (_, arms) -> (
       match arms with
@@ -681,6 +685,8 @@ let rec gen_expr env buf indent (ctx : expr_ctx) (e : Ast.expr) : unit =
       (* Unit enum variant: EnumVariant{} *)
       Buffer.add_string buf (type_name.node ^ variant_name.node ^ "{}")
   | ExprStruct (ty, fields) -> gen_struct_literal env buf indent ty fields
+  | ExprStructVariant (type_name, variant_name, fields) ->
+      gen_struct_variant_literal env buf indent type_name variant_name fields
   | ExprIf (cond, then_blk, else_blk) ->
       gen_if env buf indent ctx cond then_blk else_blk
   | ExprMatch (scrutinee, arms) -> gen_match env buf indent ctx scrutinee arms
@@ -1153,7 +1159,9 @@ and gen_user_method_call env buf indent recv method_name args =
 
 and expr_is_non_addressable (e : Ast.expr) : bool =
   match e with
-  | ExprCall _ | ExprPath _ | ExprMethodCall _ | ExprStruct _ -> true
+  | ExprCall _ | ExprPath _ | ExprMethodCall _ | ExprStruct _
+  | ExprStructVariant _ ->
+      true
   | ExprLit _ -> true
   | _ -> false
 
@@ -1185,6 +1193,18 @@ and gen_struct_literal env buf indent ty fields =
         else true
       in
       Buffer.add_string buf (go_field_name fpub sf.sf_name.node);
+      Buffer.add_string buf ": ";
+      gen_expr env buf indent CtxExpr sf.sf_expr)
+    fields;
+  Buffer.add_char buf '}'
+
+and gen_struct_variant_literal env buf indent type_name variant_name fields =
+  let go_name = type_name.node ^ variant_name.node in
+  Buffer.add_string buf (go_name ^ "{");
+  List.iteri
+    (fun i (sf : struct_field_init) ->
+      if i > 0 then Buffer.add_string buf ", ";
+      Buffer.add_string buf (go_field_name true sf.sf_name.node);
       Buffer.add_string buf ": ";
       gen_expr env buf indent CtxExpr sf.sf_expr)
     fields;

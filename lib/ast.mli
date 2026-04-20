@@ -65,6 +65,7 @@ type expr =
   | ExprFieldAccess of expr * ident located
   | ExprPath of ident located * ident located
   | ExprStruct of ty * struct_field_init list
+  | ExprStructVariant of ident located * ident located * struct_field_init list
   | ExprIf of expr * block * block option
   | ExprMatch of expr * match_arm list
   | ExprBlock of block

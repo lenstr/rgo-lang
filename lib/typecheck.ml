@@ -212,6 +212,7 @@ let expr_span (e : expr) : span =
   | ExprIdent id -> id.span
   | ExprPath (id, _) -> id.span
   | ExprStruct (TyName id, _) | ExprStruct (TyGeneric (id, _), _) -> id.span
+  | ExprStructVariant (id, _, _) -> id.span
   | _ -> dummy_span
 
 let rec check_expr env (e : expr) : ty =
@@ -258,6 +259,8 @@ let rec check_expr env (e : expr) : ty =
   | ExprFieldAccess (e, field) -> check_field_access env e field
   | ExprPath (type_name, member) -> check_path env type_name member
   | ExprStruct (ty, fields) -> check_struct_literal env ty fields
+  | ExprStructVariant (type_name, variant_name, fields) ->
+      check_struct_variant_literal env type_name variant_name fields
   | ExprIf (cond, then_blk, else_blk) -> check_if env cond then_blk else_blk
   | ExprMatch (scrutinee, arms) -> check_match env scrutinee arms
   | ExprBlock blk -> check_block env blk
@@ -634,6 +637,39 @@ and check_struct_literal env ty fields =
           ())
         fields);
   resolved
+
+and check_struct_variant_literal env type_name variant_name fields =
+  match SMap.find_opt type_name.node env.enums with
+  | Some ei -> (
+      match List.assoc_opt variant_name.node ei.ei_variants with
+      | Some (VStruct expected_fields) ->
+          List.iter
+            (fun (sf : struct_field_init) ->
+              match
+                List.find_opt
+                  (fun (n, _) -> n = sf.sf_name.node)
+                  expected_fields
+              with
+              | Some (_, expected) ->
+                  let actual = check_expr env sf.sf_expr in
+                  expect_type ~span:sf.sf_name.span ~expected ~actual
+              | None ->
+                  error_at sf.sf_name.span "no field '%s' in variant '%s::%s'"
+                    sf.sf_name.node type_name.node variant_name.node)
+            fields;
+          TEnum (type_name.node, [])
+      | Some VUnit ->
+          error_at variant_name.span
+            "unit variant '%s::%s' does not have named fields" type_name.node
+            variant_name.node
+      | Some (VTuple _) ->
+          error_at variant_name.span
+            "tuple variant '%s::%s' does not have named fields" type_name.node
+            variant_name.node
+      | None ->
+          error_at variant_name.span "undefined variant '%s' in '%s'"
+            variant_name.node type_name.node)
+  | None -> error_at type_name.span "unknown enum '%s'" type_name.node
 
 and check_if env cond then_blk else_blk =
   let ct = check_expr env cond in

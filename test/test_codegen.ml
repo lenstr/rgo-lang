@@ -422,6 +422,23 @@ fn main() {
   let go = compile_and_check ~expected_output:"done\n" src in
   Alcotest.(check bool) "uses rgo_repeat" true (contains go "rgo_repeat")
 
+let test_struct_variant_in_array () =
+  let src =
+    {|
+enum Shape {
+    Rect { w: f64, h: f64 },
+    Circle(f64),
+}
+
+fn main() {
+    let shapes = [Shape::Rect { w: 2.0, h: 3.0 }, Shape::Rect { w: 4.0, h: 5.0 }];
+    println("done");
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"done\n" src in
+  Alcotest.(check bool) "ShapeRect literal" true (contains go "ShapeRect{")
+
 (* ---------- Keyword escaping tests ---------- *)
 
 let test_keyword_escaping () =
@@ -1140,6 +1157,8 @@ let () =
             test_array_empty_with_annotation;
           Alcotest.test_case "repeat small" `Quick test_array_repeat_small;
           Alcotest.test_case "repeat large" `Quick test_array_repeat_large;
+          Alcotest.test_case "struct variant in array" `Quick
+            test_struct_variant_in_array;
         ] );
       ( "keyword-escaping",
         [ Alcotest.test_case "go keyword escape" `Quick test_keyword_escaping ]

@@ -178,6 +178,11 @@ let rec walk_expr enums tenv fn_ret_types (e : expr) : unit =
         (fun (sf : struct_field_init) ->
           walk_expr enums tenv fn_ret_types sf.sf_expr)
         fields
+  | ExprStructVariant (_, _, fields) ->
+      List.iter
+        (fun (sf : struct_field_init) ->
+          walk_expr enums tenv fn_ret_types sf.sf_expr)
+        fields
   | ExprIf (cond, then_blk, else_blk) ->
       walk_expr enums tenv fn_ret_types cond;
       walk_block enums tenv fn_ret_types then_blk;

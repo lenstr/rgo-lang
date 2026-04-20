@@ -246,6 +246,19 @@ let test_struct_literal_shorthand () =
   let _prog = parse "fn main() {\n    let p = Point { x, y };\n}" in
   ()
 
+let test_struct_variant_in_array () =
+  let _prog =
+    parse
+      "enum Shape {\n\
+      \    Rect { w: f64, h: f64 },\n\
+      \    Circle(f64),\n\
+       }\n\
+       fn main() {\n\
+      \    let shapes = [Shape::Rect { w: 2.0, h: 3.0 }];\n\
+       }"
+  in
+  ()
+
 (* --- negative: syntax errors report line references --- *)
 
 let test_error_missing_brace () =
@@ -344,6 +357,7 @@ let positive_tests =
       test_case "enum impl" `Quick test_enum_impl;
       test_case "struct literal" `Quick test_struct_literal;
       test_case "struct literal shorthand" `Quick test_struct_literal_shorthand;
+      test_case "struct variant in array" `Quick test_struct_variant_in_array;
     ]
 
 let negative_tests =

@@ -480,6 +480,13 @@ expr_primary:
   | FALSE                     { ExprLit (LitBool false) }
   (* self *)
   | SELF_VALUE                { ExprSelf }
+  (* Path Type::variant with struct fields *)
+  | a = located_ident; COLON_COLON; b = located_ident;
+    LBRACE; fs = trailing_list(COMMA, struct_field_init); RBRACE
+    { ExprStructVariant (a, b, fs) }
+  | a = located_type_kw_as_ident; COLON_COLON; b = located_ident;
+    LBRACE; fs = trailing_list(COMMA, struct_field_init); RBRACE
+    { ExprStructVariant (a, b, fs) }
   (* Path Type::variant *)
   | a = located_ident; COLON_COLON; b = located_ident
     { ExprPath (a, b) }
