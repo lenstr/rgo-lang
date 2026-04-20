@@ -741,6 +741,72 @@ fn main() {
 }
 |}
 
+(* --- Regression: generic type compatibility soundness --- *)
+
+(* Invalid: non-generic function cannot return a generic-typed value as a
+   concrete type.  b.get() returns TParam T which is out of scope in main. *)
+let invalid_generic_return =
+  {|
+struct Box<T> {
+    value: T,
+}
+impl<T> Box<T> {
+    pub fn new(v: T) -> Self {
+        Box { value: v }
+    }
+    pub fn get(&self) -> T {
+        self.value
+    }
+}
+fn main() -> i32 {
+    let b = Box::new(42);
+    b.get()
+}
+|}
+
+(* Invalid: assigning generic-typed value to incompatible annotation.
+   w.unwrap() returns TParam T which cannot satisfy an explicit str type. *)
+let invalid_generic_assign =
+  {|
+struct Wrapper<T> {
+    inner: T,
+}
+impl<T> Wrapper<T> {
+    pub fn wrap(v: T) -> Self {
+        Wrapper { inner: v }
+    }
+    pub fn unwrap(&self) -> T {
+        self.inner
+    }
+}
+fn main() {
+    let w = Wrapper::wrap(42);
+    let x: str = w.unwrap();
+}
+|}
+
+(* Invalid: bare generic struct name (no type args) is not compatible
+   with an instantiated form like Box<i32>.  Returning a bare Box from
+   a function declared to return Box<i32> must be rejected. *)
+let invalid_bare_vs_instantiated =
+  {|
+struct Box<T> {
+    value: T,
+}
+impl<T> Box<T> {
+    pub fn new(v: T) -> Self {
+        Box { value: v }
+    }
+}
+fn make() -> Box<i32> {
+    let b = Box::new(42);
+    b
+}
+fn main() {
+    let _ = make();
+}
+|}
+
 (* ======== Test registration ======== *)
 
 let positive_tests =
@@ -856,6 +922,15 @@ let negative_tests =
     ( "trait recv self vs &self mismatch",
       `Quick,
       fail ~expect:"receiver mismatch" trait_recv_value_vs_ref );
+    ( "generic return type mismatch",
+      `Quick,
+      fail ~expect:"type mismatch" invalid_generic_return );
+    ( "generic assign type mismatch",
+      `Quick,
+      fail ~expect:"type mismatch" invalid_generic_assign );
+    ( "bare vs instantiated generic mismatch",
+      `Quick,
+      fail ~expect:"type mismatch" invalid_bare_vs_instantiated );
   ]
 
 let () =

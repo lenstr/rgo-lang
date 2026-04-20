@@ -36,7 +36,10 @@ type trait_method_sig = {
   tms_has_default : bool; (* has a default body *)
 }
 
-type trait_info = { tr_methods : trait_method_sig SMap.t }
+type trait_info = {
+  tr_generics : string list;
+  tr_methods : trait_method_sig SMap.t;
+}
 
 type env = {
   values : (ty * bool (* is_mut *)) SMap.t list;
@@ -142,8 +145,23 @@ let rec subst_self self_ty t =
   | _ -> t
 
 (* ---------- type compatibility ---------- *)
-(* Check if a type is a numeric literal that can coerce to the target *)
-let rec types_compatible expected actual =
+
+(* Collect all TParam names occurring in a type. *)
+let rec collect_tparams acc = function
+  | TParam p -> if List.mem p acc then acc else p :: acc
+  | TOption t | TVec t | TRef t -> collect_tparams acc t
+  | TResult (a, b) | THashMap (a, b) ->
+      collect_tparams (collect_tparams acc a) b
+  | TTuple ts -> List.fold_left collect_tparams acc ts
+  | TStruct (_, args) | TEnum (_, args) ->
+      List.fold_left collect_tparams acc args
+  | TFn (ps, r) -> collect_tparams (List.fold_left collect_tparams acc ps) r
+  | _ -> acc
+
+(* Check if a type is a numeric literal that can coerce to the target.
+   ~type_params lists the generic type parameter names currently in scope;
+   TParam is only a wildcard when its name is in this list. *)
+let rec types_compatible ?(type_params = []) expected actual =
   if expected = actual then true
   else
     match (expected, actual) with
@@ -154,32 +172,36 @@ let rec types_compatible expected actual =
     | TFloat _, TFloat 64 -> true
     (* Result and Option with compatible inner types *)
     | TResult (ok1, err1), TResult (ok2, err2) ->
-        types_compatible ok1 ok2 && types_compatible err1 err2
-    | TOption inner1, TOption inner2 -> types_compatible inner1 inner2
-    | TVec inner1, TVec inner2 -> types_compatible inner1 inner2
+        types_compatible ~type_params ok1 ok2
+        && types_compatible ~type_params err1 err2
+    | TOption inner1, TOption inner2 ->
+        types_compatible ~type_params inner1 inner2
+    | TVec inner1, TVec inner2 -> types_compatible ~type_params inner1 inner2
     | THashMap (k1, v1), THashMap (k2, v2) ->
-        types_compatible k1 k2 && types_compatible v1 v2
+        types_compatible ~type_params k1 k2
+        && types_compatible ~type_params v1 v2
     (* TVoid acts as a wildcard for builtin constructors like HashMap::new() *)
     | _, TVoid -> true
     | TVoid, _ -> true
-    (* TParam acts as a wildcard — no full unification, so any concrete type
-       satisfies a generic type parameter and vice versa *)
-    | TParam _, _ -> true
-    | _, TParam _ -> true
-    (* Struct/Enum with matching name: compatible if args are pairwise
-       compatible or one side has no args (bare name in generic context) *)
+    (* TParam is compatible with anything only when it is in scope as a
+       generic type parameter.  TParam-vs-TParam is always compatible
+       (both sides are generic). *)
+    | TParam _, TParam _ -> true
+    | TParam p, _ -> List.mem p type_params
+    | _, TParam p -> List.mem p type_params
+    (* Struct/Enum with matching name: compatible when args are pairwise
+       compatible. Bare names (no args) are NOT automatically compatible
+       with instantiated forms. *)
     | TStruct (n1, args1), TStruct (n2, args2) when n1 = n2 ->
-        args1 = [] || args2 = []
-        || List.length args1 = List.length args2
-           && List.for_all2 types_compatible args1 args2
+        List.length args1 = List.length args2
+        && List.for_all2 (types_compatible ~type_params) args1 args2
     | TEnum (n1, args1), TEnum (n2, args2) when n1 = n2 ->
-        args1 = [] || args2 = []
-        || List.length args1 = List.length args2
-           && List.for_all2 types_compatible args1 args2
+        List.length args1 = List.length args2
+        && List.for_all2 (types_compatible ~type_params) args1 args2
     | _ -> false
 
-let expect_type ~(span : span) ~expected ~actual =
-  if not (types_compatible expected actual) then
+let expect_type ~env ~(span : span) ~expected ~actual =
+  if not (types_compatible ~type_params:env.type_params expected actual) then
     error_at span "type mismatch: expected %s, got %s" (show_ty expected)
       (show_ty actual)
 
@@ -250,7 +272,7 @@ let rec check_expr env (e : expr) : ty =
   | ExprUnary (Not, e) ->
       let t = check_expr env e in
       let span = expr_span e in
-      expect_type ~span ~expected:TBool ~actual:t;
+      expect_type ~env ~span ~expected:TBool ~actual:t;
       TBool
   | ExprBinary (op, l, r) -> check_binop env op l r
   | ExprCall (callee, args) -> check_call env callee args
@@ -279,13 +301,13 @@ let rec check_expr env (e : expr) : ty =
       Option.iter
         (fun c ->
           let ct = check_expr env c in
-          expect_type ~span:(expr_span c) ~expected:TBool ~actual:ct)
+          expect_type ~env ~span:(expr_span c) ~expected:TBool ~actual:ct)
         cond;
       let _ = check_block env blk in
       TVoid
   | ExprWhile (cond, blk) ->
       let ct = check_expr env cond in
-      expect_type ~span:(expr_span cond) ~expected:TBool ~actual:ct;
+      expect_type ~env ~span:(expr_span cond) ~expected:TBool ~actual:ct;
       let _ = check_block env blk in
       TVoid
   | ExprFor (binding, iter_expr, blk) -> check_for env binding iter_expr blk
@@ -300,17 +322,17 @@ and check_binop env op l r =
       match (op, lt, rt) with
       | Add, TString, TString -> TString
       | _, _, _ -> (
-          expect_type ~span ~expected:lt ~actual:rt;
+          expect_type ~env ~span ~expected:lt ~actual:rt;
           match lt with
           | TInt _ | TUint _ | TFloat _ -> lt
           | _ -> error_at span "arithmetic on non-numeric type %s" (show_ty lt))
       )
   | Eq | Ne | Lt | Gt | Le | Ge ->
-      expect_type ~span ~expected:lt ~actual:rt;
+      expect_type ~env ~span ~expected:lt ~actual:rt;
       TBool
   | And | Or ->
-      expect_type ~span ~expected:TBool ~actual:lt;
-      expect_type ~span:(expr_span r) ~expected:TBool ~actual:rt;
+      expect_type ~env ~span ~expected:TBool ~actual:lt;
+      expect_type ~env ~span:(expr_span r) ~expected:TBool ~actual:rt;
       TBool
 
 and check_call env callee args =
@@ -342,20 +364,20 @@ and check_call env callee args =
       | _ -> (
           match SMap.find_opt name.node env.fns with
           | Some fi ->
-              check_fn_args ~span:name.span ~name:name.node fi.fi_params
+              check_fn_args ~env ~span:name.span ~name:name.node fi.fi_params
                 arg_types;
               maybe_subst_self env fi.fi_ret
           | None -> (
               match builtin_fn_type name.node with
               | Some fi ->
-                  check_fn_args ~span:name.span ~name:name.node fi.fi_params
-                    arg_types;
+                  check_fn_args ~env ~span:name.span ~name:name.node
+                    fi.fi_params arg_types;
                   fi.fi_ret
               | None -> (
                   (* Could be a variable holding a function value *)
                   match lookup_value name.node env with
                   | Some (TFn (params, ret), _) ->
-                      check_fn_args ~span:name.span ~name:name.node params
+                      check_fn_args ~env ~span:name.span ~name:name.node params
                         arg_types;
                       ret
                   | Some _ ->
@@ -371,18 +393,26 @@ and check_call env callee args =
       let arg_types = List.map (check_expr env) args in
       match ct with
       | TFn (params, ret) ->
-          check_fn_args ~span:(expr_span callee) ~name:"<expr>" params arg_types;
+          check_fn_args ~env ~span:(expr_span callee) ~name:"<expr>" params
+            arg_types;
           ret
       | _ -> error_at (expr_span callee) "expression is not callable")
 
-and check_fn_args ~span ~name expected actual =
+and check_fn_args ~env ~span ~name expected actual =
   let expected_len = List.length expected in
   let actual_len = List.length actual in
   if expected_len <> actual_len then
     error_at span "function '%s' expects %d argument(s), got %d" name
       expected_len actual_len;
+  (* Collect TParam names from the callee's signature so they act as
+     wildcards even when the caller's env has no matching type_params. *)
+  let sig_tparams = List.fold_left collect_tparams [] expected in
+  let tp = sig_tparams @ env.type_params in
   List.iter2
-    (fun exp act -> expect_type ~span ~expected:exp ~actual:act)
+    (fun exp act ->
+      if not (types_compatible ~type_params:tp exp act) then
+        error_at span "type mismatch: expected %s, got %s" (show_ty exp)
+          (show_ty act))
     expected actual
 
 and check_assoc_fn_call env type_name fn_name arg_types =
@@ -398,7 +428,7 @@ and check_assoc_fn_call env type_name fn_name arg_types =
               type_name.node fn_name.node expected_len actual_len;
           List.iter2
             (fun exp act ->
-              expect_type ~span:fn_name.span ~expected:exp ~actual:act)
+              expect_type ~env ~span:fn_name.span ~expected:exp ~actual:act)
             field_tys arg_types;
           TEnum (type_name.node, [])
       | Some VUnit ->
@@ -427,7 +457,7 @@ and check_impl_assoc_fn env type_name fn_name arg_types =
   | Some ii -> (
       match SMap.find_opt fn_name.node ii.ii_assoc_fns with
       | Some fi ->
-          check_fn_args ~span:fn_name.span ~name:fn_name.node fi.fi_params
+          check_fn_args ~env ~span:fn_name.span ~name:fn_name.node fi.fi_params
             arg_types;
           (* Substitute Self with the concrete type from the call site.
              We derive the concrete type from type_name so this works
@@ -463,7 +493,7 @@ and check_method_call env receiver method_name args =
       check_mutability env receiver method_name;
       match arg_types with
       | [ arg ] ->
-          expect_type ~span:method_name.span ~expected:inner ~actual:arg;
+          expect_type ~env ~span:method_name.span ~expected:inner ~actual:arg;
           TVoid
       | _ -> error_at method_name.span "push expects exactly 1 argument")
   | TVec inner, "pop" ->
@@ -474,20 +504,20 @@ and check_method_call env receiver method_name args =
       check_mutability env receiver method_name;
       match arg_types with
       | [ ak; av ] ->
-          expect_type ~span:method_name.span ~expected:k ~actual:ak;
-          expect_type ~span:method_name.span ~expected:v ~actual:av;
+          expect_type ~env ~span:method_name.span ~expected:k ~actual:ak;
+          expect_type ~env ~span:method_name.span ~expected:v ~actual:av;
           TVoid
       | _ -> error_at method_name.span "insert expects exactly 2 arguments")
   | THashMap (k, v), "get" -> (
       match arg_types with
       | [ ak ] ->
-          expect_type ~span:method_name.span ~expected:k ~actual:ak;
+          expect_type ~env ~span:method_name.span ~expected:k ~actual:ak;
           TOption v
       | _ -> error_at method_name.span "get expects exactly 1 argument")
   | THashMap (k, _), "contains_key" -> (
       match arg_types with
       | [ ak ] ->
-          expect_type ~span:method_name.span ~expected:k ~actual:ak;
+          expect_type ~env ~span:method_name.span ~expected:k ~actual:ak;
           TBool
       | _ -> error_at method_name.span "contains_key expects exactly 1 argument"
       )
@@ -495,7 +525,7 @@ and check_method_call env receiver method_name args =
       check_mutability env receiver method_name;
       match arg_types with
       | [ ak ] ->
-          expect_type ~span:method_name.span ~expected:k ~actual:ak;
+          expect_type ~env ~span:method_name.span ~expected:k ~actual:ak;
           TVoid
       | _ -> error_at method_name.span "remove expects exactly 1 argument")
   | TString, "len" -> TInt 64
@@ -513,7 +543,7 @@ and check_method_call env receiver method_name args =
           match SMap.find_opt method_name.node ii.ii_methods with
           | Some mi ->
               if mi.mi_is_mut then check_mutability env receiver method_name;
-              check_fn_args ~span:method_name.span ~name:method_name.node
+              check_fn_args ~env ~span:method_name.span ~name:method_name.node
                 mi.mi_params arg_types;
               maybe_subst_self env mi.mi_ret
           | None ->
@@ -624,7 +654,7 @@ and check_struct_literal env ty fields =
           with
           | Some (_, expected, _) ->
               let actual = check_expr env sf.sf_expr in
-              expect_type ~span:sf.sf_name.span ~expected ~actual
+              expect_type ~env ~span:sf.sf_name.span ~expected ~actual
           | None ->
               error_at sf.sf_name.span "no field '%s' in struct '%s'"
                 sf.sf_name.node type_name.node)
@@ -652,7 +682,7 @@ and check_struct_variant_literal env type_name variant_name fields =
               with
               | Some (_, expected) ->
                   let actual = check_expr env sf.sf_expr in
-                  expect_type ~span:sf.sf_name.span ~expected ~actual
+                  expect_type ~env ~span:sf.sf_name.span ~expected ~actual
               | None ->
                   error_at sf.sf_name.span "no field '%s' in variant '%s::%s'"
                     sf.sf_name.node type_name.node variant_name.node)
@@ -673,14 +703,14 @@ and check_struct_variant_literal env type_name variant_name fields =
 
 and check_if env cond then_blk else_blk =
   let ct = check_expr env cond in
-  expect_type ~span:(expr_span cond) ~expected:TBool ~actual:ct;
+  expect_type ~env ~span:(expr_span cond) ~expected:TBool ~actual:ct;
   let then_ty = check_block env then_blk in
   match else_blk with
   | Some else_b ->
       let else_ty = check_block env else_b in
       (* If both branches produce a value, types must match *)
       if then_ty <> TVoid && else_ty <> TVoid then
-        expect_type ~span:dummy_span ~expected:then_ty ~actual:else_ty;
+        expect_type ~env ~span:dummy_span ~expected:then_ty ~actual:else_ty;
       then_ty
   | None -> TVoid
 
@@ -698,7 +728,7 @@ and check_match env scrutinee arms =
   | [] -> TVoid
   | first :: rest ->
       List.iter
-        (fun t -> expect_type ~span:dummy_span ~expected:first ~actual:t)
+        (fun t -> expect_type ~env ~span:dummy_span ~expected:first ~actual:t)
         rest;
       first
 
@@ -760,7 +790,7 @@ and check_stmt env (s : stmt) : env =
         | Some t, _ ->
             let init_ty = check_expr env init in
             let dt = resolve_ast_ty env t in
-            expect_type ~span:(expr_span init) ~expected:dt ~actual:init_ty;
+            expect_type ~env ~span:(expr_span init) ~expected:dt ~actual:init_ty;
             dt
         | None, _ -> check_expr env init
       in
@@ -779,7 +809,7 @@ and check_return env e_opt =
   (match (env.ret_ty, e_opt) with
   | Some expected, Some e ->
       let actual = check_expr env e in
-      expect_type ~span:(expr_span e) ~expected ~actual
+      expect_type ~env ~span:(expr_span e) ~expected ~actual
   | Some expected, None ->
       if expected <> TVoid then
         error_at dummy_span "return without value in function returning %s"
@@ -810,7 +840,7 @@ and check_assign env lhs rhs =
             "cannot assign to field of immutable receiver '&self'"
       | _ -> ())
   | _ -> ());
-  expect_type ~span:(expr_span rhs) ~expected:lhs_ty ~actual:rhs_ty;
+  expect_type ~env ~span:(expr_span rhs) ~expected:lhs_ty ~actual:rhs_ty;
   TVoid
 
 and check_question env e =
@@ -819,7 +849,7 @@ and check_question env e =
   match (t, env.ret_ty) with
   | TResult (ok, err), Some (TResult (_, ret_err)) ->
       (* ? on Result<T,E> in Result-returning fn -> unwrap T, but error types must match *)
-      if not (types_compatible ret_err err) then
+      if not (types_compatible ~type_params:env.type_params ret_err err) then
         error_at span
           "`?` error type mismatch: function returns Result<_, %s> but \
            expression has error type %s"
@@ -863,7 +893,7 @@ and check_array env elems =
       List.iter
         (fun e ->
           let t = check_expr env e in
-          expect_type ~span:(expr_span e) ~expected:first_ty ~actual:t)
+          expect_type ~env ~span:(expr_span e) ~expected:first_ty ~actual:t)
         rest;
       TVec first_ty
 
@@ -1036,7 +1066,7 @@ let rec collect_type_info env (items : item list) : env =
                     SMap.add fd.fn_name.node tms acc)
               SMap.empty t_items
           in
-          let ti = { tr_methods = methods } in
+          let ti = { tr_generics = generics; tr_methods = methods } in
           { env with traits = SMap.add t_name.node ti env.traits })
     env items
 
@@ -1123,7 +1153,8 @@ let check_fn_decl env (fd : fn_decl) =
   (* Check that body type matches return type for functions with a return type *)
   let resolved_ret = maybe_subst_self fn_env ret_ty in
   if resolved_ret <> TVoid && body_ty <> TVoid then
-    expect_type ~span:fd.fn_name.span ~expected:resolved_ret ~actual:body_ty
+    expect_type ~env:fn_env ~span:fd.fn_name.span ~expected:resolved_ret
+      ~actual:body_ty
 
 let check_item env (item : item) =
   match item with
@@ -1189,7 +1220,10 @@ let check_item env (item : item) =
                   "missing required method '%s' in impl %s for %s" mname
                   ti_trait.node (show_ty self_ty))
             tr_info.tr_methods;
-          (* Check signature compatibility for provided methods *)
+          (* Check signature compatibility for provided methods.
+             Include both impl and trait generic names so TParam is
+             treated as a wildcard for both sides. *)
+          let sig_type_params = tr_info.tr_generics @ impl_env.type_params in
           List.iter
             (fun (fd : fn_decl) ->
               match SMap.find_opt fd.fn_name.node tr_info.tr_methods with
@@ -1228,14 +1262,22 @@ let check_item env (item : item) =
                   else (
                     List.iter2
                       (fun exp act ->
-                        if not (types_compatible exp act) then
+                        if
+                          not
+                            (types_compatible ~type_params:sig_type_params exp
+                               act)
+                        then
                           error_at fd.fn_name.span
                             "signature mismatch for method '%s' in impl %s: \
                              parameter type mismatch, expected %s, got %s"
                             fd.fn_name.node ti_trait.node (show_ty exp)
                             (show_ty act))
                       tms.tms_params impl_params;
-                    if not (types_compatible tms.tms_ret impl_ret) then
+                    if
+                      not
+                        (types_compatible ~type_params:sig_type_params
+                           tms.tms_ret impl_ret)
+                    then
                       error_at fd.fn_name.span
                         "signature mismatch for method '%s' in impl %s: return \
                          type mismatch, expected %s, got %s"
