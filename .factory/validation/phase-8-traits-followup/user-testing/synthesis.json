@@ -1,0 +1,21 @@
+{
+  "milestone": "phase-8-traits-followup",
+  "round": 1,
+  "status": "pass",
+  "assertionsSummary": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "blocked": 0
+  },
+  "passedAssertions": [
+    "VAL-TRAIT-014"
+  ],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "appliedUpdates": [],
+  "previousRound": null,
+  "flowReports": [
+    ".factory/validation/phase-8-traits-followup/user-testing/flows/trait-self-default-method.json"
+  ]
+}

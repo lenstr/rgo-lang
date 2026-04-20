@@ -1,0 +1,111 @@
+{
+  "groupId": "trait-self-default-method",
+  "milestone": "phase-8-traits-followup",
+  "testedAt": "2026-04-20T18:47:34.520195+00:00",
+  "isolation": {
+    "surface": "rgoc CLI / generated Go artifacts",
+    "repoRoot": "/home/lenstr/workspace/personal/hack/rgo-lang",
+    "missionDir": "/home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7",
+    "concurrency": "serial only; max concurrent validators for this surface is 1",
+    "evidenceDir": "/home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-followup/trait-self-default-method"
+  },
+  "toolsUsed": [
+    "shell",
+    "nix develop -c dune runtest",
+    "nix develop -c dune exec rgoc -- ... -o ...",
+    "nix develop -c gofmt -d",
+    "nix develop -c go build",
+    "nix develop -c go run",
+    "nix develop -c go vet"
+  ],
+  "overallStatus": "pass",
+  "assertions": [
+    {
+      "id": "VAL-TRAIT-014",
+      "title": "Default trait methods can call sibling trait methods through Self",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run `nix develop -c dune runtest` from the repo root",
+          "expected": "The current test suite remains green for trait/default-method behavior, including the regression coverage for sibling `self.summary()` calls.",
+          "observed": "Command exited 0. The suite completed successfully; repository test sources include explicit coverage for this behavior in `test/test_typecheck.ml` and `test/test_codegen.ml`."
+        },
+        {
+          "action": "Compile `examples/traits.rg` with `rgoc` to a temporary Go file in the evidence directory",
+          "expected": "The example compiles successfully and the generated Go preserves the default method calling the sibling trait method on `self`.",
+          "observed": "Command exited 0 and wrote `traits.go`. Generated method body is `func (self Article) Short() string { return self.Summary() }`."
+        },
+        {
+          "action": "Validate the generated Go with `gofmt -d`, `go build`, `go run`, and `go vet`",
+          "expected": "No formatter diff, successful build, successful execution, and clean vet output.",
+          "observed": "All commands exited 0. `gofmt -d` produced no diff, `go build` produced `traits.bin`, `go run` printed `Hello: World` then `Hello`, and `go vet` emitted no diagnostics."
+        }
+      ],
+      "commands": [
+        {
+          "command": "nix develop -c dune runtest",
+          "exitCode": 0,
+          "outputFile": "phase-8-traits-followup/trait-self-default-method/dune-runtest.txt",
+          "observation": "Full suite passed; success output is quiet aside from the Nix shell banner."
+        },
+        {
+          "command": "nix develop -c dune exec rgoc -- /home/lenstr/workspace/personal/hack/rgo-lang/examples/traits.rg -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-followup/trait-self-default-method/traits.go",
+          "exitCode": 0,
+          "outputFile": "phase-8-traits-followup/trait-self-default-method/rgoc-compile.txt",
+          "observation": "Compilation succeeded and emitted Go implementing `Short()` via `self.Summary()`."
+        },
+        {
+          "command": "nix develop -c gofmt -d /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-followup/trait-self-default-method/traits.go",
+          "exitCode": 0,
+          "outputFile": "phase-8-traits-followup/trait-self-default-method/gofmt-diff.txt",
+          "observation": "No diff output; generated Go is formatter-stable."
+        },
+        {
+          "command": "nix develop -c go build -o /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-followup/trait-self-default-method/traits.bin /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-followup/trait-self-default-method/traits.go",
+          "exitCode": 0,
+          "outputFile": "phase-8-traits-followup/trait-self-default-method/go-build.txt",
+          "observation": "Build succeeded and produced a runnable binary."
+        },
+        {
+          "command": "nix develop -c go run /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-followup/trait-self-default-method/traits.go",
+          "exitCode": 0,
+          "outputFile": "phase-8-traits-followup/trait-self-default-method/go-run.txt",
+          "observation": "Program output matched the checked example behavior: `Hello: World` and `Hello`."
+        },
+        {
+          "command": "nix develop -c go vet /home/lenstr/.factory/missions/761991a0-6428-436f-b034-0393187de1c7/evidence/phase-8-traits-followup/trait-self-default-method/traits.go",
+          "exitCode": 0,
+          "outputFile": "phase-8-traits-followup/trait-self-default-method/go-vet.txt",
+          "observation": "Vet completed cleanly with no diagnostics."
+        }
+      ],
+      "evidence": {
+        "artifacts": [
+          "phase-8-traits-followup/trait-self-default-method/dune-runtest.txt",
+          "phase-8-traits-followup/trait-self-default-method/rgoc-compile.txt",
+          "phase-8-traits-followup/trait-self-default-method/traits.go",
+          "phase-8-traits-followup/trait-self-default-method/gofmt-diff.txt",
+          "phase-8-traits-followup/trait-self-default-method/go-build.txt",
+          "phase-8-traits-followup/trait-self-default-method/traits.bin",
+          "phase-8-traits-followup/trait-self-default-method/go-run.txt",
+          "phase-8-traits-followup/trait-self-default-method/go-vet.txt"
+        ],
+        "generatedGoSnippet": "func (self Article) Short() string { return self.Summary() }",
+        "runtimeOutput": "Hello: World\nHello\n"
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [
+    {
+      "description": "`dune runtest` is silent on success for this repo, so the relevant assertion-specific evidence comes primarily from the direct `examples/traits.rg` CLI flow and generated Go inspection.",
+      "resolved": true,
+      "resolution": "Supplemented the suite run with direct `rgoc` compilation plus downstream Go validation and captured the generated `Short()` implementation.",
+      "affectedAssertions": [
+        "VAL-TRAIT-014"
+      ]
+    }
+  ],
+  "blockers": [],
+  "summary": "VAL-TRAIT-014 passed: the suite stayed green, `examples/traits.rg` compiled through `rgoc`, generated Go implemented `Short()` via `self.Summary()`, and downstream `gofmt`, `go build`, `go run`, and `go vet` all succeeded."
+}
