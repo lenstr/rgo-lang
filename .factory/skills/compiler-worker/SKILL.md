@@ -9,7 +9,7 @@ NOTE: Startup and cleanup are handled by `worker-base`. This skill defines the W
 
 ## When to Use This Skill
 
-Use for compiler implementation features in this mission: parser/AST, semantic analysis, ownership and move tracking, Drop/Copy/Clone behavior, exhaustiveness, code generation, CLI behavior, and related examples/tests.
+Use for compiler implementation features in this mission: import syntax and namespace resolution, stdlib naming translation, interop metadata, ownership and cleanup planning, callback/lambda support, `net/http` lowering, generated Go validation, and related fixtures/tests.
 
 ## Required Skills
 
@@ -17,37 +17,38 @@ None.
 
 ## Work Procedure
 
-1. Read `mission.md`, mission `AGENTS.md`, `.factory/services.yaml`, and relevant `.factory/library/*.md` files before changing code.
-2. Inspect the existing repository area for the feature and match established file/module patterns before editing.
-3. Write or extend tests first for the requested behavior. For compiler work this usually means unit tests, negative fixtures, snapshot/expect tests, or e2e fixtures. Make the new tests fail before implementing the feature.
-4. Implement the smallest code change set needed to make the new tests pass while preserving PRD behavior.
-5. Run the narrowest relevant validators during iteration, then run the mission-level validators from `.factory/services.yaml` before handoff.
-6. For codegen, CLI, or ownership-sensitive features (Drop/Copy/Clone/moves), manually sanity-check at least one representative `.rg -> .go` flow and record the exact command/output path plus the observed runtime or diagnostic result in the handoff.
-7. When a feature changes ownership-sensitive behavior, prefer one negative compile-path test and one positive generated-Go/runtime path so move-vs-copy-vs-clone vs cleanup timing are all observable.
-8. Do not leave generated temp files or long-running processes behind. Clean up temporary outputs created for manual verification unless the feature explicitly adds fixtures.
-9. In the handoff, be explicit about tests added, commands run, manual checks performed, and anything skipped or blocked.
+1. Read `mission.md`, mission `AGENTS.md`, `.factory/services.yaml`, `validation-contract.md`, and the relevant `.factory/library/*.md` files before changing code.
+2. Match the existing repository structure and extend the smallest possible parser / resolver / typecheck / planning / codegen surface for the feature.
+3. Write tests first. Prefer a focused positive fixture and a focused negative fixture for each new compiler behavior. For interop work, add at least one real `.rg -> .go` acceptance check when the feature affects codegen.
+4. Implement only the behavior needed for the current feature and mission slice; do not broaden the supported Go surface beyond the contracted `net/http` subset unless the feature explicitly requires it.
+5. For naming-bridge work, verify both the accepted rgo-facing spelling and the rejected wrong-case spelling.
+6. For ownership-sensitive work, verify one negative compile path and one positive runtime path so move/copy/clone/drop behavior is externally observable.
+7. For callback or HTTP-facing work, manually exercise the generated artifact on `127.0.0.1:3111` when the feature makes that possible. Capture the exact compile/build/run/curl commands and what each request proved.
+8. Run the narrowest relevant validators during iteration, then run the mission-level commands from `.factory/services.yaml` before handoff.
+9. Do not leave generated temp files or long-running processes behind. Put disposable runtime artifacts under `.factory/runtime/` and clean them up unless the feature explicitly adds tracked fixtures.
+10. In the handoff, be explicit about tests added, commands run, runtime probes performed, and any deferred ambiguity or unsupported cases.
 
 ## Example Handoff
 
 ```json
 {
-  "salientSummary": "Implemented enum exhaustiveness checking and wired negative fixtures into dune runtest. Added one positive fixture with wildcard coverage and one negative fixture missing a variant; all mission validators now pass.",
-  "whatWasImplemented": "Added the Exhaust module pass over typed match expressions, integrated it into the driver before codegen, and extended the test harness with positive and negative enum coverage fixtures. The compiler now rejects non-exhaustive matches with a missing-variant diagnostic while accepting wildcard coverage.",
-  "whatWasLeftUndone": "",
+  "salientSummary": "Implemented `use net::http` parsing plus package-qualified stdlib name resolution and added one positive fixture plus two negative casing/import fixtures. The new fixture now lowers to real `import \"net/http\"` Go and the repo validators stay green.",
+  "whatWasImplemented": "Added AST/parser/resolver support for `use net::http` and package-qualified stdlib references, wired the naming bridge for `http::listen_and_serve` and `http::Request`, and extended the test suite with positive and negative fixtures covering qualified imports, missing imports, and wrong-case stdlib references.",
+  "whatWasLeftUndone": "Receiver-member naming for handler bodies is still pending in a later feature.",
   "verification": {
     "commandsRun": [
       {
-        "command": "nix develop -c dune runtest --no-buffer test/test_exhaust.exe",
+        "command": "nix develop -c dune runtest -j 16 test/test_parser.exe test/test_resolver.exe test/test_codegen.exe",
         "exitCode": 0,
-        "observation": "Positive and negative exhaustiveness fixtures passed."
+        "observation": "New import and naming fixtures passed."
       },
       {
-        "command": "nix develop -c dune build",
+        "command": "nix develop -c dune build -j 16",
         "exitCode": 0,
-        "observation": "Repository builds cleanly after integrating the pass."
+        "observation": "Repository builds cleanly after the interop parser/resolver changes."
       },
       {
-        "command": "nix develop -c dune runtest",
+        "command": "nix develop -c dune runtest -j 16",
         "exitCode": 0,
         "observation": "Full test suite passed."
       },
@@ -59,23 +60,23 @@ None.
     ],
     "interactiveChecks": [
       {
-        "action": "Compiled a representative enum fixture with full coverage and then a fixture missing one variant.",
-        "observed": "The covered fixture succeeded; the missing-variant fixture failed with a non-exhaustive-match diagnostic naming the uncovered case."
+        "action": "Compiled a positive `use net::http` fixture to `.factory/runtime/http-import.go` and inspected the lowered import and symbol spellings.",
+        "observed": "Generated Go contained `import \"net/http\"`, `http.ListenAndServe`, and `*http.Request` with no manual patching required."
       }
     ]
   },
   "tests": {
     "added": [
       {
-        "file": "test/test_exhaust.ml",
+        "file": "test/test_typecheck.ml",
         "cases": [
           {
-            "name": "wildcard match is accepted",
-            "verifies": "A wildcard arm satisfies exhaustiveness for enum matches."
+            "name": "use net::http enables qualified stdlib symbols",
+            "verifies": "Package-qualified stdlib names resolve after import and lower to real Go imports."
           },
           {
-            "name": "missing enum variant is rejected",
-            "verifies": "A non-exhaustive enum match produces a diagnostic containing the missing variant."
+            "name": "wrong-case stdlib callable is rejected",
+            "verifies": "Go-cased callable names fail in the rgo-facing naming bridge."
           }
         ]
       }
@@ -88,6 +89,6 @@ None.
 ## When to Return to Orchestrator
 
 - The feature depends on a prior compiler phase that is not implemented or is too broken to proceed safely.
-- The PRD is ambiguous for the requested milestone and the ambiguity affects observable compiler behavior.
-- A required validation command from `.factory/services.yaml` is broken for reasons unrelated to the feature.
-- Implementing the feature would require adding a new dependency or external service not already planned.
+- The feature requires expanding beyond the approved `net/http` mission slice or beyond zero-capture anonymous handlers.
+- A required validation command or the reserved localhost validation port (`127.0.0.1:3111`) is unavailable for reasons unrelated to the feature.
+- Implementing the feature would require a new dependency, service, or external package mechanism not already planned.

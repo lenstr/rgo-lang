@@ -15,20 +15,23 @@ All commands must run through the repository flake:
 - `nix develop -c ocaml ...`
 
 Validation entrypoints are standardized in `.factory/services.yaml`:
-- `build = nix develop -c dune build`
-- `test = nix develop -c dune runtest`
+- `build = nix develop -c dune build -j 16`
+- `test = nix develop -c dune runtest -j 16`
 - `lint = nix develop -c dune build @fmt`
-- `typecheck = nix develop -c dune build`
+- `typecheck = nix develop -c dune build -j 16`
 - `cli_version = nix develop -c dune exec rgoc -- --version`
+- `go_version = nix develop -c go version`
 
 The flake currently provides Go 1.26+, OCaml 5.x, dune, menhir, sedlex, ppx_deriving, alcotest, ppx_expect, ocamlformat, ocaml-lsp, and bisect_ppx.
 
 ## External dependencies
 
-This mission has no external credentials, APIs, databases, or background services.
+This mission has no external credentials, APIs, databases, or third-party services.
+The only runtime dependency added by the mission is the Go stdlib surface exercised through generated Go binaries.
 
 ## Mission-specific setup notes
 
-- The Drop/Copy/Clone mission adds no new runtime services.
-- Validation should stay inside the repo root and use the flake toolchain only.
-- Temporary generated Go files should be written outside the repo or cleaned up immediately unless promoted to tracked fixtures.
+- The interop-first mission remains repo-local and stdlib-first.
+- Validators and workers should compile the representative HTTP fixture into `./.factory/runtime/http-validation-server` for live HTTP checks.
+- The HTTP validation server should bind `127.0.0.1:3111` only.
+- Temporary generated Go files should be written under `.factory/runtime/` or another disposable path and cleaned up unless promoted to tracked fixtures.

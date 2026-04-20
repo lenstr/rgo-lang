@@ -1,104 +1,132 @@
 # Architecture
 
-How the system works at a high level.
+High-level architecture for the interop-first mission.
 
-**What belongs here:** compiler phases, major modules, data flow, invariants, and mission-relevant architectural boundaries.
-**What does NOT belong here:** exact shell commands or service/port details.
+**What belongs here:** major compiler components, data flow, interop boundaries, planner/codegen handoff, and mission-level invariants.
+**What does NOT belong here:** patch-level implementation notes, exhaustive API inventories, or exact validation commands/ports.
 
 ---
 
 ## Compiler pipeline
 
-The repository implements a single-file compiler pipeline for `rgo` source programs, with one `.rg` input lowering to one Go package.
+The repository remains a single-file compiler from one `.rg` input to one Go output, but this mission adds an explicit interop-aware semantic path rather than treating Go calls as codegen-only string substitutions.
 
-Current and mission-relevant phases:
+1. `Lexer` tokenizes source, including the `use a::b` import surface and `::`-qualified references.
+2. `Parser` builds AST forms for imports, package-qualified paths, callable expressions, and the minimum anonymous-function shape needed by the HTTP slice.
+3. `Resolver` distinguishes symbol origin:
+   - local rgo declarations
+   - approved stdlib package namespaces such as `net::http`
+   - future external Go packages behind a deferred boundary
+4. `Typecheck` validates local types plus the approved imported Go surface, including package-qualified types, callable signatures, receiver/member access, and handler registration signatures.
+5. `Interop planning` classifies each foreign reference before codegen:
+   - import path to emit in Go
+   - rgo-facing name to Go-facing name lowering
+   - call-boundary ownership behavior
+   - callback lowering mode
+6. `Ownership / cleanup planning` preserves explicit move/copy/clone/drop decisions for the same program, including interop-sensitive by-value boundaries.
+7. `Exhaust` remains downstream of typing and should stay orthogonal to package interop.
+8. `Codegen` emits real Go imports and operations from the precomputed plans instead of rediscovering package, naming, ownership, or callback semantics ad hoc.
+9. `Driver` orchestrates the phases, writes the output file, and keeps generated Go formatter-stable.
 
-1. `Lexer` tokenizes `.rg` source using sedlex.
-2. `Parser` turns tokens into an AST using Menhir.
-3. `Resolver` assigns names to declarations and uses, including type names, enum variants, impl scopes, and trait method namespaces.
-4. `Typecheck` validates the AST, performs local inference, enforces mutability rules, checks `Option`/`Result`/`?`, resolves method calls, validates trait impls and bounds, and substitutes `Self` where allowed.
-5. `Ownership / Drop analysis` is the planned new mission layer. It should decide whole-binding move validity, Copy-vs-move behavior, Clone escape-hatch behavior, and cleanup scheduling for named bindings.
-6. `Exhaust` validates exhaustiveness of typed pattern matches after type information is available.
-7. `Codegen` lowers rgo programs into formatted Go source and must preserve the ownership/drop decisions made earlier.
-8. `Driver` and the CLI glue phases together, run output formatting, and write output files.
+## Interop semantic layers
 
-## Planned ownership / cleanup architecture
+The mission should keep interop as a stack of semantic layers with clear responsibility boundaries.
 
-This mission should treat `Drop`, `Copy`, and `Clone` as a coordinated semantic subsystem rather than three isolated parser or codegen tweaks.
+### Import and namespace layer
 
-### Semantic roles
+- `use net::http` introduces a package namespace named `http`.
+- Imported package members remain package-qualified in user code; bare imported-call resolution is out of scope.
+- Imported package aliases are reserved at file scope; colliding top-level user declarations should fail explicitly instead of shadowing silently.
+- Unsupported package paths should fail explicitly as deferred external-package work, not fall through as local-name errors.
 
-- `Drop` introduces automatic cleanup for owned user-defined nominal values. Its contract recognition and impl-shape validation belong in semantic analysis: duplicate impls, missing required methods, invalid method shapes, and invalid impl targets should be rejected before codegen.
-- `Copy` prevents ownership transfer at whole-binding move sites when the type is eligible. Its eligibility and bound validation also belong in semantic analysis.
-- `Clone` is the explicit user-facing duplication escape hatch for non-`Copy` values. Its canonical `clone(&self) -> Self` contract should be validated in semantic analysis just like other required trait methods.
+### Import and naming bridge
 
-### MVP ownership boundary
+- The rgo-facing surface uses Rust-style `snake_case` for imported functions and receiver methods.
+- Imported Go type names stay PascalCase in rgo source.
+- Source-level imported type names intentionally hide Go pointer/reference spelling when that improves the rgo surface; interop metadata must record the real lowered Go shape, for example `http::Request` -> `*http.Request` and `http::ResponseWriter` -> `http.ResponseWriter`.
+- The bridge is directional: resolution/typecheck work in the rgo-facing namespace, while codegen lowers to real Go names such as `http.ListenAndServe`, `http.NewServeMux`, `mux.HandleFunc`, `req.FormValue`, and `w.WriteHeader`.
 
-The mission boundary is **whole named bindings only**:
+### Typed interop surface
 
-- supported move sites: assignment/rebinding, by-value calls, and by-value returns
-- supported cleanup paths: normal scope exit, mutable-binding overwrite, explicit `return`, by-value parameter cleanup at callee exit, and `?` exits including nested `?` expression forms covered by the contract
-- moved bindings become unusable afterward
-- no partial moves from fields or enum payloads
-- no full borrow checker or lifetime analysis
+- Package-qualified imported types must be valid in type position.
+- Imported functions, constructors, and receiver members must be valid in expression position in the same program.
+- Imported symbols should carry enough metadata for later phases to know whether they are:
+  - type-only
+  - value/callable
+  - receiver member surface
+  - callback-registration entry points
 
-### Cleanup scheduling model
+## Ownership and callback boundaries
 
-Workers should preserve these invariants:
+This mission keeps ownership and callback work intentionally narrow but explicit.
 
-- cleanup only for still-live owned bindings
-- cleanup in reverse declaration order on normal scope exit
-- cleanup also on early exits covered by the mission (`return`, `?`, and equivalent control-flow exits the feature explicitly supports)
-- overwriting a live mutable binding cleans up the old value exactly once
-- moved bindings must not be cleaned up a second time
+### Ownership boundary
 
-### Recommended implementation split
+- By-value call semantics must be extensible by callee kind: local rgo callable, approved stdlib callable, and future foreign callable.
+- Whole-binding ownership rules still apply first; no partial moves from fields or enum payloads.
+- `Copy`, `Clone`, and `Drop` remain explicit semantic decisions, not codegen guesses.
+- Interop calls must consume planner output that says whether a boundary is copy-preserving, move-producing, or cleanup-neutral.
 
-The cleanest architecture is to keep contract validation and type eligibility in semantic analysis, then have one explicit ownership/cleanup planning layer produce information that codegen can consume.
+### Callback slice
 
-That means:
-
-- parser/AST should change only if the language surface itself changes
-- resolver/typecheck should recognize and validate the `Drop` / `Copy` / `Clone` contracts and determine type-level eligibility
-- an ownership/drop planning layer should reason about binding lifetimes, moves, and cleanup points
-- codegen should lower already-decided cleanup/copy/clone behavior rather than re-deriving semantics ad hoc from raw AST shape
+- Support passing named rgo functions directly where the approved `net/http` handler signature requires it.
+- Support zero-capture anonymous handlers only.
+- Reject capturing anonymous handlers in this mission.
+- Callback registration must not consume reusable named function bindings or zero-capture handler values.
 
 ### Planner-to-codegen handoff
 
-Workers should not leave this implicit. The ownership/cleanup layer needs a concrete handoff artifact to codegen, such as:
+Interop and ownership planning should hand codegen an explicit artifact, such as annotated typed nodes or a per-function lowering plan. The handoff must carry at least:
 
-- annotated typed AST nodes, or
-- a separate per-function cleanup/move plan keyed by statements/expressions/bindings
+- resolved package/import identity
+- rgo-facing name to Go-facing name mapping
+- imported type/value/member category
+- callback lowering strategy for each registered handler
+- call-boundary ownership classification
+- cleanup suppression/scheduling decisions already computed upstream
 
-Whatever representation is chosen, it must carry at least:
+Codegen should be a consumer of these decisions, not the place where they are recreated.
 
-- which bindings are live vs moved at each move site
-- where cleanup must run
-- which cleanups are suppressed because ownership transferred elsewhere
-- which paths are Copy-preserving rather than move-producing
+## HTTP slice
 
-The exact data structure is up to the implementation, but codegen should consume explicit precomputed decisions rather than re-infering ownership ad hoc.
+The first concrete interop slice is `net/http`, chosen as the validation surface for “real Go interop”.
 
-## Core invariants for this mission
+### Supported mission shape
 
-- `Drop` is only for supported user-defined nominal types in this mission (`struct`, `enum`, including generic nominal types).
-- `Drop` types cannot also be `Copy`.
-- `Clone` remains explicit and user-visible through `clone()`.
-- Generic instantiations must stay concrete across move/copy/clone/drop paths; workers must not collapse instantiated types to bare nominal names.
-- Downstream generated Go must remain deterministic, formatter-stable, buildable, and vet-clean.
-- Existing trait/impl/generic behavior outside the new ownership semantics must not regress.
+- import: `use net::http`
+- server startup via `http::listen_and_serve`
+- mux creation via `http::new_serve_mux`
+- handler registration via the approved `ServeMux` receiver surface
+- handler parameters using `http::ResponseWriter` and `http::Request`
+- request/member operations needed for CRUD validation, including request method access and form-field reads
+- response writing/status operations needed for CRUD validation
 
-## Repository layout
+### Validation-facing behavior
 
-- `bin/` holds the CLI entrypoint (`rgoc`).
-- `lib/` holds compiler modules and their `.mli` interfaces.
-- `test/` holds unit, snapshot, negative, and end-to-end fixtures.
-- `examples/` holds sample `.rg` programs that should compile through the pipeline.
+The architecture must support a minimal CRUD-style server that proves:
 
-## Validation shape
+- imports lower to real `net/http`
+- package-qualified names compose in both type and value positions
+- named handlers and zero-capture anonymous handlers both work
+- repeated requests reuse registered handlers safely
+- long-lived CRUD state is represented through explicit module-level or otherwise globally reachable state, not captured closures
+- GET/POST success flows and error-path flows remain observable through real HTTP traffic
 
-The user-facing surface remains CLI-only:
+## External-package foundation
 
-- compile `.rg` fixtures/examples with `rgoc`
-- validate generated Go with `gofmt -d`, `go build`, `go vet`, and `go run`
-- use exact stdout ordering/counts as the oracle for Drop timing, exactly-once behavior, Copy reuse, Clone duplication, and cross-area early-exit flows
+This mission is stdlib-first, but the semantic model should already leave room for arbitrary Go packages later.
+
+- Symbol origin must be represented as more than “local vs not local”.
+- Package-qualified lookup should not assume `net/http` is the only possible foreign namespace forever.
+- Resolver/typecheck should have a clean deferred branch for unsupported external packages.
+- Version resolution, package loading, and broad third-party validation are intentionally deferred.
+
+## Key invariants
+
+- Imported package namespaces stay explicit and package-qualified.
+- The naming bridge always presents callables/members in `snake_case` and imported Go types in PascalCase.
+- Ownership decisions are computed before codegen and preserved across interop boundaries.
+- Callback support is limited to named functions and zero-capture anonymous handlers.
+- The HTTP slice is the minimum needed to validate a real CRUD-style localhost server.
+- External-package support is foundation-only in this mission.
+- Generated Go must remain deterministic, formatter-stable, buildable, and vet-clean.

@@ -1,9 +1,16 @@
 commands:
   install: nix develop -c true
-  build: nix develop -c dune build
-  test: nix develop -c dune runtest
+  build: nix develop -c dune build -j 16
+  typecheck: nix develop -c dune build -j 16
+  test: nix develop -c dune runtest -j 16
   lint: nix develop -c dune build @fmt
-  typecheck: nix develop -c dune build
   cli_version: nix develop -c dune exec rgoc -- --version
+  go_version: nix develop -c go version
 
-services: {}
+services:
+  http_validation_server:
+    start: ./.factory/runtime/http-validation-server --listen 127.0.0.1:3111
+    stop: sh -c 'pid=$(lsof -ti tcp:3111 || true); test -n "$pid" && kill $pid || true'
+    healthcheck: curl -sf http://127.0.0.1:3111/items
+    port: 3111
+    depends_on: []
