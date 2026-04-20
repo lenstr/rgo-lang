@@ -568,26 +568,28 @@ fn main() {
 let test_pointer_receiver_non_addressable () =
   let src =
     {|
-struct Point {
-    pub x: f64,
-    pub y: f64,
+struct Counter {
+    value: i64,
 }
 
-impl Point {
-    pub fn get_x(&self) -> f64 {
-        self.x
+impl Counter {
+    pub fn new(v: i64) -> Self {
+        Counter { value: v }
+    }
+
+    pub fn get(&self) -> i64 {
+        self.value
     }
 }
 
 fn main() {
-    let p = Point { x: 1.0, y: 2.0 };
-    println(p.get_x());
+    println(Counter::new(42).get());
 }
 |}
   in
-  let go = compile_and_check src in
+  let go = compile_and_check ~expected_output:"42\n" src in
   (* Verify it generates pointer receiver *)
-  Alcotest.(check bool) "pointer receiver" true (contains go "(self *Point)")
+  Alcotest.(check bool) "pointer receiver" true (contains go "(self *Counter)")
 
 (* ---------- Hello world sanity ---------- *)
 

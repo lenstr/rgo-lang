@@ -294,7 +294,10 @@ let rec infer_expr_type env (e : Ast.expr) : Ast.ty option =
           match SMap.find_opt type_name.node env.impls with
           | Some ii -> (
               match SMap.find_opt fn_name.node ii.ii_assoc_fns with
-              | Some fi -> fi.fi_ret
+              | Some fi -> (
+                  match fi.fi_ret with
+                  | Some TySelf -> Some (TyName type_name)
+                  | other -> other)
               | None -> None)
           | None -> None))
   | ExprPath (type_name, _variant) -> (
@@ -1138,9 +1141,31 @@ and gen_user_method_call env buf indent recv method_name args =
   in
   if needs_temp then begin
     let tmp = fresh_tmp env "recv" in
-    Buffer.add_string buf (Printf.sprintf "func() { %s := " tmp);
+    (* Look up method return type to decide wrapping strategy *)
+    let method_ret =
+      match type_name with
+      | Some tn -> (
+          match SMap.find_opt tn env.impls with
+          | Some ii -> (
+              match SMap.find_opt method_name.node ii.ii_methods with
+              | Some mi -> (
+                  match mi.mi_ret with
+                  | Some TySelf -> Some (Ast.TyName (dummy_loc tn))
+                  | other -> other)
+              | None -> None)
+          | None -> None)
+      | None -> None
+    in
+    (match method_ret with
+    | Some ret_ty ->
+        let gt = go_type env ret_ty in
+        Printf.bprintf buf "func() %s { %s := " gt tmp
+    | None -> Printf.bprintf buf "func() { %s := " tmp);
     gen_expr env buf indent CtxExpr recv;
     Buffer.add_string buf "; ";
+    (match method_ret with
+    | Some _ -> Buffer.add_string buf "return "
+    | None -> ());
     Buffer.add_string buf tmp;
     Buffer.add_char buf '.';
     Buffer.add_string buf (go_method_name is_pub method_name.node);
