@@ -2719,6 +2719,233 @@ fn main() {
     src
   |> ignore
 
+(* ======== Generic ownership path tests (VAL-OWN-010, VAL-OWN-011) ======== *)
+
+(* VAL-OWN-010: Partial move from field via let binding — negative *)
+let test_own_partial_move_let_negative () =
+  compile_expect_error ~expect:"partial moves are not supported"
+    {|
+struct Inner {
+  pub name: str,
+}
+
+struct Outer {
+  pub inner: Inner,
+}
+
+fn main() {
+  let o = Outer { inner: Inner { name: "hi" } };
+  let x = o.inner;
+  println(x.name);
+}
+|}
+    ()
+
+(* VAL-OWN-010: Partial move from field via call argument — negative *)
+let test_own_partial_move_call_negative () =
+  compile_expect_error ~expect:"partial moves are not supported"
+    {|
+struct Inner {
+  pub name: str,
+}
+
+struct Outer {
+  pub inner: Inner,
+}
+
+fn consume(i: Inner) {
+  println(i.name);
+}
+
+fn main() {
+  let o = Outer { inner: Inner { name: "hi" } };
+  consume(o.inner);
+}
+|}
+    ()
+
+(* VAL-OWN-011: Generic struct with Drop — cleanup preserves concrete
+   instantiation and fires exactly once *)
+let test_own_generic_drop_cleanup () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+struct Container<T> {
+  pub value: T,
+}
+
+impl<T> Container<T> {
+  pub fn new(v: T) -> Self {
+    Container { value: v }
+  }
+}
+
+impl<T> Drop for Container<T> {
+  fn drop(&mut self) {
+    println("drop-container");
+  }
+}
+
+fn main() {
+  let c = Container::new(42);
+  println("alive");
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"alive\ndrop-container\n" src in
+  (* Verify the generated Go preserves generic instantiation *)
+  Alcotest.(check bool)
+    "generic struct type" true
+    (contains go "type Container[T any] struct");
+  Alcotest.(check bool)
+    "generic Drop method" true
+    (contains go "func (self *Container[T]) Drop()")
+
+(* VAL-OWN-011: Generic struct move tracking — moved value has cleanup
+   transferred to destination *)
+let test_own_generic_move_cleanup () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+struct Container<T> {
+  pub value: T,
+}
+
+impl<T> Container<T> {
+  pub fn new(v: T) -> Self {
+    Container { value: v }
+  }
+}
+
+impl<T> Drop for Container<T> {
+  fn drop(&mut self) {
+    println("drop-container");
+  }
+}
+
+fn main() {
+  let a = Container::new("hello");
+  let b = a;
+  println("done");
+}
+|}
+  in
+  compile_and_check ~expected_output:"done\ndrop-container\n" src |> ignore
+
+(* VAL-OWN-011: Generic struct with Copy — copies keep original alive *)
+let test_own_generic_copy_runtime () =
+  let src =
+    {|
+trait Copy {}
+
+struct Wrapper<T> {
+  pub value: T,
+}
+
+impl<T> Copy for Wrapper<T> {}
+
+impl<T> Wrapper<T> {
+  pub fn new(v: T) -> Self {
+    Wrapper { value: v }
+  }
+
+  pub fn get(&self) -> T {
+    self.value
+  }
+}
+
+fn use_wrapper<T>(w: Wrapper<T>) {
+  println("used");
+}
+
+fn main() {
+  let w = Wrapper::new(42);
+  use_wrapper(w);
+  use_wrapper(w);
+  println("still-alive");
+}
+|}
+  in
+  compile_and_check ~expected_output:"used\nused\nstill-alive\n" src |> ignore
+
+(* VAL-OWN-011: Generic enum with Drop — cleanup fires once *)
+(* VAL-OWN-011: Two distinct generic instantiations have independent
+   cleanup scheduling *)
+let test_own_generic_two_instantiations () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+struct Box<T> {
+  pub value: T,
+}
+
+impl<T> Box<T> {
+  pub fn new(v: T) -> Self {
+    Box { value: v }
+  }
+}
+
+impl<T> Drop for Box<T> {
+  fn drop(&mut self) {
+    println("drop-box");
+  }
+}
+
+fn main() {
+  let a = Box::new(42);
+  let b = Box::new("hello");
+  println("alive");
+}
+|}
+  in
+  compile_and_check ~expected_output:"alive\ndrop-box\ndrop-box\n" src |> ignore
+
+(* VAL-OWN-011: Generic clone escape hatch at boundary *)
+let test_own_generic_clone_runtime () =
+  let src =
+    {|
+trait Clone {
+  fn clone(&self) -> Self;
+}
+
+struct Container<T> {
+  pub value: T,
+}
+
+impl<T> Container<T> {
+  pub fn new(v: T) -> Self {
+    Container { value: v }
+  }
+}
+
+impl<T> Clone for Container<T> {
+  fn clone(&self) -> Self {
+    Container { value: self.value }
+  }
+}
+
+fn consume<T>(c: Container<T>) {
+  println("consumed");
+}
+
+fn main() {
+  let c = Container::new(42);
+  consume(c.clone());
+  println("still-alive");
+}
+|}
+  in
+  compile_and_check ~expected_output:"consumed\nstill-alive\n" src |> ignore
+
 let () =
   Alcotest.run "codegen"
     [
@@ -2978,6 +3205,10 @@ let () =
             test_own_drop_copy_overlap;
           Alcotest.test_case "clone on non-Clone rejected" `Quick
             test_own_clone_no_impl;
+          Alcotest.test_case "partial move from field via let" `Quick
+            test_own_partial_move_let_negative;
+          Alcotest.test_case "partial move from field via call" `Quick
+            test_own_partial_move_call_negative;
         ] );
       ( "ownership-cleanup",
         [
@@ -2993,5 +3224,18 @@ let () =
             test_own_cleanup_byval_return;
           Alcotest.test_case "callee-exit cleanup for by-value params" `Quick
             test_own_cleanup_callee_param;
+        ] );
+      ( "generic-ownership",
+        [
+          Alcotest.test_case "generic Drop cleanup exactly-once" `Quick
+            test_own_generic_drop_cleanup;
+          Alcotest.test_case "generic move transfers cleanup" `Quick
+            test_own_generic_move_cleanup;
+          Alcotest.test_case "generic Copy struct reusable" `Quick
+            test_own_generic_copy_runtime;
+          Alcotest.test_case "generic two instantiations cleanup" `Quick
+            test_own_generic_two_instantiations;
+          Alcotest.test_case "generic clone escape hatch" `Quick
+            test_own_generic_clone_runtime;
         ] );
     ]

@@ -1920,6 +1920,150 @@ fn main() {
 }
 |}
 
+(* VAL-OWN-010: Partial move from field via let binding is rejected *)
+let own_partial_move_let_negative =
+  {|
+struct Inner {
+  pub name: str,
+}
+
+struct Outer {
+  pub inner: Inner,
+}
+
+fn main() {
+  let o = Outer { inner: Inner { name: "hi" } };
+  let x = o.inner;
+  println(x.name);
+}
+|}
+
+(* VAL-OWN-010: Partial move from field via call argument is rejected *)
+let own_partial_move_call_negative =
+  {|
+struct Inner {
+  pub name: str,
+}
+
+struct Outer {
+  pub inner: Inner,
+}
+
+fn consume(i: Inner) {
+  println(i.name);
+}
+
+fn main() {
+  let o = Outer { inner: Inner { name: "hi" } };
+  consume(o.inner);
+}
+|}
+
+(* VAL-OWN-010: Partial move from field via assignment is rejected *)
+let own_partial_move_assign_negative =
+  {|
+struct Inner {
+  pub name: str,
+}
+
+struct Outer {
+  pub inner: Inner,
+}
+
+fn main() {
+  let o = Outer { inner: Inner { name: "hi" } };
+  let mut x = Inner { name: "placeholder" };
+  x = o.inner;
+  println(x.name);
+}
+|}
+
+(* VAL-OWN-010: Copy field access is still allowed (not a partial move) *)
+let own_field_read_copy_positive =
+  {|
+struct Point {
+  pub x: i64,
+  pub y: i64,
+}
+
+fn show(n: i64) {
+  println(n);
+}
+
+fn main() {
+  let p = Point { x: 1, y: 2 };
+  let a = p.x;
+  show(p.y);
+  println(a);
+}
+|}
+
+(* VAL-OWN-010: String field access is allowed (not a partial move) *)
+let own_field_read_str_positive =
+  {|
+struct Resource {
+  pub name: str,
+}
+
+fn main() {
+  let r = Resource { name: "hello" };
+  let s = r.name;
+  println(s);
+}
+|}
+
+(* VAL-OWN-011: Generic struct move tracking works with concrete instantiation *)
+let own_generic_move_negative =
+  {|
+struct Container<T> {
+  pub value: T,
+}
+
+impl<T> Container<T> {
+  pub fn new(v: T) -> Self {
+    Container { value: v }
+  }
+}
+
+fn consume<T>(c: Container<T>) {
+  println("consumed");
+}
+
+fn main() {
+  let c = Container::new(42);
+  consume(c);
+  consume(c);
+}
+|}
+
+(* VAL-OWN-011: Generic struct with Copy stays usable *)
+let own_generic_copy_positive =
+  {|
+trait Copy {}
+
+struct Wrapper<T> {
+  pub value: T,
+}
+
+impl<T> Copy for Wrapper<T> {}
+
+impl<T> Wrapper<T> {
+  pub fn new(v: T) -> Self {
+    Wrapper { value: v }
+  }
+}
+
+fn use_wrapper<T>(w: Wrapper<T>) {
+  println("used");
+}
+
+fn main() {
+  let w = Wrapper::new(42);
+  use_wrapper(w);
+  use_wrapper(w);
+}
+|}
+
 let ownership_positive_tests =
   [
     ("copy i64 survives assignment", `Quick, pass own_copy_assign_positive);
@@ -1927,6 +2071,9 @@ let ownership_positive_tests =
     ("copy bool survives call", `Quick, pass own_copy_bool_positive);
     ("copy struct survives call", `Quick, pass own_copy_struct_positive);
     ("clone escape hatch", `Quick, pass own_clone_positive);
+    ("copy field access allowed", `Quick, pass own_field_read_copy_positive);
+    ("string field access allowed", `Quick, pass own_field_read_str_positive);
+    ("generic Copy struct reusable", `Quick, pass own_generic_copy_positive);
   ]
 
 let ownership_negative_tests =
@@ -1953,6 +2100,21 @@ let ownership_negative_tests =
     ( "field access after move rejected",
       `Quick,
       fail ~expect:"use of moved value" own_field_after_move_negative );
+    ( "partial move from field via let rejected",
+      `Quick,
+      fail ~expect:"partial moves are not supported"
+        own_partial_move_let_negative );
+    ( "partial move from field via call rejected",
+      `Quick,
+      fail ~expect:"partial moves are not supported"
+        own_partial_move_call_negative );
+    ( "partial move from field via assign rejected",
+      `Quick,
+      fail ~expect:"partial moves are not supported"
+        own_partial_move_assign_negative );
+    ( "generic struct move double-use rejected",
+      `Quick,
+      fail ~expect:"use of moved value" own_generic_move_negative );
   ]
 
 let () =

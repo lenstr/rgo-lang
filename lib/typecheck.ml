@@ -194,6 +194,26 @@ let consume_if_non_copy (env : env) (span : span) (name : string) (t : ty) :
     mark_moved env name
   end
 
+(* Would extracting this type from a field constitute a partial move?
+   Only non-Copy nominal types, containers, and unbound generic params
+   are real move targets.  Primitives, strings, and references are
+   effectively value-copied at the Go level. *)
+let is_partial_move_type (env : env) (t : ty) : bool =
+  match t with
+  | TStruct (name, _) | TEnum (name, _) -> (
+      match SMap.find_opt name env.trait_impls with
+      | Some traits -> not (SSet.mem "Copy" traits)
+      | None -> true)
+  | TVec _ | THashMap _ | TImported _ -> true
+  | TParam p -> (
+      match SMap.find_opt p env.param_bounds with
+      | Some bounds -> not (List.mem "Copy" bounds)
+      | None -> true)
+  | TOption _ | TResult (_, _) -> true
+  | TInt _ | TUint _ | TFloat _ | TBool | TString | TRef _ | TVoid | TTuple _
+  | TFn _ | TVar _ | TSelf ->
+      false
+
 (* ---------- AST type -> internal type ---------- *)
 let rec resolve_ast_ty env (t : Ast.ty) : ty =
   match t with
@@ -549,12 +569,17 @@ and check_call env callee args =
       | _ -> error_at (expr_span callee) "expression is not callable")
 
 (* Ownership: after a by-value call, mark each identifier argument as
-   moved when its type is non-Copy. *)
+   moved when its type is non-Copy.  Also reject partial moves from
+   field access. *)
 and consume_call_args env (args : expr list) (arg_types : ty list) : unit =
   List.iter2
     (fun arg ty ->
       match arg with
       | ExprIdent name -> consume_if_non_copy env name.span name.node ty
+      | ExprFieldAccess (_, field) when is_partial_move_type env ty ->
+          error_at field.span
+            "cannot move out of field '%s' -- partial moves are not supported"
+            field.node
       | _ -> ())
     args arg_types
 
@@ -1307,10 +1332,14 @@ and check_stmt env (s : stmt) : env =
           error_at (expr_span init) "cannot bind result of void expression"
       | _ -> ());
       (* Ownership: if RHS is a simple identifier with a non-Copy type,
-         mark the source as moved. *)
+         mark the source as moved.  Reject partial moves from fields. *)
       (match init with
       | ExprIdent src_name ->
           consume_if_non_copy env src_name.span src_name.node declared_ty
+      | ExprFieldAccess (_, field) when is_partial_move_type env declared_ty ->
+          error_at field.span
+            "cannot move out of field '%s' -- partial moves are not supported"
+            field.node
       | _ -> ());
       bind_let_pattern env declared_ty is_mut pat
   | StmtExpr e ->
@@ -1363,10 +1392,14 @@ and check_assign env lhs rhs =
   | _ -> ());
   expect_type ~env ~span:(expr_span rhs) ~expected:lhs_ty ~actual:rhs_ty;
   (* Ownership: if RHS is a simple identifier with a non-Copy type,
-     mark the source as moved. *)
+     mark the source as moved.  Reject partial moves from fields. *)
   (match rhs with
   | ExprIdent src_name ->
       consume_if_non_copy env src_name.span src_name.node rhs_ty
+  | ExprFieldAccess (_, field) when is_partial_move_type env rhs_ty ->
+      error_at field.span
+        "cannot move out of field '%s' -- partial moves are not supported"
+        field.node
   | _ -> ());
   TVoid
 
