@@ -13,139 +13,33 @@ let error_at (span : span) fmt =
         (Typecheck_error { msg; line = span.start.line; col = span.start.col }))
     fmt
 
-(* ---------- stdlib interop surface ---------- *)
+(* ---------- stdlib interop surface (delegated to Interop registry) ---------- *)
 
-(* The minimum net/http surface contracted for this mission. *)
-type stdlib_member_kind = StdlibFn | StdlibType
+let lookup_stdlib_member = Interop.lookup_member
+let is_wrong_case_stdlib = Interop.wrong_case_member
 
-type stdlib_member = {
-  sm_rgo_name : string; (* rgo-facing name, e.g. "listen_and_serve" *)
-  sm_kind : stdlib_member_kind;
-}
+(* ---------- stdlib receiver/member surface (delegated to Interop registry) ---------- *)
 
-(* Package-level functions and constructors *)
-let net_http_fns =
-  [
-    { sm_rgo_name = "listen_and_serve"; sm_kind = StdlibFn };
-    { sm_rgo_name = "new_serve_mux"; sm_kind = StdlibFn };
-  ]
-
-(* Type surface *)
-let net_http_types =
-  [
-    { sm_rgo_name = "Request"; sm_kind = StdlibType };
-    { sm_rgo_name = "ResponseWriter"; sm_kind = StdlibType };
-    { sm_rgo_name = "ServeMux"; sm_kind = StdlibType };
-  ]
-
-let net_http_surface = net_http_fns @ net_http_types
-
-(* Lookup by rgo-facing name *)
-let lookup_stdlib_member (pkg_alias : string) (member : string) :
-    stdlib_member option =
-  match pkg_alias with
-  | "http" -> List.find_opt (fun sm -> sm.sm_rgo_name = member) net_http_surface
-  | _ -> None
-
-(* Check if a name looks like a Go-cased callable that we should reject *)
-let is_wrong_case_stdlib (pkg_alias : string) (member : string) : string option
-    =
-  match pkg_alias with
-  | "http" -> (
-      (* Check if member matches a Go-cased callable name *)
-      let go_cased_fns =
-        [
-          ("ListenAndServe", "listen_and_serve");
-          ("NewServeMux", "new_serve_mux");
-        ]
-      in
-      let go_cased_types_as_snake =
-        [
-          ("request", "Request");
-          ("response_writer", "ResponseWriter");
-          ("serve_mux", "ServeMux");
-        ]
-      in
-      match List.assoc_opt member go_cased_fns with
-      | Some correct -> Some correct
-      | None -> (
-          match List.assoc_opt member go_cased_types_as_snake with
-          | Some correct -> Some correct
-          | None -> None))
-  | _ -> None
-
-(* ---------- stdlib receiver/member surface ---------- *)
-
-(* Receiver method info: params (excluding receiver), return type *)
 type stdlib_method_info = { smi_params : Types.ty list; smi_ret : Types.ty }
-
-(* Receiver field info: rgo_name, type *)
 type stdlib_field_info = { sfi_ty : Types.ty }
 
 let stdlib_receiver_methods (pkg : string) (type_name : string)
     (method_name : string) : stdlib_method_info option =
-  match (pkg, type_name, method_name) with
-  | "http", "ServeMux", "handle_func" ->
-      (* mux.HandleFunc(pattern string, handler func(ResponseWriter, *Request)) *)
-      Some
-        {
-          smi_params =
-            [
-              Types.TString;
-              Types.TFn
-                ( [
-                    TImported ("http", "ResponseWriter");
-                    TImported ("http", "Request");
-                  ],
-                  TVoid );
-            ];
-          smi_ret = TVoid;
-        }
-  | "http", "Request", "form_value" ->
-      (* req.FormValue(key string) string *)
-      Some { smi_params = [ Types.TString ]; smi_ret = TString }
-  | "http", "ResponseWriter", "write_header" ->
-      (* w.WriteHeader(statusCode int) *)
-      Some { smi_params = [ Types.TInt 64 ]; smi_ret = TVoid }
-  | "http", "ResponseWriter", "write" ->
-      (* w.Write(data []byte) (int, error) -- simplified to (String) -> () *)
-      Some { smi_params = [ Types.TString ]; smi_ret = TVoid }
-  | _ -> None
+  match Interop.receiver_method pkg type_name method_name with
+  | Some rm -> Some { smi_params = rm.rmi_params; smi_ret = rm.rmi_ret }
+  | None -> None
 
 let stdlib_receiver_fields (pkg : string) (type_name : string)
     (field_name : string) : stdlib_field_info option =
-  match (pkg, type_name, field_name) with
-  | "http", "Request", "method" -> Some { sfi_ty = Types.TString }
-  | _ -> None
+  match Interop.receiver_field pkg type_name field_name with
+  | Some rf -> Some { sfi_ty = rf.rfi_ty }
+  | None -> None
 
-(* Check if a receiver method/field name is a Go-cased spelling that should be rejected *)
-let is_wrong_case_receiver (pkg : string) (type_name : string) (member : string)
-    : string option =
-  match (pkg, type_name) with
-  | "http", "ServeMux" -> (
-      match member with "HandleFunc" -> Some "handle_func" | _ -> None)
-  | "http", "Request" -> (
-      match member with
-      | "FormValue" -> Some "form_value"
-      | "Method" -> Some "method"
-      | _ -> None)
-  | "http", "ResponseWriter" -> (
-      match member with
-      | "WriteHeader" -> Some "write_header"
-      | "Write" -> Some "write"
-      | _ -> None)
-  | _ -> None
+let is_wrong_case_receiver = Interop.wrong_case_receiver
 
-(* ---------- stdlib type resolution (non-recursive) ---------- *)
+(* ---------- stdlib type resolution (delegated to Interop registry) ---------- *)
 
-let stdlib_type_ty_simple (pkg_alias : string) (type_name : string) :
-    Types.ty option =
-  match (pkg_alias, type_name) with
-  | "http", "Request" -> Some (Types.TImported ("http", "Request"))
-  | "http", "ResponseWriter" ->
-      Some (Types.TImported ("http", "ResponseWriter"))
-  | "http", "ServeMux" -> Some (Types.TImported ("http", "ServeMux"))
-  | _ -> None
+let stdlib_type_ty_simple = Interop.type_ty
 
 (* ---------- environment ---------- *)
 module SMap = Map.Make (String)
@@ -286,15 +180,15 @@ let rec resolve_ast_ty env (t : Ast.ty) : ty =
   | TyPath (pkg, member) -> (
       (* Package-qualified type e.g. http::Request *)
       match lookup_stdlib_member pkg.node member.node with
-      | Some sm -> (
-          match sm.sm_kind with
-          | StdlibType -> (
+      | Some mi -> (
+          match mi.mi_kind with
+          | Interop.MemberType -> (
               match stdlib_type_ty_simple pkg.node member.node with
               | Some ty -> ty
               | None ->
                   error_at member.span "undefined type '%s::%s'" pkg.node
                     member.node)
-          | StdlibFn ->
+          | Interop.MemberFn ->
               error_at member.span "'%s::%s' is a function, not a type" pkg.node
                 member.node)
       | None -> (
@@ -638,39 +532,24 @@ and check_bounds env span bounds formals actuals =
 
 and stdlib_fn_type (pkg_alias : string) (member_name : string) : fn_info option
     =
-  match (pkg_alias, member_name) with
-  | "http", "listen_and_serve" ->
-      (* http.ListenAndServe(addr string, handler *http.ServeMux) error
-         For mission purposes: (String, ServeMux) -> () *)
-      Some
-        {
-          fi_params = [ TString; TImported ("http", "ServeMux") ];
-          fi_ret = TVoid;
-          fi_bounds = [];
-        }
-  | "http", "new_serve_mux" ->
-      (* http.NewServeMux() *http.ServeMux *)
-      Some
-        {
-          fi_params = [];
-          fi_ret = TImported ("http", "ServeMux");
-          fi_bounds = [];
-        }
-  | _ -> None
+  match Interop.fn_type pkg_alias member_name with
+  | Some fti ->
+      Some { fi_params = fti.fti_params; fi_ret = fti.fti_ret; fi_bounds = [] }
+  | None -> None
 
 and check_stdlib_path _env type_name member =
   let pkg = type_name.node in
   let name = member.node in
   (* First check if it's a valid member *)
   match lookup_stdlib_member pkg name with
-  | Some sm -> (
-      match sm.sm_kind with
-      | StdlibType ->
+  | Some mi -> (
+      match mi.mi_kind with
+      | Interop.MemberType ->
           (* Imported types are not valid in expression/value position;
              use them in type annotations instead. *)
           error_at member.span "'%s::%s' is a type, not a value expression" pkg
             name
-      | StdlibFn -> (
+      | Interop.MemberFn -> (
           match stdlib_fn_type pkg name with
           | Some fi -> TFn (fi.fi_params, fi.fi_ret)
           | None ->
@@ -693,9 +572,9 @@ and check_stdlib_call env type_name fn_name arg_types =
   let name = fn_name.node in
   (* First check if it's a valid member *)
   match lookup_stdlib_member pkg name with
-  | Some sm -> (
-      match sm.sm_kind with
-      | StdlibFn -> (
+  | Some mi -> (
+      match mi.mi_kind with
+      | Interop.MemberFn -> (
           match stdlib_fn_type pkg name with
           | Some fi ->
               check_fn_args ~env ~span:fn_name.span ~name fi.fi_params arg_types;
@@ -703,7 +582,7 @@ and check_stdlib_call env type_name fn_name arg_types =
           | None ->
               error_at fn_name.span
                 "undefined member '%s' in imported package '%s'" name pkg)
-      | StdlibType ->
+      | Interop.MemberType ->
           error_at fn_name.span "'%s::%s' is a type, not a callable" pkg name)
   | None -> (
       (* Check for wrong-case usage *)

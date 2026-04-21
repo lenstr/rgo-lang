@@ -44,3 +44,8 @@
  (libraries rgo alcotest)
  (deps
   (glob_files ../examples/*.rg)))
+
+(test
+ (name test_interop)
+ (modules test_interop)
+ (libraries rgo alcotest))

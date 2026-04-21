@@ -24,17 +24,10 @@ exception Import_error of { kind : import_error_kind; span : span }
 
 let import_error_at span kind = raise (Import_error { kind; span })
 
-(* ---------- supported stdlib packages ---------- *)
+(* ---------- supported stdlib packages (delegated to Interop registry) ---------- *)
 
-let supported_stdlib_packages = [ ([ "net"; "http" ], "http") ]
-
-let is_stdlib_path segments =
-  List.exists (fun (path, _alias) -> path = segments) supported_stdlib_packages
-
-let alias_for_path segments =
-  List.find_map
-    (fun (path, alias) -> if path = segments then Some alias else None)
-    supported_stdlib_packages
+let is_stdlib_path = Interop.is_stdlib_path
+let alias_for_path = Interop.alias_for_path
 
 (* ---------- scopes ---------- *)
 
@@ -174,12 +167,7 @@ let rec resolve_ty env (t : ty) =
   | TyPath (pkg, _member) ->
       (* Package-qualified type: check the package is imported *)
       if not (lookup_imported_package pkg.node env) then
-        let is_known_alias =
-          List.exists
-            (fun (_path, alias) -> alias = pkg.node)
-            supported_stdlib_packages
-        in
-        if is_known_alias then
+        if Interop.is_known_alias pkg.node then
           import_error_at pkg.span (Missing_import pkg.node)
         else error_at pkg.span "undefined type '%s'" pkg.node
 
@@ -234,13 +222,7 @@ and resolve_path_ref env type_name _member_name =
        the type-checking phase where impl blocks are available. *)
     match lookup_type type_name.node env with
     | None ->
-        (* Check if this could be a known stdlib package that's not imported *)
-        let is_known_alias =
-          List.exists
-            (fun (_path, alias) -> alias = type_name.node)
-            supported_stdlib_packages
-        in
-        if is_known_alias then
+        if Interop.is_known_alias type_name.node then
           import_error_at type_name.span (Missing_import type_name.node)
         else error_at type_name.span "undefined type '%s'" type_name.node
     | Some _ti -> ()

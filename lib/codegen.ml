@@ -79,7 +79,7 @@ type cg_shared = {
   mutable needs_fmt : bool;
   mutable needs_errors : bool;
   mutable needs_math : bool;
-  mutable needs_net_http : bool;
+  mutable needs_imported_pkgs : bool;
   mutable self_ref_traits : string list;
       (* Trait names that use Self in their signatures *)
 }
@@ -148,10 +148,7 @@ let rec is_nullable_ty env (t : Ast.ty) : bool =
       | Some n -> SMap.mem n env.enums
       | None -> false)
   | TyTuple _ -> false
-  | TyPath (_, { node = "Request"; _ }) -> true (* *http.Request is a pointer *)
-  | TyPath (_, { node = "ServeMux"; _ }) ->
-      true (* *http.ServeMux is a pointer *)
-  | TyPath _ -> false
+  | TyPath (pkg, member) -> Interop.type_is_pointer pkg.node member.node
 
 let rec go_type env (t : Ast.ty) : string =
   match t with
@@ -200,22 +197,17 @@ let rec go_type env (t : Ast.ty) : string =
       match env.self_type with
       | Some t -> go_type env t
       | None -> ( match env.self_type_name with Some n -> n | None -> "Self"))
-  | TyPath (pkg, member) ->
-      (* Package-qualified stdlib type — resolve Go package name from imports *)
-      env.shared.needs_net_http <- true;
+  | TyPath (pkg, member) -> (
+      (* Package-qualified stdlib type — resolve via Interop registry *)
+      env.shared.needs_imported_pkgs <- true;
       let go_pkg =
         match SMap.find_opt pkg.node env.imported_packages with
         | Some (_, go_pkg_name) -> go_pkg_name
         | None -> pkg.node
       in
-      let go_type_name =
-        match member.node with
-        | "Request" -> "*" ^ go_pkg ^ ".Request"
-        | "ResponseWriter" -> go_pkg ^ ".ResponseWriter"
-        | "ServeMux" -> "*" ^ go_pkg ^ ".ServeMux"
-        | _ -> go_pkg ^ "." ^ member.node
-      in
-      go_type_name
+      match Interop.go_qualified_type pkg.node member.node go_pkg with
+      | Some qt -> qt
+      | None -> go_pkg ^ "." ^ member.node)
 
 (* Go return type for printing (with leading space or parens) *)
 let go_ret_sig env (ret : Ast.ty option) : string =
@@ -255,9 +247,8 @@ let rec go_zero_value env (t : Ast.ty) : string =
           match env.self_type_name with
           | Some n -> if SMap.mem n env.enums then "nil" else n ^ "{}"
           | None -> "nil"))
-  | TyPath (_, { node = "Request"; _ }) -> "nil" (* pointer type *)
-  | TyPath (_, { node = "ServeMux"; _ }) -> "nil" (* pointer type *)
-  | TyPath _ -> "nil"
+  | TyPath (pkg, member) ->
+      if Interop.type_is_pointer pkg.node member.node then "nil" else "nil"
 
 (* ---------- type inference for expressions (mirrors typecheck) ---------- *)
 
@@ -496,7 +487,7 @@ let collect_env (prog : Ast.program) : cg_env =
       needs_fmt = false;
       needs_errors = false;
       needs_math = false;
-      needs_net_http = false;
+      needs_imported_pkgs = false;
       self_ref_traits = [];
     }
   in
@@ -510,12 +501,22 @@ let collect_env (prog : Ast.program) : cg_env =
           List.map (fun (s : ident located) -> s.node) imp.imp_segments
         in
         let alias =
-          match Resolver.alias_for_path segments with
+          match Interop.alias_for_path segments with
           | Some a -> a
           | None -> List.nth segments (List.length segments - 1)
         in
-        let go_import_path = String.concat "/" segments in
-        let go_pkg_name = List.nth segments (List.length segments - 1) in
+        (* Resolve Go import path and package name via Interop registry,
+           falling back to segment-derived values for future packages. *)
+        let go_import_path =
+          match Interop.go_import_path alias with
+          | Some p -> p
+          | None -> String.concat "/" segments
+        in
+        let go_pkg_name =
+          match Interop.go_pkg_name alias with
+          | Some n -> n
+          | None -> List.nth segments (List.length segments - 1)
+        in
         SMap.add alias (go_import_path, go_pkg_name) acc)
       SMap.empty prog.imports
   in
@@ -830,13 +831,21 @@ let rec gen_expr env buf indent (ctx : expr_ctx) (e : Ast.expr) : unit =
   | ExprFieldAccess (e, field) -> (
       let recv_ty = infer_expr_type env e in
       match recv_ty with
-      | Some (TyPath (pkg_alias, _)) when is_imported_package pkg_alias.node env
-        ->
-          (* Stdlib field access: snake_case -> PascalCase *)
-          env.shared.needs_net_http <- true;
+      | Some (TyPath (pkg_alias, tname))
+        when is_imported_package pkg_alias.node env ->
+          (* Stdlib field access: resolve Go name via Interop registry *)
+          env.shared.needs_imported_pkgs <- true;
           gen_expr env buf indent CtxExpr e;
           Buffer.add_char buf '.';
-          Buffer.add_string buf (snake_to_pascal field.node)
+          let go_field =
+            match
+              Interop.go_receiver_field_name pkg_alias.node tname.node
+                field.node
+            with
+            | Some name -> name
+            | None -> snake_to_pascal field.node
+          in
+          Buffer.add_string buf go_field
       | _ ->
           gen_expr env buf indent CtxExpr e;
           Buffer.add_char buf '.';
@@ -845,14 +854,18 @@ let rec gen_expr env buf indent (ctx : expr_ctx) (e : Ast.expr) : unit =
           Buffer.add_string buf (go_field_name is_pub field.node))
   | ExprPath (type_name, member_name) ->
       if is_imported_package type_name.node env then begin
-        (* Imported stdlib member in value position (e.g., function value) *)
-        env.shared.needs_net_http <- true;
+        (* Imported stdlib member in value position: resolve via Interop registry *)
+        env.shared.needs_imported_pkgs <- true;
         let go_pkg =
           match SMap.find_opt type_name.node env.imported_packages with
           | Some (_, go_pkg_name) -> go_pkg_name
           | None -> type_name.node
         in
-        let go_name = snake_to_pascal member_name.node in
+        let go_name =
+          match Interop.go_member_name type_name.node member_name.node with
+          | Some name -> name
+          | None -> snake_to_pascal member_name.node
+        in
         Buffer.add_string buf (go_pkg ^ "." ^ go_name)
       end
       else
@@ -1066,13 +1079,17 @@ and gen_some_for_type env buf indent (inner_ty : Ast.ty) arg =
 (* ---------- stdlib codegen helpers ---------- *)
 
 and gen_stdlib_call env buf indent type_name fn_name args =
-  env.shared.needs_net_http <- true;
+  env.shared.needs_imported_pkgs <- true;
   let go_pkg =
     match SMap.find_opt type_name.node env.imported_packages with
     | Some (_, go_pkg_name) -> go_pkg_name
     | None -> type_name.node
   in
-  let go_name = snake_to_pascal fn_name.node in
+  let go_name =
+    match Interop.go_member_name type_name.node fn_name.node with
+    | Some name -> name
+    | None -> snake_to_pascal fn_name.node
+  in
   Printf.bprintf buf "%s.%s(" go_pkg go_name;
   gen_args env buf indent args;
   Buffer.add_char buf ')'
@@ -1329,9 +1346,21 @@ and gen_string_method env buf indent recv method_name =
   | _ -> failwith ("codegen: unsupported string method " ^ method_name.node)
 
 and gen_stdlib_method_call env buf indent recv method_name args =
-  (* Stdlib receiver methods: snake_case -> PascalCase *)
-  env.shared.needs_net_http <- true;
-  let go_method = snake_to_pascal method_name.node in
+  (* Stdlib receiver methods: resolve Go name via Interop registry *)
+  env.shared.needs_imported_pkgs <- true;
+  let recv_pkg_type =
+    match infer_expr_type env recv with
+    | Some (TyPath (pkg, tname)) -> Some (pkg.node, tname.node)
+    | _ -> None
+  in
+  let go_method =
+    match recv_pkg_type with
+    | Some (pkg, tname) -> (
+        match Interop.go_receiver_method_name pkg tname method_name.node with
+        | Some name -> name
+        | None -> snake_to_pascal method_name.node)
+    | None -> snake_to_pascal method_name.node
+  in
   gen_expr env buf indent CtxExpr recv;
   Buffer.add_char buf '.';
   Buffer.add_string buf go_method;
@@ -2926,7 +2955,7 @@ let gen_imports buf env =
   if env.shared.needs_errors then imports := "\"errors\"" :: !imports;
   if env.shared.needs_math then imports := "\"math\"" :: !imports;
   (* Add imports from resolved import metadata, only if actually used *)
-  if env.shared.needs_net_http then
+  if env.shared.needs_imported_pkgs then
     SMap.iter
       (fun _alias (go_path, _go_pkg) ->
         imports := ("\"" ^ go_path ^ "\"") :: !imports)
