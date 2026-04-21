@@ -2174,6 +2174,196 @@ fn main() {
 }
 |}
 
+(* VAL-OWN-001: Consuming self method moves non-Copy receiver *)
+let own_consuming_self_move_negative =
+  {|
+struct Resource {
+  pub name: str,
+}
+
+impl Resource {
+  fn consume(self) {
+    println(self.name);
+  }
+}
+
+fn main() {
+  let r = Resource { name: "r1" };
+  r.consume();
+  println(r.name);
+}
+|}
+
+(* VAL-OWN-001: Non-consuming &self keeps receiver usable *)
+let own_ref_self_positive =
+  {|
+struct Resource {
+  pub name: str,
+}
+
+impl Resource {
+  fn get_name(&self) -> str {
+    self.name
+  }
+}
+
+fn main() {
+  let r = Resource { name: "r1" };
+  println(r.get_name());
+  println(r.get_name());
+}
+|}
+
+(* VAL-OWN-001: Non-consuming &mut self keeps receiver usable *)
+let own_mutref_self_positive =
+  {|
+struct Counter {
+  pub value: i64,
+}
+
+impl Counter {
+  fn increment(&mut self) {
+    self.value = self.value + 1;
+  }
+
+  fn get(&self) -> i64 {
+    self.value
+  }
+}
+
+fn main() {
+  let mut c = Counter { value: 0 };
+  c.increment();
+  c.increment();
+  println(c.get());
+}
+|}
+
+(* VAL-OWN-001: Consuming self on Copy type keeps receiver usable *)
+let own_consuming_self_copy_positive =
+  {|
+trait Copy {}
+
+struct Point {
+  pub x: i64,
+  pub y: i64,
+}
+
+impl Copy for Point {}
+
+impl Point {
+  fn consume(self) -> i64 {
+    self.x + self.y
+  }
+}
+
+fn main() {
+  let p = Point { x: 1, y: 2 };
+  println(p.consume());
+  println(p.consume());
+}
+|}
+
+(* VAL-OWN-001: Double consuming self call rejected *)
+let own_consuming_self_double_negative =
+  {|
+struct Resource {
+  pub name: str,
+}
+
+impl Resource {
+  fn consume(self) {
+    println(self.name);
+  }
+}
+
+fn main() {
+  let r = Resource { name: "r1" };
+  r.consume();
+  r.consume();
+}
+|}
+
+(* VAL-OWN-010: Enum-payload pattern destructuring partial move rejected *)
+let own_enum_pattern_partial_move_negative =
+  {|
+struct Inner {
+  pub name: str,
+}
+
+enum Wrapper {
+  Some(Inner),
+  None,
+}
+
+fn main() {
+  let w = Wrapper::Some(Inner { name: "hi" });
+  match w {
+    Wrapper::Some(inner) => println(inner.name),
+    Wrapper::None => println("none"),
+  }
+}
+|}
+
+(* VAL-OWN-010: Enum wildcard pattern is fine (no extraction) *)
+let own_enum_pattern_wildcard_positive =
+  {|
+enum Shape {
+  Circle(f64),
+  Rect(str, str),
+}
+
+fn main() {
+  let s = Shape::Rect("wide", "tall");
+  match s {
+    Shape::Circle(_) => println("circle"),
+    Shape::Rect(_, _) => println("rect"),
+  }
+}
+|}
+
+(* VAL-OWN-010: Copy enum pattern destructuring is fine *)
+let own_enum_pattern_copy_positive =
+  {|
+trait Copy {}
+
+enum Pair {
+  Two(i64, i64),
+  None,
+}
+
+impl Copy for Pair {}
+
+fn main() {
+  let p = Pair::Two(1, 2);
+  match p {
+    Pair::Two(a, b) => println(a + b),
+    Pair::None => println(0),
+  }
+}
+|}
+
+(* VAL-OWN-010: Enum struct-pattern destructuring partial move rejected *)
+let own_enum_struct_pattern_partial_move_negative =
+  {|
+struct Inner {
+  pub name: str,
+}
+
+enum Wrapper {
+  Some { inner: Inner },
+  None,
+}
+
+fn main() {
+  let w = Wrapper::Some { inner: Inner { name: "hi" } };
+  match w {
+    Wrapper::Some { inner } => println(inner.name),
+    Wrapper::None => println("none"),
+  }
+}
+|}
+
 let ownership_positive_tests =
   [
     ("copy i64 survives assignment", `Quick, pass own_copy_assign_positive);
@@ -2191,6 +2381,21 @@ let ownership_positive_tests =
     ( "generic enum Clone with Self lowering",
       `Quick,
       pass own_generic_enum_clone_positive );
+    ( "non-consuming &self keeps receiver usable",
+      `Quick,
+      pass own_ref_self_positive );
+    ( "non-consuming &mut self keeps receiver usable",
+      `Quick,
+      pass own_mutref_self_positive );
+    ( "consuming self on Copy type keeps receiver usable",
+      `Quick,
+      pass own_consuming_self_copy_positive );
+    ( "enum wildcard pattern is fine",
+      `Quick,
+      pass own_enum_pattern_wildcard_positive );
+    ( "Copy enum pattern destructuring is fine",
+      `Quick,
+      pass own_enum_pattern_copy_positive );
   ]
 
 let ownership_negative_tests =
@@ -2238,6 +2443,20 @@ let ownership_negative_tests =
     ( "generic enum payload mismatch rejected",
       `Quick,
       fail ~expect:"type mismatch" own_generic_enum_payload_mismatch_negative );
+    ( "consuming self moves non-Copy receiver",
+      `Quick,
+      fail ~expect:"use of moved value" own_consuming_self_move_negative );
+    ( "double consuming self call rejected",
+      `Quick,
+      fail ~expect:"use of moved value" own_consuming_self_double_negative );
+    ( "enum-payload pattern partial move rejected",
+      `Quick,
+      fail ~expect:"partial moves are not supported"
+        own_enum_pattern_partial_move_negative );
+    ( "enum struct-pattern partial move rejected",
+      `Quick,
+      fail ~expect:"partial moves are not supported"
+        own_enum_struct_pattern_partial_move_negative );
   ]
 
 let () =

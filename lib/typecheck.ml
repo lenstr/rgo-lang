@@ -60,7 +60,12 @@ type fn_info = {
       (* type_param_name -> list of required trait names *)
 }
 
-type method_info = { mi_params : ty list; mi_ret : ty; mi_is_mut : bool }
+type method_info = {
+  mi_params : ty list;
+  mi_ret : ty;
+  mi_is_mut : bool;
+  mi_consumes_self : bool;
+}
 
 type impl_info = {
   ii_methods : method_info SMap.t;
@@ -587,6 +592,14 @@ and consume_call_args env (args : expr list) (arg_types : ty list) : unit =
       | _ -> ())
     args arg_types
 
+(* Ownership: when a method has a consuming `self` receiver, mark
+   the receiver binding as moved if its type is non-Copy. *)
+and consume_receiver env (span : span) (receiver : expr) (recv_ty : ty) : unit =
+  match receiver with
+  | ExprIdent name -> consume_if_non_copy env span name.node recv_ty
+  | ExprSelf -> consume_if_non_copy env span "self" recv_ty
+  | _ -> ()
+
 and check_fn_args ~env:_ ~span ~name expected actual =
   let expected_len = List.length expected in
   let actual_len = List.length actual in
@@ -1053,6 +1066,9 @@ and check_user_method_call env receiver recv_ty method_name arg_types =
               if mi.mi_is_mut then check_mutability env receiver method_name;
               check_fn_args ~env ~span:method_name.span ~name:method_name.node
                 mi.mi_params arg_types;
+              (* Ownership: consuming self receiver moves the receiver binding *)
+              if mi.mi_consumes_self then
+                consume_receiver env method_name.span receiver resolved_recv;
               maybe_subst_self env mi.mi_ret
           | None ->
               error_at method_name.span "no method '%s' on type %s"
@@ -1295,8 +1311,69 @@ and check_if env cond then_blk else_blk =
       then_ty
   | None -> TVoid
 
+(* Check whether a pattern would partially move a non-Copy payload out of
+   a user-defined enum.  Called only when the scrutinee is a non-Copy enum. *)
+and check_pattern_partial_move env scrutinee_ty (p : pat) : unit =
+  match p with
+  | PatTuple (enum_name, variant_name, pats) -> (
+      match SMap.find_opt enum_name.node env.enums with
+      | Some ei -> (
+          match List.assoc_opt variant_name.node ei.ei_variants with
+          | Some (VTuple field_tys) ->
+              List.iter2
+                (fun p ty ->
+                  if pat_has_bindings p && is_partial_move_type env ty then
+                    error_at variant_name.span
+                      "cannot destructure non-Copy enum payload -- partial \
+                       moves are not supported")
+                pats field_tys
+          | _ -> ())
+      | None -> (
+          (* For built-in Result/Option: check inner payload types *)
+          match (enum_name.node, variant_name.node, scrutinee_ty, pats) with
+          | _, _, _, [] -> ()
+          | _ -> ()))
+  | PatStruct (_enum_name, variant_name, field_pats) -> (
+      match SMap.find_opt _enum_name.node env.enums with
+      | Some ei -> (
+          match List.assoc_opt variant_name.node ei.ei_variants with
+          | Some (VStruct fields) ->
+              List.iter
+                (fun (fp : field_pat) ->
+                  let has_bind =
+                    match fp.fp_pat with
+                    | Some p -> pat_has_bindings p
+                    | None -> true
+                  in
+                  if has_bind then
+                    match List.assoc_opt fp.fp_name.node fields with
+                    | Some ty when is_partial_move_type env ty ->
+                        error_at variant_name.span
+                          "cannot destructure non-Copy enum payload -- partial \
+                           moves are not supported"
+                    | _ -> ())
+                field_pats
+          | _ -> ())
+      | None -> ())
+  | _ -> ()
+
 and check_match env scrutinee arms =
   let scrutinee_ty = check_expr env scrutinee in
+  (* Ownership: reject enum-payload pattern destructuring that would partially
+     move a non-Copy payload out of an owned enum binding.
+     Skip for `self` scrutinees: &self/&mut self are borrowed (no move),
+     and consuming self is already handled by receiver ownership. *)
+  let check_enum_partial_move =
+    match (scrutinee, scrutinee_ty) with
+    | ExprSelf, _ -> false
+    | _, TEnum (_, _) when not (is_copy_type env scrutinee_ty) -> true
+    | _ -> false
+  in
+  if check_enum_partial_move then
+    List.iter
+      (fun (arm : match_arm) ->
+        check_pattern_partial_move env scrutinee_ty arm.arm_pat)
+      arms;
   let arm_types =
     List.map
       (fun (arm : match_arm) ->
@@ -1312,6 +1389,19 @@ and check_match env scrutinee arms =
         (fun t -> expect_type ~env ~span:dummy_span ~expected:first ~actual:t)
         rest;
       first
+
+(* Check if a pattern extracts data (has any binding, not just wildcards). *)
+and pat_has_bindings (p : pat) : bool =
+  match p with
+  | PatWild -> false
+  | PatLit _ -> false
+  | PatBind _ -> true
+  | PatTuple (_, _, pats) -> List.exists pat_has_bindings pats
+  | PatStruct (_, _, fps) ->
+      List.exists
+        (fun (fp : field_pat) ->
+          match fp.fp_pat with Some p -> pat_has_bindings p | None -> true)
+        fps
 
 and bind_pattern env scrutinee_ty (p : pat) : env =
   match p with
@@ -1707,6 +1797,10 @@ let rec collect_type_info env (items : item list) : env =
                             (match tms.tms_self with
                             | Some SelfMutRef -> true
                             | _ -> false);
+                          mi_consumes_self =
+                            (match tms.tms_self with
+                            | Some SelfValue -> true
+                            | _ -> false);
                         }
                       in
                       (mname, mi) :: acc
@@ -1859,7 +1953,17 @@ and collect_impl env impl_generics i_ty impl_items =
             let is_mut =
               match self_param with SelfMutRef -> true | _ -> false
             in
-            let mi = { mi_params = params; mi_ret = ret; mi_is_mut = is_mut } in
+            let consumes =
+              match self_param with SelfValue -> true | _ -> false
+            in
+            let mi =
+              {
+                mi_params = params;
+                mi_ret = ret;
+                mi_is_mut = is_mut;
+                mi_consumes_self = consumes;
+              }
+            in
             { ii with ii_methods = SMap.add fd.fn_name.node mi ii.ii_methods }
         | None ->
             let fi = { fi_params = params; fi_ret = ret; fi_bounds = [] } in
