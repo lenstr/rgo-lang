@@ -274,6 +274,26 @@ let dummy_loc n =
 (* Check if a name is an imported stdlib package alias *)
 let is_imported_package name env = SMap.mem name env.imported_packages
 
+(* Convert a Types.ty (from the Interop registry) to an Ast.ty option
+   for codegen-side type inference. *)
+let interop_ty_to_ast_ty (t : Types.ty) : Ast.ty option =
+  match t with
+  | Types.TString -> Some (TyName (dummy_loc "str"))
+  | Types.TInt 8 -> Some (TyName (dummy_loc "i8"))
+  | Types.TInt 16 -> Some (TyName (dummy_loc "i16"))
+  | Types.TInt 32 -> Some (TyName (dummy_loc "i32"))
+  | Types.TInt 64 -> Some (TyName (dummy_loc "i64"))
+  | Types.TUint 8 -> Some (TyName (dummy_loc "u8"))
+  | Types.TUint 16 -> Some (TyName (dummy_loc "u16"))
+  | Types.TUint 32 -> Some (TyName (dummy_loc "u32"))
+  | Types.TUint 64 -> Some (TyName (dummy_loc "u64"))
+  | Types.TFloat 32 -> Some (TyName (dummy_loc "f32"))
+  | Types.TFloat 64 -> Some (TyName (dummy_loc "f64"))
+  | Types.TBool -> Some (TyName (dummy_loc "bool"))
+  | Types.TImported (pkg, name) -> Some (TyPath (dummy_loc pkg, dummy_loc name))
+  | Types.TVoid -> None
+  | _ -> None
+
 (* snake_case to PascalCase conversion for Go function names *)
 let snake_to_pascal (s : string) : string =
   s |> String.split_on_char '_'
@@ -332,11 +352,10 @@ let rec infer_expr_type env (e : Ast.expr) : Ast.ty option =
         (* Check for imported stdlib package call *)
         is_imported_package type_name.node env
       then
-        (* Return the inferred Go type for stdlib calls *)
-        match (type_name.node, fn_name.node) with
-        | "http", "new_serve_mux" ->
-            Some (TyPath (type_name, dummy_loc "ServeMux"))
-        | _ -> None
+        (* Return the inferred Go type via Interop registry *)
+        match Interop.fn_type type_name.node fn_name.node with
+        | Some fti -> interop_ty_to_ast_ty fti.fti_ret
+        | None -> None
       else
         (* Enum variant constructor or associated function *)
         match SMap.find_opt type_name.node env.enums with
@@ -373,11 +392,11 @@ let rec infer_expr_type env (e : Ast.expr) : Ast.ty option =
               | Some f -> Some f.fd_ty
               | None -> None)
           | None -> None)
-      | Some (TyPath (_, { node = tname; _ })) -> (
-          (* Stdlib field access return types *)
-          match (tname, field.node) with
-          | "Request", "method" -> Some (TyName (dummy_loc "str"))
-          | _ -> None)
+      | Some (TyPath (pkg_alias, { node = tname; _ })) -> (
+          (* Stdlib field access: resolve via Interop registry *)
+          match Interop.receiver_field pkg_alias.node tname field.node with
+          | Some rf -> interop_ty_to_ast_ty rf.rfi_ty
+          | None -> None)
       | _ -> None)
   | ExprStruct (ty, _) -> Some ty
   | ExprStructVariant (type_name, _, _) -> (
@@ -445,11 +464,11 @@ and infer_method_ret_type env recv method_name =
           | Some mi -> mi.mi_ret
           | None -> None)
       | None -> None)
-  | Some (TyPath (_, _)) -> (
-      (* Stdlib receiver methods return types *)
-      match method_name.node with
-      | "form_value" -> Some (TyName (dummy_loc "str"))
-      | _ -> None)
+  | Some (TyPath (pkg_alias, { node = tname; _ })) -> (
+      (* Stdlib receiver method return types: resolve via Interop registry *)
+      match Interop.receiver_method pkg_alias.node tname method_name.node with
+      | Some rm -> interop_ty_to_ast_ty rm.rmi_ret
+      | None -> None)
   | _ -> None
 
 (* Check whether a trait uses Self in any method signature *)
