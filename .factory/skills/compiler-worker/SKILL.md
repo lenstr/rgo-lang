@@ -25,8 +25,9 @@ None.
 6. For ownership-sensitive work, verify one negative compile path and one positive runtime path so move/copy/clone/drop behavior is externally observable.
 7. For callback or HTTP-facing work, manually exercise the generated artifact on `127.0.0.1:3111` when the feature makes that possible. Capture the exact compile/build/run/curl commands and what each request proved.
 8. Run the narrowest relevant validators during iteration, then run the mission-level commands from `.factory/services.yaml` before handoff.
-9. Do not leave generated temp files or long-running processes behind. Put disposable runtime artifacts under `.factory/runtime/` and clean them up unless the feature explicitly adds tracked fixtures.
-10. In the handoff, be explicit about tests added, commands run, runtime probes performed, and any deferred ambiguity or unsupported cases.
+9. If you had to deviate from strict tests-first sequencing, record that honestly in the handoff: set `skillFeedback.followedProcedure` to `false` and explain the reason in `deviations`.
+10. Do not leave generated temp files or long-running processes behind. Put disposable runtime artifacts under `.factory/runtime/` and clean them up unless the feature explicitly adds tracked fixtures.
+11. In the handoff, be explicit about tests added, commands run, runtime probes performed, and any deferred ambiguity or unsupported cases.
 
 ## Example Handoff
 
