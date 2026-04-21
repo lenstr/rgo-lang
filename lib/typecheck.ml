@@ -105,6 +105,7 @@ type env = {
       (* type_param_name -> list of required trait names *)
   imported_packages : string list SMap.t;
       (* alias -> path segments, for import-aware diagnostics *)
+  self_consumed : bool; (* true when current method takes self by value *)
   moved : SSet.t ref; (* mutable set of bindings that have been moved *)
 }
 
@@ -123,6 +124,7 @@ let empty_env =
     type_params = [];
     param_bounds = SMap.empty;
     imported_packages = SMap.empty;
+    self_consumed = false;
     moved = ref SSet.empty;
   }
 
@@ -222,6 +224,23 @@ let is_partial_move_type (env : env) (t : ty) : bool =
   | TInt _ | TUint _ | TFloat _ | TBool | TString | TRef _ | TVoid | TTuple _
   | TFn _ | TVar _ | TSelf ->
       false
+
+(* Whether a payload type extracted via pattern destructuring would
+   constitute a disallowed partial move.  For built-in Option/Result
+   pattern bindings we only reject non-Copy user-defined nominal types,
+   not nested built-in containers. *)
+let is_destructure_move_type (env : env) (t : ty) : bool =
+  match t with
+  | TStruct (name, _) | TEnum (name, _) -> (
+      match SMap.find_opt name env.trait_impls with
+      | Some traits -> not (SSet.mem "Copy" traits)
+      | None -> true)
+  | TParam p -> (
+      match SMap.find_opt p env.param_bounds with
+      | Some bounds -> not (List.mem "Copy" bounds)
+      | None -> true)
+  | TVec _ | THashMap _ | TImported _ -> true
+  | _ -> false
 
 (* ---------- AST type -> internal type ---------- *)
 let rec resolve_ast_ty env (t : Ast.ty) : ty =
@@ -1018,6 +1037,11 @@ and check_user_method_call env receiver recv_ty method_name arg_types =
           let ret = subst_self resolved_recv tms.tms_ret in
           check_fn_args ~env ~span:method_name.span ~name:method_name.node
             params arg_types;
+          (* Ownership: consuming self receiver moves the receiver binding *)
+          (match tms.tms_self with
+          | Some Ast.SelfValue ->
+              consume_receiver env method_name.span receiver resolved_recv
+          | _ -> ());
           ret
       | _ :: _ ->
           let names =
@@ -1340,9 +1364,23 @@ and check_pattern_partial_move env scrutinee_ty (p : pat) : unit =
           | _ -> ())
       | None -> (
           (* For built-in Result/Option: check inner payload types *)
-          match (enum_name.node, variant_name.node, scrutinee_ty, pats) with
-          | _, _, _, [] -> ()
-          | _ -> ()))
+          let inner_ty =
+            match (enum_name.node, variant_name.node, scrutinee_ty) with
+            | "Result", "Ok", TResult (ok_ty, _) -> Some ok_ty
+            | "Result", "Err", TResult (_, err_ty) -> Some err_ty
+            | "Option", "Some", TOption ty -> Some ty
+            | _ -> None
+          in
+          match inner_ty with
+          | Some ty ->
+              List.iter
+                (fun p ->
+                  if pat_has_bindings p && is_destructure_move_type env ty then
+                    error_at variant_name.span
+                      "cannot destructure non-Copy enum payload -- partial \
+                       moves are not supported")
+                pats
+          | None -> ()))
   | PatStruct (_enum_name, variant_name, field_pats) -> (
       match SMap.find_opt _enum_name.node env.enums with
       | Some ei -> (
@@ -1371,12 +1409,15 @@ and check_match env scrutinee arms =
   let scrutinee_ty = check_expr env scrutinee in
   (* Ownership: reject enum-payload pattern destructuring that would partially
      move a non-Copy payload out of an owned enum binding.
-     Skip for `self` scrutinees: &self/&mut self are borrowed (no move),
-     and consuming self is already handled by receiver ownership. *)
+     Applies to user-defined enums, built-in Option, and built-in Result.
+     For ExprSelf, only check when self is consumed (by-value receiver);
+     borrowed self (&self/&mut self) does not move ownership. *)
   let check_enum_partial_move =
     match (scrutinee, scrutinee_ty) with
-    | ExprSelf, _ -> false
-    | _, TEnum (_, _) when not (is_copy_type env scrutinee_ty) -> true
+    | ExprSelf, _ -> env.self_consumed
+    | _, (TEnum (_, _) | TOption _ | TResult (_, _))
+      when not (is_copy_type env scrutinee_ty) ->
+        true
     | _ -> false
   in
   if check_enum_partial_move then
@@ -2069,7 +2110,11 @@ let check_item env (item : item) =
                 let is_mut =
                   match self_p with SelfMutRef -> true | _ -> false
                 in
-                add_value "self" self_ty ~is_mut impl_env
+                let consumed =
+                  match self_p with SelfValue -> true | _ -> false
+                in
+                let env_with_self = add_value "self" self_ty ~is_mut impl_env in
+                { env_with_self with self_consumed = consumed }
             | None -> impl_env
           in
           check_fn_decl method_env fd)
@@ -2097,7 +2142,11 @@ let check_item env (item : item) =
                 let is_mut =
                   match self_p with SelfMutRef -> true | _ -> false
                 in
-                add_value "self" self_ty ~is_mut impl_env
+                let consumed =
+                  match self_p with SelfValue -> true | _ -> false
+                in
+                let env_with_self = add_value "self" self_ty ~is_mut impl_env in
+                { env_with_self with self_consumed = consumed }
             | None -> impl_env
           in
           check_fn_decl method_env fd)
@@ -2208,7 +2257,13 @@ let check_item env (item : item) =
                     let is_mut =
                       match self_p with SelfMutRef -> true | _ -> false
                     in
-                    add_value "self" TSelf ~is_mut trait_env
+                    let consumed =
+                      match self_p with SelfValue -> true | _ -> false
+                    in
+                    let env_with_self =
+                      add_value "self" TSelf ~is_mut trait_env
+                    in
+                    { env_with_self with self_consumed = consumed }
                 | None -> trait_env
               in
               check_fn_decl method_env fd

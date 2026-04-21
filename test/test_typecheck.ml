@@ -2410,6 +2410,151 @@ fn main() {
 }
 |}
 
+(* VAL-OWN-001: Trait-bound dispatch - non-consuming &self keeps receiver usable *)
+let own_trait_dispatch_ref_self_positive =
+  {|
+trait Inspect {
+  fn show(&self);
+}
+
+struct Resource {
+  pub name: str,
+}
+
+impl Inspect for Resource {
+  fn show(&self) {
+    println(self.name);
+  }
+}
+
+fn use_inspector<T: Inspect>(t: T) {
+  t.show();
+  t.show();
+}
+
+fn main() {
+  let r = Resource { name: "hello" };
+  use_inspector(r);
+}
+|}
+
+(* VAL-OWN-010: Option with Copy payload pattern is fine *)
+let own_option_copy_pattern_positive =
+  {|
+fn main() {
+  let opt: Option<i64> = Some(42);
+  match opt {
+    Option::Some(n) => println(n),
+    Option::None => println(0),
+  }
+}
+|}
+
+(* VAL-OWN-010: Result with Copy payload pattern is fine *)
+let own_result_copy_pattern_positive =
+  {|
+fn main() {
+  let res: Result<i64, str> = Ok(42);
+  match res {
+    Result::Ok(n) => println(n),
+    Result::Err(e) => println(e),
+  }
+}
+|}
+
+(* VAL-OWN-010: Option/Result wildcard pattern is fine *)
+let own_option_wildcard_pattern_positive =
+  {|
+struct Inner {
+  pub name: str,
+}
+
+fn main() {
+  let opt: Option<Inner> = Some(Inner { name: "hi" });
+  match opt {
+    Option::Some(_) => println("some"),
+    Option::None => println("none"),
+  }
+}
+|}
+
+(* VAL-OWN-001: Trait-bound dispatch consumes self - later use rejected *)
+let own_trait_dispatch_consume_negative =
+  {|
+trait Consume {
+  fn take(self);
+}
+
+struct Resource {
+  pub name: str,
+}
+
+impl Consume for Resource {
+  fn take(self) {
+    println(self.name);
+  }
+}
+
+fn use_consumer<T: Consume>(t: T) {
+  t.take();
+  t.take();
+}
+|}
+
+(* VAL-OWN-010: Option with non-Copy payload partial move rejected *)
+let own_option_pattern_partial_move_negative =
+  {|
+struct Inner {
+  pub name: str,
+}
+
+fn main() {
+  let opt: Option<Inner> = Some(Inner { name: "hi" });
+  match opt {
+    Option::Some(inner) => println(inner.name),
+    Option::None => println("none"),
+  }
+}
+|}
+
+(* VAL-OWN-010: Result with non-Copy payload partial move rejected *)
+let own_result_pattern_partial_move_negative =
+  {|
+struct Inner {
+  pub name: str,
+}
+
+fn main() {
+  let res: Result<Inner, str> = Ok(Inner { name: "hi" });
+  match res {
+    Result::Ok(inner) => println(inner.name),
+    Result::Err(e) => println(e),
+  }
+}
+|}
+
+(* VAL-OWN-010: Consuming self match with enum payload partial move rejected *)
+let own_self_match_enum_payload_negative =
+  {|
+struct Inner {
+  pub name: str,
+}
+
+enum Wrapper {
+  Some(Inner),
+  None,
+}
+
+impl Wrapper {
+  fn inspect(self) {
+    match self {
+      Wrapper::Some(inner) => println(inner.name),
+      Wrapper::None => println("none"),
+    }
+  }
+}
+|}
+
 let ownership_positive_tests =
   [
     ("copy i64 survives assignment", `Quick, pass own_copy_assign_positive);
@@ -2448,6 +2593,18 @@ let ownership_positive_tests =
     ( "Copy enum pattern destructuring is fine",
       `Quick,
       pass own_enum_pattern_copy_positive );
+    ( "trait-bound &self dispatch keeps receiver usable",
+      `Quick,
+      pass own_trait_dispatch_ref_self_positive );
+    ( "Option with Copy payload pattern is fine",
+      `Quick,
+      pass own_option_copy_pattern_positive );
+    ( "Result with Copy payload pattern is fine",
+      `Quick,
+      pass own_result_copy_pattern_positive );
+    ( "Option with non-Copy payload wildcard is fine",
+      `Quick,
+      pass own_option_wildcard_pattern_positive );
   ]
 
 let ownership_negative_tests =
@@ -2513,6 +2670,21 @@ let ownership_negative_tests =
       `Quick,
       fail ~expect:"partial moves are not supported"
         own_enum_struct_pattern_partial_move_negative );
+    ( "trait-bound consuming self dispatch rejected",
+      `Quick,
+      fail ~expect:"use of moved value" own_trait_dispatch_consume_negative );
+    ( "Option non-Copy payload pattern rejected",
+      `Quick,
+      fail ~expect:"partial moves are not supported"
+        own_option_pattern_partial_move_negative );
+    ( "Result non-Copy payload pattern rejected",
+      `Quick,
+      fail ~expect:"partial moves are not supported"
+        own_result_pattern_partial_move_negative );
+    ( "consuming self match enum payload rejected",
+      `Quick,
+      fail ~expect:"partial moves are not supported"
+        own_self_match_enum_payload_negative );
   ]
 
 let () =
