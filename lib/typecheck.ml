@@ -1329,6 +1329,14 @@ and check_stmt env (s : stmt) : env =
             dt
         | None, _ -> check_expr env init
       in
+      (* Reject binding void expressions to variables *)
+      (match (declared_ty, pat) with
+      | TVoid, PatBind name ->
+          error_at name.span "cannot bind result of void expression to '%s'"
+            name.node
+      | TVoid, _ ->
+          error_at (expr_span init) "cannot bind result of void expression"
+      | _ -> ());
       bind_let_pattern env declared_ty is_mut pat
   | StmtExpr e ->
       let _ = check_expr env e in

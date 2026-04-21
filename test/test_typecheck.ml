@@ -1612,6 +1612,48 @@ let receiver_member_negative_tests =
       fail ~expect:"wrong case" wrong_case_write );
   ]
 
+(* ======== Void binding rejection ======== *)
+
+let void_bind_write =
+  {|
+use net::http;
+fn handler(w: http::ResponseWriter, r: http::Request) {
+    let n = w.write("hello");
+}
+fn main() {
+}
+|}
+
+let void_bind_write_header =
+  {|
+use net::http;
+fn handler(w: http::ResponseWriter, r: http::Request) {
+    let s = w.write_header(200);
+}
+fn main() {
+}
+|}
+
+let void_bind_println = {|
+fn main() {
+    let x = println("hi");
+}
+|}
+
+let void_binding_tests =
+  [
+    ( "let n = w.write(...) rejected",
+      `Quick,
+      fail ~expect:"cannot bind result of void expression" void_bind_write );
+    ( "let s = w.write_header(...) rejected",
+      `Quick,
+      fail ~expect:"cannot bind result of void expression"
+        void_bind_write_header );
+    ( "let x = println(...) rejected",
+      `Quick,
+      fail ~expect:"cannot bind result of void expression" void_bind_println );
+  ]
+
 let () =
   Alcotest.run "typecheck"
     [
@@ -1621,4 +1663,5 @@ let () =
       ("import-negative", import_negative_tests);
       ("receiver-member-positive", receiver_member_positive_tests);
       ("receiver-member-negative", receiver_member_negative_tests);
+      ("void-binding", void_binding_tests);
     ]

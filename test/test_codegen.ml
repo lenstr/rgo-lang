@@ -2276,6 +2276,19 @@ fn main() {
 |}
     ()
 
+(* Negative: w.write in value position rejected (void return, no return contract) *)
+let test_stdlib_receiver_write_value_position () =
+  compile_expect_error ~expect:"cannot bind result of void expression"
+    {|
+use net::http;
+fn handler(w: http::ResponseWriter, r: http::Request) {
+    let n = w.write("hello");
+}
+fn main() {
+}
+|}
+    ()
+
 let () =
   Alcotest.run "codegen"
     [
@@ -2507,5 +2520,7 @@ let () =
             test_stdlib_receiver_wrong_case_write_header;
           Alcotest.test_case "Go-cased Write rejected" `Quick
             test_stdlib_receiver_wrong_case_write;
+          Alcotest.test_case "w.write in value position rejected" `Quick
+            test_stdlib_receiver_write_value_position;
         ] );
     ]
