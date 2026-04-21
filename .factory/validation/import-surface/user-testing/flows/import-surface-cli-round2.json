@@ -1,0 +1,138 @@
+{
+  "milestone": "import-surface",
+  "groupId": "import-surface-cli-round2",
+  "surface": "rgoc CLI + generated Go artifacts",
+  "testedAt": "2026-04-21T03:24:00+03:00",
+  "isolation": {
+    "mode": "serial-only validation",
+    "repoRoot": "/home/lenstr/workspace/personal/hack/rgo-lang",
+    "missionDir": "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7",
+    "evidenceDir": "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round2",
+    "reportPath": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/import-surface/user-testing/flows/import-surface-cli-round2.json",
+    "sharedMutableStateAvoided": [
+      "repo worktree",
+      "_build/",
+      ".factory/runtime/",
+      "localhost:3111"
+    ],
+    "temporaryArtifactsRestrictedTo": "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round2",
+    "notes": "All project commands executed via nix develop -c ...; the compile used DUNE_BUILD_DIR inside the evidence directory so validation did not touch the shared _build/ tree."
+  },
+  "toolsUsed": [
+    "tuistory",
+    "nix develop -c env DUNE_BUILD_DIR=\"/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round2/dune-build\" dune exec rgoc -- \"/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round2/fixtures/stdlib_cross_bridge.rg\" -o \"/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round2/outputs/stdlib_cross_bridge.go\""
+  ],
+  "assertions": [
+    {
+      "id": "VAL-STDLIB-001",
+      "title": "Stdlib call sites use snake_case while stdlib type names stay PascalCase",
+      "status": "fail",
+      "steps": [
+        {
+          "action": "Compile a representative fixture that uses use net::http, http::listen_and_serve, http::new_serve_mux, mux.handle_func, http::Request, http::ResponseWriter, and http::ServeMux.",
+          "expected": "rgoc exits 0, writes generated Go, and leaves the flow ready for gofmt -d, go build, and go vet.",
+          "observed": "rgoc exited 1 with `no method 'handle_func' on type http::ServeMux` at stdlib_cross_bridge.rg:9:9, so no generated Go file was emitted."
+        },
+        {
+          "action": "Check the requested -o path after the failed compile.",
+          "expected": "No misleading output file remains only if compilation failed before code generation.",
+          "observed": "outputs/stdlib_cross_bridge.go did not exist after the command (`output_exists=false`)."
+        }
+      ],
+      "evidence": {
+        "commands": [
+          "nix develop -c env DUNE_BUILD_DIR=\"/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round2/dune-build\" dune exec rgoc -- \"/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round2/fixtures/stdlib_cross_bridge.rg\" -o \"/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round2/outputs/stdlib_cross_bridge.go\"",
+          "if [ -e \"/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round2/outputs/stdlib_cross_bridge.go\" ]; then echo \"output_exists=true\"; else echo \"output_exists=false\"; fi"
+        ],
+        "diagnostics": [
+          "error: /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round2/fixtures/stdlib_cross_bridge.rg:9:9: no method 'handle_func' on type http::ServeMux"
+        ],
+        "logs": [
+          "import-surface/import-surface-cli-round2/logs/command_plan.txt",
+          "import-surface/import-surface-cli-round2/logs/stdlib_cross_bridge_compile.log",
+          "import-surface/import-surface-cli-round2/logs/stdlib_cross_bridge_output_checks.log",
+          "import-surface/import-surface-cli-round2/logs/stdlib_cross_bridge_gofmt.log",
+          "import-surface/import-surface-cli-round2/logs/stdlib_cross_bridge_gobuild.log",
+          "import-surface/import-surface-cli-round2/logs/stdlib_cross_bridge_govet.log",
+          "import-surface/import-surface-cli-round2/logs/stdlib_cross_bridge_generated_go_refs.log"
+        ],
+        "terminalSnapshots": [
+          "import-surface/import-surface-cli-round2/terminal/stdlib_cross_bridge_failure.txt",
+          "import-surface/import-surface-cli-round2/terminal/stdlib_cross_bridge_failure.png"
+        ],
+        "codeRefs": [
+          "import-surface/import-surface-cli-round2/fixtures/stdlib_cross_bridge.rg"
+        ],
+        "outputChecks": [
+          {
+            "path": "import-surface/import-surface-cli-round2/outputs/stdlib_cross_bridge.go",
+            "exists": false
+          }
+        ]
+      },
+      "issues": "The naming bridge still fails at the receiver method step: mux.handle_func(...) is rejected before any generated Go can prove the snake_case-to-Go lowering."
+    },
+    {
+      "id": "VAL-CROSS-001",
+      "title": "Import, naming, and stdlib type usage compose coherently in one program",
+      "status": "fail",
+      "steps": [
+        {
+          "action": "Reuse the same representative fixture so one program imports net::http, uses snake_case stdlib call names, and mentions PascalCase stdlib types in the same file.",
+          "expected": "The combined flow compiles successfully and yields generated Go containing the lowered net/http spellings.",
+          "observed": "The combined program failed at compile time with `no method 'handle_func' on type http::ServeMux` at stdlib_cross_bridge.rg:9:9, preventing generated-Go inspection."
+        },
+        {
+          "action": "Check whether the requested generated-Go output exists after the failed combined-flow compile.",
+          "expected": "A failed combined-flow compile leaves no misleading output file behind.",
+          "observed": "outputs/stdlib_cross_bridge.go did not exist after the command (`output_exists=false`)."
+        }
+      ],
+      "evidence": {
+        "commands": [
+          "nix develop -c env DUNE_BUILD_DIR=\"/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round2/dune-build\" dune exec rgoc -- \"/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round2/fixtures/stdlib_cross_bridge.rg\" -o \"/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round2/outputs/stdlib_cross_bridge.go\"",
+          "if [ -e \"/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round2/outputs/stdlib_cross_bridge.go\" ]; then echo \"output_exists=true\"; else echo \"output_exists=false\"; fi"
+        ],
+        "diagnostics": [
+          "error: /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round2/fixtures/stdlib_cross_bridge.rg:9:9: no method 'handle_func' on type http::ServeMux"
+        ],
+        "logs": [
+          "import-surface/import-surface-cli-round2/logs/command_plan.txt",
+          "import-surface/import-surface-cli-round2/logs/stdlib_cross_bridge_compile.log",
+          "import-surface/import-surface-cli-round2/logs/stdlib_cross_bridge_output_checks.log",
+          "import-surface/import-surface-cli-round2/logs/stdlib_cross_bridge_gofmt.log",
+          "import-surface/import-surface-cli-round2/logs/stdlib_cross_bridge_gobuild.log",
+          "import-surface/import-surface-cli-round2/logs/stdlib_cross_bridge_govet.log",
+          "import-surface/import-surface-cli-round2/logs/stdlib_cross_bridge_generated_go_refs.log"
+        ],
+        "terminalSnapshots": [
+          "import-surface/import-surface-cli-round2/terminal/stdlib_cross_bridge_failure.txt",
+          "import-surface/import-surface-cli-round2/terminal/stdlib_cross_bridge_failure.png"
+        ],
+        "codeRefs": [
+          "import-surface/import-surface-cli-round2/fixtures/stdlib_cross_bridge.rg"
+        ],
+        "outputChecks": [
+          {
+            "path": "import-surface/import-surface-cli-round2/outputs/stdlib_cross_bridge.go",
+            "exists": false
+          }
+        ]
+      },
+      "issues": "The combined import+naming+type flow still breaks on mux.handle_func(...), so the full single-program composition contract is not yet satisfied."
+    }
+  ],
+  "frictions": [
+    {
+      "description": "Each nix develop invocation prepended the flake shell banner and parser-generator warnings before the actual rgoc diagnostic, adding log noise during CLI inspection.",
+      "resolved": true,
+      "resolution": "Captured the full compile log plus a terminal snapshot so the final user-facing diagnostic and output-existence check remained explicit.",
+      "affectedAssertions": [
+        "VAL-STDLIB-001",
+        "VAL-CROSS-001"
+      ]
+    }
+  ],
+  "blockers": [],
+  "summary": "Retested 2 previously failing import-surface assertions. Both still fail because the representative fixture is rejected with `no method 'handle_func' on type http::ServeMux`, and the requested generated-Go output file is not created."
+}

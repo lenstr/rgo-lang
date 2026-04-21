@@ -1,0 +1,41 @@
+{
+  "milestone": "import-surface",
+  "round": 1,
+  "status": "fail",
+  "assertionsSummary": {
+    "total": 11,
+    "passed": 9,
+    "failed": 2,
+    "blocked": 0
+  },
+  "passedAssertions": [
+    "VAL-IMPORT-001",
+    "VAL-IMPORT-002",
+    "VAL-IMPORT-003",
+    "VAL-IMPORT-004",
+    "VAL-IMPORT-005",
+    "VAL-IMPORT-006",
+    "VAL-IMPORT-007",
+    "VAL-IMPORT-008",
+    "VAL-STDLIB-002"
+  ],
+  "failedAssertions": [
+    {
+      "id": "VAL-STDLIB-001",
+      "reason": "Representative source-level naming bridge fails because `mux.handle_func(...)` is rejected with `no method 'handle_func' on type http::ServeMux`."
+    },
+    {
+      "id": "VAL-CROSS-001",
+      "reason": "A single program that combines `use net::http`, snake_case stdlib calls, PascalCase stdlib types, and `mux.handle_func(...)` fails because `http::ServeMux` has no `handle_func` method."
+    }
+  ],
+  "blockedAssertions": [],
+  "appliedUpdates": [
+    {
+      "target": ".factory/library/user-testing.md",
+      "description": "Added an explicit Flow Validator Guidance section for the `rgoc` CLI + generated Go artifacts surface so serial import-surface validation has a named guidance section and evidence/output rules.",
+      "source": "setup"
+    }
+  ],
+  "previousRound": null
+}
