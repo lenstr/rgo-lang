@@ -28,7 +28,6 @@ func take(r Resource) Resource {
 
 func main() {
 	fmt.Println("before-block")
-
 	inner := Resource{Name: "inner"}
 	_ = inner
 	__live_1 := true

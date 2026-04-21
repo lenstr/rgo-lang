@@ -2799,14 +2799,12 @@ and gen_stmt env buf indent (s : Ast.stmt) : cg_env =
       env
   | StmtExpr (ExprBlock blk as e) ->
       (* Block expressions in statement context: the outer fold_stmts has
-         already written [indent] to the buffer.  gen_block_stmts adds its own
-         [indent] per inner statement, so the stray outer indent must be
-         consumed by a newline to avoid double-indenting the first line.
-
-         After processing the block, restore the outer scope so that
-         subsequent function-level Drop bindings still use defer rather than
-         being tracked in the (now exited) inner scope. *)
-      Buffer.add_char buf '\n';
+         already written [indent] to the buffer, but gen_block_stmts adds
+         its own [indent] per inner statement.  Remove the stray outer
+         indent to avoid double-indenting the first line of the block.
+         After processing, restore outer scope so subsequent function-level
+         Drop bindings still use defer rather than scope-based tracking. *)
+      Buffer.truncate buf (Buffer.length buf - String.length indent);
       let outer_scope_drops = env.scope_drops in
       let outer_values = env.values in
       let inner = push_scope ~is_function:false env in
