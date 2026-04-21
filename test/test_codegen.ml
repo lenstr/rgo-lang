@@ -3063,6 +3063,65 @@ fn main() {
   compile_and_check ~expected_output:"alive\ndrop-wrapper\ndrop-wrapper\n" src
   |> ignore
 
+(* VAL-OWN-011: Generic enum Clone with Self lowering — clone at boundary
+   proves original remains usable while clone is independently consumed *)
+let test_own_generic_enum_clone_runtime () =
+  let src =
+    {|
+trait Clone {
+  fn clone(&self) -> Self;
+}
+
+trait Drop {
+  fn drop(&mut self);
+}
+
+enum Wrapper<T> {
+  Some(T),
+  None,
+}
+
+impl<T> Clone for Wrapper<T> {
+  fn clone(&self) -> Self {
+    match self {
+      Wrapper::Some(v) => Wrapper::Some(v),
+      Wrapper::None => Wrapper::None,
+    }
+  }
+}
+
+impl<T> Drop for Wrapper<T> {
+  fn drop(&mut self) {
+    println("drop-wrapper");
+  }
+}
+
+fn consume(w: Wrapper<i64>) {
+  println("consumed");
+}
+
+fn main() {
+  let w = Wrapper::Some(42);
+  consume(w.clone());
+  println("original-alive");
+}
+|}
+  in
+  compile_and_check
+    ~expected_output:"consumed\ndrop-wrapper\noriginal-alive\ndrop-wrapper\n"
+    src
+  |> ignore
+
+(* VAL-OWN-011: Generic enum clone example fixture builds and runs *)
+let test_generic_enum_clone_example () =
+  let src = read_file "../examples/generic_enum_clone.rg" in
+  let _go =
+    compile_and_check
+      ~expected_output:"consumed\ndrop-wrapper\noriginal-alive\ndrop-wrapper\n"
+      src
+  in
+  ()
+
 (* Negative: mismatched generic enum payload type is rejected *)
 let test_own_generic_enum_mismatch_negative () =
   compile_expect_error ~expect:"type mismatch"
@@ -3238,6 +3297,8 @@ let () =
           Alcotest.test_case "shapes.rg runs" `Quick test_shapes_example;
           Alcotest.test_case "loops.rg runs" `Quick test_loops_example;
           Alcotest.test_case "traits.rg runs" `Quick test_traits_example;
+          Alcotest.test_case "generic_enum_clone.rg runs" `Quick
+            test_generic_enum_clone_example;
         ] );
       ( "generics",
         [
@@ -3382,6 +3443,8 @@ let () =
             test_own_generic_enum_copy;
           Alcotest.test_case "generic enum two instantiations" `Quick
             test_own_generic_enum_clone;
+          Alcotest.test_case "generic enum Clone with Self lowering" `Quick
+            test_own_generic_enum_clone_runtime;
           Alcotest.test_case "generic enum payload mismatch rejected" `Quick
             test_own_generic_enum_mismatch_negative;
         ] );

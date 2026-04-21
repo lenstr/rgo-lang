@@ -753,7 +753,16 @@ and check_assoc_fn_call env type_name fn_name arg_types =
             if arg_types <> [] then
               error_at fn_name.span "unit variant '%s::%s' takes no arguments"
                 type_name.node fn_name.node;
-            TEnum (type_name.node, [])
+            (* Inherit type args from Self inside an impl block for the same enum *)
+            let type_args =
+              match (ei.ei_tparams, env.self_ty) with
+              | [], _ -> []
+              | _, Some (TEnum (sn, (_ :: _ as args))) when sn = type_name.node
+                ->
+                  args
+              | tparams, _ -> List.map (fun tp -> TParam tp) tparams
+            in
+            TEnum (type_name.node, type_args)
         | Some (VStruct _) ->
             error_at fn_name.span
               "struct variant '%s::%s' must use named fields" type_name.node
@@ -1135,7 +1144,17 @@ and check_path env type_name member =
     match SMap.find_opt type_name.node env.enums with
     | Some ei -> (
         match List.assoc_opt member.node ei.ei_variants with
-        | Some VUnit -> TEnum (type_name.node, [])
+        | Some VUnit ->
+            (* Inherit type args from Self inside an impl block for the same enum *)
+            let type_args =
+              match (ei.ei_tparams, env.self_ty) with
+              | [], _ -> []
+              | _, Some (TEnum (sn, (_ :: _ as args))) when sn = type_name.node
+                ->
+                  args
+              | tparams, _ -> List.map (fun tp -> TParam tp) tparams
+            in
+            TEnum (type_name.node, type_args)
         | Some _ ->
             error_at member.span "variant '%s::%s' requires arguments"
               type_name.node member.node

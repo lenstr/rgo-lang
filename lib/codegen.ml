@@ -940,9 +940,22 @@ let rec gen_expr env buf indent (ctx : expr_ctx) (e : Ast.expr) : unit =
         in
         Buffer.add_string buf (go_pkg ^ "." ^ go_name)
       end
-      else
-        (* Unit enum variant: EnumVariant{} *)
-        Buffer.add_string buf (type_name.node ^ member_name.node ^ "{}")
+      else begin
+        (* Unit enum variant: EnumVariant{} or EnumVariant[T]{} *)
+        let type_suffix =
+          match SMap.find_opt type_name.node env.enums with
+          | Some ei when ei.ei_tparams <> [] ->
+              let tparam_types =
+                List.map
+                  (fun tp -> if List.mem tp env.type_params then tp else "any")
+                  ei.ei_tparams
+              in
+              "[" ^ String.concat ", " tparam_types ^ "]"
+          | _ -> ""
+        in
+        Buffer.add_string buf
+          (type_name.node ^ member_name.node ^ type_suffix ^ "{}")
+      end
   | ExprStruct (ty, fields) -> gen_struct_literal env buf indent ty fields
   | ExprStructVariant (type_name, variant_name, fields) ->
       gen_struct_variant_literal env buf indent type_name variant_name fields
@@ -1206,7 +1219,10 @@ and gen_path_call env buf indent type_name fn_name args =
                       (fun tp ->
                         match Hashtbl.find_opt bindings tp with
                         | Some t -> t
-                        | None -> "any")
+                        | None ->
+                            (* If tp is an in-scope type parameter, use it
+                               directly instead of erasing to any *)
+                            if List.mem tp env.type_params then tp else "any")
                       tparams
                   in
                   "[" ^ String.concat ", " tparam_types ^ "]"
@@ -1221,7 +1237,20 @@ and gen_path_call env buf indent type_name fn_name args =
               args;
             Buffer.add_char buf '}'
         | Some VUnit ->
-            Buffer.add_string buf (type_name.node ^ fn_name.node ^ "{}")
+            let type_suffix =
+              match ei.ei_tparams with
+              | [] -> ""
+              | tparams ->
+                  let tparam_types =
+                    List.map
+                      (fun tp ->
+                        if List.mem tp env.type_params then tp else "any")
+                      tparams
+                  in
+                  "[" ^ String.concat ", " tparam_types ^ "]"
+            in
+            Buffer.add_string buf
+              (type_name.node ^ fn_name.node ^ type_suffix ^ "{}")
         | Some (VStruct _) ->
             (* Should not happen: struct variants are constructed differently *)
             Buffer.add_string buf (type_name.node ^ fn_name.node ^ "{}")
@@ -1661,11 +1690,18 @@ and gen_match env buf indent ctx scrutinee arms =
   | Some (TyGeneric ({ node = "Option"; _ }, [ inner_ty ])) ->
       gen_option_match env buf indent ctx scrutinee arms inner_ty
   | _ -> (
-      let enum_name =
+      let enum_name, enum_targs =
         match infer_expr_type env scrutinee with
-        | Some (TyName { node = n; _ }) -> Some n
-        | Some (TyGeneric ({ node = n; _ }, _)) -> Some n
-        | _ -> None
+        | Some (TyName { node = n; _ }) -> (Some n, [])
+        | Some (TyGeneric ({ node = n; _ }, args)) -> (Some n, args)
+        | _ -> (None, [])
+      in
+      (* Suffix for variant case types in generic enum type switches *)
+      let targs_suffix =
+        match enum_targs with
+        | [] -> ""
+        | _ ->
+            "[" ^ String.concat ", " (List.map (go_type env) enum_targs) ^ "]"
       in
       match ctx with
       | CtxStmt ->
@@ -1674,7 +1710,7 @@ and gen_match env buf indent ctx scrutinee arms =
           Buffer.add_string buf ".(type) {\n";
           List.iter
             (fun (arm : match_arm) ->
-              gen_match_arm env buf indent enum_name arm)
+              gen_match_arm env buf indent enum_name ~targs_suffix arm)
             arms;
           if not (has_wildcard_or_bind_arm arms) then begin
             Printf.bprintf buf "%sdefault:\n" indent;
@@ -1698,7 +1734,7 @@ and gen_match env buf indent ctx scrutinee arms =
           Buffer.add_string buf ".(type) {\n";
           List.iter
             (fun (arm : match_arm) ->
-              gen_match_arm_with_return env buf ni enum_name arm)
+              gen_match_arm_with_return env buf ni enum_name ~targs_suffix arm)
             arms;
           if not (has_wildcard_or_bind_arm arms) then begin
             Printf.bprintf buf "%sdefault:\n" ni;
@@ -1708,7 +1744,8 @@ and gen_match env buf indent ctx scrutinee arms =
           Printf.bprintf buf "%s}\n" ni;
           Printf.bprintf buf "%s}()" indent)
 
-and gen_match_arm env buf indent enum_name (arm : match_arm) =
+and gen_match_arm env buf indent enum_name ?(targs_suffix = "")
+    (arm : match_arm) =
   let ni = indent ^ "\t" in
   match arm.arm_pat with
   | PatWild ->
@@ -1728,7 +1765,8 @@ and gen_match_arm env buf indent enum_name (arm : match_arm) =
       gen_arm_body_stmts env buf ni arm.arm_expr
   | PatTuple (ename, vname, pats) ->
       let case_type =
-        (match enum_name with Some en -> en | None -> ename.node) ^ vname.node
+        (match enum_name with Some en -> en | None -> ename.node)
+        ^ vname.node ^ targs_suffix
       in
       Printf.bprintf buf "%scase %s:\n" indent case_type;
       if pats = [] || List.for_all (fun p -> p = PatWild) pats then
@@ -1737,14 +1775,16 @@ and gen_match_arm env buf indent enum_name (arm : match_arm) =
       gen_arm_body_stmts env buf ni arm.arm_expr
   | PatStruct (ename, vname, field_pats) ->
       let case_type =
-        (match enum_name with Some en -> en | None -> ename.node) ^ vname.node
+        (match enum_name with Some en -> en | None -> ename.node)
+        ^ vname.node ^ targs_suffix
       in
       Printf.bprintf buf "%scase %s:\n" indent case_type;
       if field_pats = [] then Printf.bprintf buf "%s_ = __v\n" ni
       else gen_struct_bindings env buf ni field_pats;
       gen_arm_body_stmts env buf ni arm.arm_expr
 
-and gen_match_arm_with_return env buf indent enum_name (arm : match_arm) =
+and gen_match_arm_with_return env buf indent enum_name ?(targs_suffix = "")
+    (arm : match_arm) =
   let ni = indent ^ "\t" in
   match arm.arm_pat with
   | PatWild ->
@@ -1770,7 +1810,8 @@ and gen_match_arm_with_return env buf indent enum_name (arm : match_arm) =
       Buffer.add_char buf '\n'
   | PatTuple (ename, vname, pats) ->
       let case_type =
-        (match enum_name with Some en -> en | None -> ename.node) ^ vname.node
+        (match enum_name with Some en -> en | None -> ename.node)
+        ^ vname.node ^ targs_suffix
       in
       Printf.bprintf buf "%scase %s:\n" indent case_type;
       if pats = [] || List.for_all (fun p -> p = PatWild) pats then
@@ -1781,7 +1822,8 @@ and gen_match_arm_with_return env buf indent enum_name (arm : match_arm) =
       Buffer.add_char buf '\n'
   | PatStruct (ename, vname, field_pats) ->
       let case_type =
-        (match enum_name with Some en -> en | None -> ename.node) ^ vname.node
+        (match enum_name with Some en -> en | None -> ename.node)
+        ^ vname.node ^ targs_suffix
       in
       Printf.bprintf buf "%scase %s:\n" indent case_type;
       if field_pats = [] then Printf.bprintf buf "%s_ = __v\n" ni
@@ -1950,18 +1992,24 @@ and gen_match_as_return env buf indent scrutinee arms =
   | Some (TyGeneric ({ node = "Option"; _ }, [ inner_ty ])) ->
       gen_option_match_as_return env buf indent scrutinee arms inner_ty
   | _ ->
-      let enum_name =
+      let enum_name, enum_targs =
         match infer_expr_type env scrutinee with
-        | Some (TyName { node = n; _ }) -> Some n
-        | Some (TyGeneric ({ node = n; _ }, _)) -> Some n
-        | _ -> None
+        | Some (TyName { node = n; _ }) -> (Some n, [])
+        | Some (TyGeneric ({ node = n; _ }, args)) -> (Some n, args)
+        | _ -> (None, [])
+      in
+      let targs_suffix =
+        match enum_targs with
+        | [] -> ""
+        | _ ->
+            "[" ^ String.concat ", " (List.map (go_type env) enum_targs) ^ "]"
       in
       Printf.bprintf buf "%sswitch __v := " indent;
       gen_expr env buf indent CtxExpr scrutinee;
       Buffer.add_string buf ".(type) {\n";
       List.iter
         (fun (arm : match_arm) ->
-          gen_match_arm_with_return env buf indent enum_name arm)
+          gen_match_arm_with_return env buf indent enum_name ~targs_suffix arm)
         arms;
       if not (has_wildcard_or_bind_arm arms) then begin
         Printf.bprintf buf "%sdefault:\n" indent;
@@ -2798,23 +2846,39 @@ and gen_enum_decl env buf e_name e_generics e_variants _impl_methods =
   (* Sealed interface *)
   Printf.bprintf buf "type %s%s interface {\n" e_name.node generics_decl;
   Printf.bprintf buf "\tis%s()\n" e_name.node;
-  (* Add method signatures from impl blocks *)
+  (* Add method signatures from impl blocks.
+     Build a self_type so TySelf resolves to the concrete enum type. *)
+  let self_enum_ty =
+    match e_generics with
+    | [] -> Ast.TyName e_name
+    | _ ->
+        Ast.TyGeneric
+          ( e_name,
+            List.map (fun (tp : type_param) -> Ast.TyName tp.tp_name) e_generics
+          )
+  in
+  let iface_env =
+    {
+      env with
+      self_type = Some self_enum_ty;
+      self_type_name = Some e_name.node;
+    }
+  in
   (match SMap.find_opt e_name.node env.impls with
   | Some ii ->
       SMap.iter
         (fun mname mi ->
           let is_pub = true in
-          (* methods in impls default to checking the fn_decl *)
           let go_name = go_method_name is_pub mname in
           Printf.bprintf buf "\t%s(" go_name;
           List.iteri
             (fun i (p : param) ->
               if i > 0 then Buffer.add_string buf ", ";
-              Buffer.add_string buf (go_type env p.p_ty))
+              Buffer.add_string buf (go_type iface_env p.p_ty))
             mi.mi_params;
           Buffer.add_char buf ')';
           (match mi.mi_ret with
-          | Some t -> Printf.bprintf buf " %s" (go_type env t)
+          | Some t -> Printf.bprintf buf " %s" (go_type iface_env t)
           | None -> ());
           Buffer.add_char buf '\n')
         ii.ii_methods
@@ -2825,12 +2889,10 @@ and gen_enum_decl env buf e_name e_generics e_variants _impl_methods =
   List.iter
     (fun (v : variant) ->
       let vtype = e_name.node ^ v.var_name.node in
-      (* For generic enums, variant structs carry the same type params *)
-      let needs_generics =
-        match v.var_fields with
-        | Some (TupleFields _) | Some (StructFields _) -> e_generics <> []
-        | None -> false
-      in
+      (* For generic enums, variant structs carry the same type params.
+         Unit variants also need generics when the enum has self-referential
+         methods (e.g. Clone() -> Self) that require the type params. *)
+      let needs_generics = e_generics <> [] in
       let vtype_decl =
         if needs_generics then vtype ^ generics_decl else vtype
       in
@@ -3010,11 +3072,21 @@ and gen_enum_method env buf enum_name _generics_decl fd _self_param =
     | [] -> ""
     | tps -> "[" ^ String.concat ", " tps ^ "]"
   in
+  (* Build concrete Self type for the enum (e.g. Wrapper[T]) *)
+  let self_enum_ty =
+    match enum_tparams with
+    | [] -> Ast.TyName (dummy_loc enum_name)
+    | _ ->
+        Ast.TyGeneric
+          ( dummy_loc enum_name,
+            List.map (fun tp -> Ast.TyName (dummy_loc tp)) enum_tparams )
+  in
   let fn_env =
     {
       env with
       ret_ty = fd.fn_ret;
       self_type_name = Some enum_name;
+      self_type = Some self_enum_ty;
       type_params =
         enum_tparams
         @ List.map (fun (tp : type_param) -> tp.tp_name.node) fd.fn_generics
@@ -3022,9 +3094,7 @@ and gen_enum_method env buf enum_name _generics_decl fd _self_param =
     }
   in
   let fn_env = push_scope fn_env in
-  let fn_env =
-    add_value "self" (Some (TyName (dummy_loc enum_name))) ~is_mut:false fn_env
-  in
+  let fn_env = add_value "self" (Some self_enum_ty) ~is_mut:false fn_env in
   let fn_env =
     List.fold_left
       (fun e (p : param) ->
@@ -3049,12 +3119,10 @@ and gen_enum_method env buf enum_name _generics_decl fd _self_param =
   match SMap.find_opt enum_name env.enums with
   | Some ei ->
       List.iter
-        (fun (vname, vshape) ->
+        (fun (vname, _vshape) ->
           let vtype = enum_name ^ vname in
-          (* Variant structs with fields carry enum generics *)
-          let variant_has_generics =
-            enum_tparams <> [] && match vshape with VUnit -> false | _ -> true
-          in
+          (* All variants of generic enums carry the enum's type params *)
+          let variant_has_generics = enum_tparams <> [] in
           let vtype_recv =
             if variant_has_generics then vtype ^ helper_generics_use else vtype
           in
@@ -3076,14 +3144,7 @@ and gen_enum_method env buf enum_name _generics_decl fd _self_param =
           Printf.bprintf buf "\t%s%s%s(self"
             (if has_return then "return " else "")
             helper_name
-            (if enum_tparams <> [] && variant_has_generics then
-               helper_generics_use
-             else if enum_tparams <> [] then
-               (* Unit variant: use [any] *)
-               "["
-               ^ String.concat ", " (List.map (fun _ -> "any") enum_tparams)
-               ^ "]"
-             else "");
+            (if enum_tparams <> [] then helper_generics_use else "");
           List.iter
             (fun (p : param) ->
               Printf.bprintf buf ", %s" (escape_ident p.p_name.node))

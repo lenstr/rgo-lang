@@ -2124,6 +2124,38 @@ fn main() {
 }
 |}
 
+(* VAL-OWN-011: Generic enum Clone with Self in method signature *)
+let own_generic_enum_clone_positive =
+  {|
+trait Clone {
+  fn clone(&self) -> Self;
+}
+
+enum Wrapper<T> {
+  Some(T),
+  None,
+}
+
+impl<T> Clone for Wrapper<T> {
+  fn clone(&self) -> Self {
+    match self {
+      Wrapper::Some(v) => Wrapper::Some(v),
+      Wrapper::None => Wrapper::None,
+    }
+  }
+}
+
+fn consume(w: Wrapper<i64>) {
+  println("consumed");
+}
+
+fn main() {
+  let w = Wrapper::Some(42);
+  consume(w.clone());
+  println("original-alive");
+}
+|}
+
 (* Negative: mismatched generic enum payload type *)
 let own_generic_enum_payload_mismatch_negative =
   {|
@@ -2156,6 +2188,9 @@ let ownership_positive_tests =
       `Quick,
       pass own_generic_enum_constructor_positive );
     ("generic enum Copy reusable", `Quick, pass own_generic_enum_copy_positive);
+    ( "generic enum Clone with Self lowering",
+      `Quick,
+      pass own_generic_enum_clone_positive );
   ]
 
 let ownership_negative_tests =
