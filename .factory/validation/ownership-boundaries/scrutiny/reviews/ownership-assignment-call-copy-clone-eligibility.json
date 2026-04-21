@@ -1,0 +1,28 @@
+{
+  "featureId": "ownership-assignment-call-copy-clone-eligibility",
+  "reviewedAt": "2026-04-21T08:05:11.092331+00:00",
+  "commitId": "777e56a",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The feature adds basic move tracking for assignment and free-function call sites, plus Copy/Clone/Drop eligibility checks, but it does not apply consuming-boundary semantics to by-value method receivers. As implemented, `self` methods behave like `&self` methods after impl collection, so a non-`Copy` binding can be reused after a consuming method call.",
+    "issues": [
+      {
+        "file": "lib/typecheck.ml",
+        "line": 63,
+        "severity": "blocking",
+        "description": "By-value method receivers are not represented or consumed. `method_info` stores only `mi_is_mut` at line 63, impl collection records methods with `let mi = { mi_params = params; mi_ret = ret; mi_is_mut = is_mut }` at line 1862, and method-call checking only uses that flag for mutability at lines 1053-1056. That means `self` and `&self` receivers are treated the same at call sites. I confirmed the regression by compiling `/tmp/ownership_method_value_move.rg` with `nix develop -c dune exec rgoc -- /tmp/ownership_method_value_move.rg -o /tmp/ownership_method_value_move.go`: the program defines `fn consume(self) -> str`, calls `r.consume()`, then reuses `r`, and the compiler exits 0 instead of reporting a move. This misses the feature requirement that consuming by-value call boundaries reject later reuse of non-`Copy` values."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `compiler-worker` skill says to write tests first, but this session edited `lib/typecheck.ml` repeatedly before adding the new ownership tests, while the handoff still reported `skillFeedback.followedProcedure: true`. Shared state should clarify whether `followedProcedure` tolerates implementation-first work or the skill should be relaxed so scrutiny can trust that field.",
+      "evidence": "`.factory/skills/compiler-worker/SKILL.md:22` says \"Write tests first\". The transcript skeleton for worker session `c992798b-ac65-415b-be61-4f97e37a6c4c` shows multiple `Edit` operations on `lib/typecheck.ml` before later edits to `test/test_codegen.ml` and `test/test_typecheck.ml`, while the handoff JSON at `/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/handoffs/2026-04-21T03-06-59-635Z__ownership-assignment-call-copy-clone-eligibility__c992798b-ac65-415b-be61-4f97e37a6c4c.json` reports `\"followedProcedure\": true`."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Fail. Commit `777e56a` covers assignment moves, free-function call moves, Copy survival, Clone eligibility, and Drop/Copy overlap, but it still lets non-`Copy` values survive consuming `self` method calls because receiver kind is erased in `method_info` and never turned into a move at method-call sites."
+}

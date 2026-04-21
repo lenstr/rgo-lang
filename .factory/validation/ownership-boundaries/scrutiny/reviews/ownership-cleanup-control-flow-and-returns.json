@@ -1,0 +1,34 @@
+{
+  "featureId": "ownership-cleanup-control-flow-and-returns",
+  "reviewedAt": "2026-04-21T11:04:27+03:00",
+  "commitId": "b90efa7",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The change adds defer-based Drop cleanup plus focused runtime tests, but the implementation is not semantics-complete for lexical scopes or all consuming-expression forms. I found two blocking ownership/codegen bugs that can produce late drops or double cleanup outside the narrow cases covered by the new tests.",
+    "issues": [
+      {
+        "file": "lib/codegen.ml",
+        "line": 2595,
+        "severity": "blocking",
+        "description": "Cleanup for Drop bindings is emitted as a plain Go `defer` at declaration time, while block codegen (`gen_block_stmts`) just inlines nested blocks into the surrounding function. In Go, `defer` runs at function exit, not lexical block exit, so bindings declared inside nested blocks/loop bodies are dropped too late instead of on normal scope exit as required by VAL-OWN-005."
+      },
+      {
+        "file": "lib/codegen.ml",
+        "line": 2530,
+        "severity": "blocking",
+        "description": "Guard suppression for consumed Drop bindings is only applied to standalone statement expressions and bare-identifier let moves. Consuming calls inside value-producing contexts such as `let x = take(r)`, `return take(r)`, or a final expression `take(r)` leave the caller guard armed, so the caller can still run deferred cleanup after ownership already moved into the callee/return path."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The compiler-worker skill says ownership-sensitive features should verify one negative compile path and one positive runtime path, but this feature only added positive runtime cleanup tests while the handoff still reports `followedProcedure: true`.",
+      "evidence": ".factory/skills/compiler-worker/SKILL.md:25; test/test_codegen.ml:2555-2719 adds only positive runtime cleanup cases; handoff 2026-04-21T06-19-26-069Z__ownership-cleanup-control-flow-and-returns__a86d1a79-5d6e-4014-bc8a-5c5d872a9c32.json records `skillFeedback.followedProcedure` as true."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed the feature metadata, handoff, transcript skeleton, compiler-worker skill, shared-state docs, and commit `b90efa7`. The feature adds substantial cleanup coverage, but it fails review because `lib/codegen.ml` currently models cleanup with function-scoped Go defers and only suppresses consumed guards in a subset of expression contexts, leaving high-confidence paths with late drop timing or double cleanup."
+}

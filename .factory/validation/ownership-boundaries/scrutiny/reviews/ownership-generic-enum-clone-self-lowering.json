@@ -1,0 +1,21 @@
+{
+  "featureId": "ownership-generic-enum-clone-self-lowering",
+  "reviewedAt": "2026-04-21T08:04:46Z",
+  "commitId": "38939b1",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "I reviewed the feature metadata, worker handoff, transcript skeleton, and commit `38939b1`. The implementation fixes the feature-scoped failure in both semantic and codegen paths: `lib/typecheck.ml` now preserves the enclosing enum instantiation for unit-variant constructors used inside `impl` bodies, and `lib/codegen.ml` now lowers enum-interface/method `Self` references to the concrete generic enum type, carries generic parameters onto unit variants, and emits generic type-switch case labels. The added typecheck/codegen coverage plus the `examples/generic_enum_clone.rg` fixture align with the feature contract, and I did not find a feature-scoped correctness bug in the reviewed change.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `compiler-worker` skill's tests-first rule is too rigid for multi-path ownership/codegen fixes. In this run the worker had to prototype the fix first to understand the generated-Go target, then honestly marked the deviation in `skillFeedback`; the skill should explicitly allow that exception.",
+      "evidence": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/skills/compiler-worker/SKILL.md:22 requires workers to 'Write tests first', while SKILL.md:28 says deviations should set `skillFeedback.followedProcedure` to `false`. The handoff at /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/handoffs/2026-04-21T07-44-03-458Z__ownership-generic-enum-clone-self-lowering__419a7d9e-aca8-4610-8d18-a09488dc7593.json records `followedProcedure = false` with a justified explanation that the fix spanned typecheck plus multiple interacting codegen paths."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Pass. Commit `38939b1` addresses the generic-enum `Self` lowering bug end-to-end for the reviewed Clone flow, and I found no feature-scoped blocking or non-blocking code issues in the implementation."
+}

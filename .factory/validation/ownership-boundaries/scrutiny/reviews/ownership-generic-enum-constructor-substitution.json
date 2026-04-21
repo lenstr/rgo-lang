@@ -1,0 +1,34 @@
+{
+  "featureId": "ownership-generic-enum-constructor-substitution",
+  "reviewedAt": "2026-04-21T08:05:00.587343Z",
+  "commitId": "95bd494",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The feature covers the simple direct-constructor ownership cases in the added tests, but I found two blocking correctness gaps in the new generic enum constructor inference paths: conflicting bindings for repeated type parameters are accepted, and Go type-argument emission only preserves direct `T` payloads instead of recursively preserving concrete instantiations.",
+    "issues": [
+      {
+        "file": "lib/typecheck.ml",
+        "line": 728,
+        "severity": "blocking",
+        "description": "Generic enum constructors now accept conflicting payload types when the same type parameter appears more than once. `check_assoc_fn_call`/`check_struct_variant_literal` validate each field with `types_compatible ~type_params:ei.ei_tparams`, so every `T` occurrence is treated as an independent wildcard, and `infer_tparam_bindings` then keeps only the first binding (`lib/typecheck.ml:790-793`) instead of checking later occurrences. A constructor like `Pair::Both(1, \"x\")` for `enum Pair<T> { Both(T, T) }` would therefore infer `Pair<i64>` instead of rejecting the mismatched payloads at the constructor call site."
+      },
+      {
+        "file": "lib/codegen.ml",
+        "line": 1212,
+        "severity": "blocking",
+        "description": "The new codegen inference only recognizes payload fields whose formal type is exactly `TyName tp` (`lib/codegen.ml:399-403` and `1212-1216`). Typechecking infers bindings recursively through `Vec<T>`, `Option<T>`, `Result<T, E>`, tuples, structs, and enums (`lib/typecheck.ml:787-809`), but codegen does not mirror that logic, so constructors such as `Wrapper::Some([1, 2])` can typecheck as `Wrapper<Vec<i64>>` while generated Go falls back to `[any]` instead of preserving the concrete instantiation. That violates the feature requirement to preserve concrete generic instantiations in generated Go."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The compiler-worker skill's tests-first requirement appears too rigid for this feature, and the handoff status did not capture the deviation consistently.",
+      "evidence": "`/home/lenstr/workspace/personal/hack/rgo-lang/.factory/skills/compiler-worker/SKILL.md:22-28` says to write tests first and to set `skillFeedback.followedProcedure` to false when deviating. The transcript skeleton for session `5e0a2f04-e4ab-417d-8df9-d514e79e8557` shows code edits to `lib/typecheck.ml` and `lib/codegen.ml` before any test-file edits, while `/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/handoffs/2026-04-21T07-18-21-032Z__ownership-generic-enum-constructor-substitution__5e0a2f04-e4ab-417d-8df9-d514e79e8557.json` still records `skillFeedback.followedProcedure: true` and only mentions the tests-first mismatch in `suggestedChanges`."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Fail. I reviewed the feature handoff, transcript skeleton, commit diff, mission guidance, shared-state docs, and compiler-worker skill. The implementation solves the narrow `Wrapper::Some(42)` ownership scenarios in the new tests, but it still has a blocking type-soundness hole for repeated type parameters and a blocking codegen gap that erases nested generic payload instantiations to `any`, so I cannot mark the feature as passing."
+}

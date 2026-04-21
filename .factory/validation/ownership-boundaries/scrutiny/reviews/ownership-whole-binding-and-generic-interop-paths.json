@@ -1,0 +1,39 @@
+{
+  "featureId": "ownership-whole-binding-and-generic-interop-paths",
+  "reviewedAt": "2026-04-21T11:04:50+03:00",
+  "commitId": "38db2d3",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "Reviewed the feature metadata, handoff, transcript skeleton, and commit `38db2d3`. The change does add whole-binding checks for struct field accesses in let/call/assign paths and adds generic-struct ownership coverage, but it does not satisfy the feature's promised enum half. In this commit, generic enum variant constructors still compare payloads against bare type parameters and then erase the instantiated arguments by returning `TEnum(type_name, [])`, so direct generic-enum move/copy/clone/drop flows cannot preserve concrete instantiations. Separately, the new whole-binding guard only covers `ExprFieldAccess`; enum payload destructuring in match patterns still binds payload values without any corresponding whole-binding ownership rejection. Because the feature's expected behavior explicitly includes enum payloads and generic struct/enum instantiations, the implementation is incomplete.",
+    "issues": [
+      {
+        "file": "lib/typecheck.ml",
+        "line": 725,
+        "severity": "blocking",
+        "description": "Generic enum constructor calls still erase concrete type arguments: `check_assoc_fn_call` validates tuple-variant payloads against the declared field types and then returns `TEnum(type_name.node, [])`. For a generic enum like `Wrapper<T>`, direct calls such as `Wrapper::Some(42)` therefore do not preserve the concrete instantiation required by the feature, which matches the handoff's own note that direct generic-enum ownership testing was still broken in this commit."
+      },
+      {
+        "file": "lib/typecheck.ml",
+        "line": 1293,
+        "severity": "blocking",
+        "description": "Whole-binding-only ownership is still not enforced for enum payload extraction. The new partial-move checks added by this feature only reject `ExprFieldAccess` in let/call/assign flows, but `bind_pattern` still recursively binds `PatTuple`/`PatStruct` payloads with no ownership guard, so enum payload destructuring remains outside the promised `fields or enum payloads` protection."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "knowledge",
+      "observation": "The mission feature metadata is ambiguous about scope: this feature still describes and verifies generic struct/enum ownership preservation, but its `fulfills` list only names `VAL-OWN-010`, while later ownership-boundaries features explicitly finish the missing generic-enum constructor and Clone work. That mismatch makes it unclear to workers/reviewers whether generic-enum coverage is required here or intentionally deferred.",
+      "evidence": "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/features.json:559-579 define this feature as covering generic struct/enum behavior but only fulfilling VAL-OWN-010; the follow-up entries at 589-645 describe the missing generic-enum constructor and Clone pieces and note that VAL-OWN-011 was still outstanding."
+    },
+    {
+      "area": "skills",
+      "observation": "The `compiler-worker` skill does not warn about the pre-existing generic-enum constructor inference gap, even though that gap directly affected this worker's ability to exercise the promised enum ownership paths and was called out in the handoff feedback.",
+      "evidence": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/skills/compiler-worker/SKILL.md:20-30 gives the ownership/generic procedure but no note about generic enum constructor limitations; the handoff at /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/handoffs/2026-04-21T06-46-36-748Z__ownership-whole-binding-and-generic-interop-paths__990b4c0f-767f-4981-a7c1-bea3f069729d.json:128-140 records the gap and suggests adding it to the skill."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Result: fail. Commit `38db2d3` improves struct-field whole-binding checks and generic-struct ownership coverage, but it does not deliver the feature's required enum behavior: generic enum constructor calls still erase concrete type arguments, and enum payload destructuring still lacks whole-binding ownership enforcement."
+}

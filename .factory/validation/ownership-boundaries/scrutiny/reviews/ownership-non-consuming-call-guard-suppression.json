@@ -1,0 +1,28 @@
+{
+  "featureId": "ownership-non-consuming-call-guard-suppression",
+  "reviewedAt": "2026-04-21T08:04:59+00:00",
+  "commitId": "0eab8fa",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The patch fixes the specific builtin `println(...)` case, but it does not fully implement the feature's promised 'truly consuming call boundaries' behavior. Imported stdlib package calls are still treated as consuming in codegen guard suppression, so retained `Drop` values can still silently lose cleanup after package-qualified non-consuming calls.",
+    "issues": [
+      {
+        "file": "lib/codegen.ml",
+        "line": 2493,
+        "severity": "blocking",
+        "description": "`collect_consumed_idents` still marks every `ExprPath` call as consuming (`ExprCall (ExprPath _, args)`), even though imported stdlib calls also use `ExprPath`. The same file explicitly distinguishes imported package calls elsewhere (`is_imported_package` in `gen_path_call`, lines 1193-1196, and in type inference, lines 375-380), and typecheck routes those calls through `check_stdlib_call` via `check_assoc_fn_call` (`lib/typecheck.ml:709-712`). As a result, a non-consuming call such as `http::listen_and_serve(...)` can still suppress a caller-side Drop guard, so the feature does not yet satisfy 'Drop guards are suppressed only for call arguments whose modeled parameter semantics actually consume ownership.'"
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The worker marked `skillFeedback.followedProcedure` as true, but the commit adds a generated runtime artifact `.factory/runtime/non-consuming-call.go` instead of cleaning it up. The skill already says disposable runtime artifacts under `.factory/runtime/` should be cleaned unless the feature explicitly adds tracked fixtures, so this looks like an uncaptured procedure deviation rather than a documentation gap.",
+      "evidence": ".factory/skills/compiler-worker/SKILL.md:29 requires cleanup of disposable runtime artifacts; handoff file `/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/handoffs/2026-04-21T07-59-10-931Z__ownership-non-consuming-call-guard-suppression__a584cb9b-cdad-4a16-91b4-4bfcaf9da3e3.json` reports `skillFeedback.followedProcedure: true`; commit `0eab8fa` adds `.factory/runtime/non-consuming-call.go`."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed the feature metadata, handoff, transcript skeleton, skill instructions, shared-state docs, and commit `0eab8fa`. The implementation improves builtin-call behavior but still misclassifies imported package `ExprPath` calls as consuming, so the feature remains incomplete and the review fails."
+}
