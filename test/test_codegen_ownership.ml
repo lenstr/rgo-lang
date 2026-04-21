@@ -582,6 +582,171 @@ fn main() {
 |}
     ()
 
+(* ======== Lexical scope cleanup tests ======== *)
+
+(* Drop binding in a nested block is cleaned at block exit, not function exit *)
+let test_own_nested_block_cleanup () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+struct Resource {
+  pub name: str,
+}
+
+impl Drop for Resource {
+  fn drop(&mut self) {
+    println("drop:" + self.name);
+  }
+}
+
+fn main() {
+  println("before-block");
+  {
+    let a = Resource { name: "inner" };
+    println("inside-block");
+  }
+  println("after-block");
+}
+|}
+  in
+  compile_and_check
+    ~expected_output:"before-block\ninside-block\ndrop:inner\nafter-block\n" src
+  |> ignore
+
+(* Drop binding in a loop body is cleaned each iteration *)
+let test_own_loop_cleanup () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+struct Resource {
+  pub name: str,
+}
+
+impl Drop for Resource {
+  fn drop(&mut self) {
+    println("drop:" + self.name);
+  }
+}
+
+fn main() {
+  let mut i = 0;
+  while i < 2 {
+    let a = Resource { name: "loop" };
+    println("iter");
+    i = i + 1;
+  }
+  println("done");
+}
+|}
+  in
+  compile_and_check ~expected_output:"iter\ndrop:loop\niter\ndrop:loop\ndone\n"
+    src
+  |> ignore
+
+(* Consuming move in let init suppresses guard exactly once *)
+let test_own_let_init_consume_suppresses () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+struct Resource {
+  pub name: str,
+}
+
+impl Drop for Resource {
+  fn drop(&mut self) {
+    println("drop:" + self.name);
+  }
+}
+
+fn take(r: Resource) -> Resource {
+  r
+}
+
+fn main() {
+  let a = Resource { name: "original" };
+  let b = take(a);
+  println("moved");
+}
+|}
+  in
+  compile_and_check ~expected_output:"moved\ndrop:original\n" src |> ignore
+
+(* Consuming move in return expression suppresses guard exactly once *)
+let test_own_return_consume_suppresses () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+struct Resource {
+  pub name: str,
+}
+
+impl Drop for Resource {
+  fn drop(&mut self) {
+    println("drop:" + self.name);
+  }
+}
+
+fn take(r: Resource) -> Resource {
+  r
+}
+
+fn wrap() -> Resource {
+  let a = Resource { name: "wrapped" };
+  take(a)
+}
+
+fn main() {
+  let r = wrap();
+  println("caller:" + r.name);
+}
+|}
+  in
+  compile_and_check ~expected_output:"caller:wrapped\ndrop:wrapped\n" src
+  |> ignore
+
+(* Imported stdlib non-consuming call does not suppress Drop cleanup *)
+let test_own_stdlib_call_no_suppress () =
+  let src =
+    {|
+use net::http;
+
+trait Drop {
+  fn drop(&mut self);
+}
+
+struct Resource {
+  pub name: str,
+}
+
+impl Drop for Resource {
+  fn drop(&mut self) {
+    println("drop:" + self.name);
+  }
+}
+
+fn main() {
+  let a = Resource { name: "alpha" };
+  let _mux = http::new_serve_mux();
+  println(a.name);
+  println("still-alive");
+}
+|}
+  in
+  compile_and_check ~expected_output:"alpha\nstill-alive\ndrop:alpha\n" src
+  |> ignore
+
 (* ======== Generic ownership path tests (VAL-OWN-011) ======== *)
 
 (* VAL-OWN-011: Generic struct with Drop u2014 cleanup preserves concrete
@@ -1099,6 +1264,16 @@ let () =
             test_own_cleanup_byval_return;
           Alcotest.test_case "callee-exit cleanup for by-value params" `Quick
             test_own_cleanup_callee_param;
+          Alcotest.test_case "nested block cleanup at block exit" `Quick
+            test_own_nested_block_cleanup;
+          Alcotest.test_case "loop body cleanup each iteration" `Quick
+            test_own_loop_cleanup;
+          Alcotest.test_case "let init consume suppresses guard once" `Quick
+            test_own_let_init_consume_suppresses;
+          Alcotest.test_case "return consume suppresses guard once" `Quick
+            test_own_return_consume_suppresses;
+          Alcotest.test_case "stdlib call does not suppress cleanup" `Quick
+            test_own_stdlib_call_no_suppress;
         ] );
       ( "non-consuming-call-guards",
         [

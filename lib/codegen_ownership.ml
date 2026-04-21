@@ -29,9 +29,10 @@ let is_non_consuming_builtin name =
 
 (* Collect identifier names that are consumed as by-value call arguments.
    Only user-defined rgo function/method calls consume ownership;
-   builtins and imported stdlib calls do not. *)
+   builtins, imported stdlib calls, and enum constructors do not. *)
 let collect_consumed_idents ~(is_user_fn : string -> bool)
     ~(is_user_method : string -> string -> bool)
+    ~(is_stdlib_call : string -> string -> bool)
     ~(lookup_value_ty : string -> Ast.ty option) (e : Ast.expr) : string list =
   let ident_names args =
     List.filter_map
@@ -43,9 +44,9 @@ let collect_consumed_idents ~(is_user_fn : string -> bool)
   | ExprCall (ExprIdent { node = callee; _ }, args)
     when (not (is_non_consuming_builtin callee)) && is_user_fn callee ->
       ident_names args
-  | ExprCall (ExprPath _, args) ->
-      (* Associated function calls (Type::method) are user-defined *)
-      ident_names args
+  | ExprCall (ExprPath (type_name, fn_name), args) ->
+      if is_stdlib_call type_name.node fn_name.node then []
+      else ident_names args
   | ExprCall _ -> []
   | ExprMethodCall (receiver, method_name, args) ->
       (* Only user-defined methods consume; check impls registry *)
@@ -73,15 +74,35 @@ let collect_consumed_idents ~(is_user_fn : string -> bool)
    Drop-type identifiers that were consumed by by-value calls. *)
 let suppress_consumed_guards ~(lookup_guard : string -> string option)
     ~(is_user_fn : string -> bool) ~(is_user_method : string -> string -> bool)
+    ~(is_stdlib_call : string -> string -> bool)
     ~(lookup_value_ty : string -> Ast.ty option) buf indent (e : Ast.expr) :
     unit =
   let consumed =
-    collect_consumed_idents ~is_user_fn ~is_user_method ~lookup_value_ty e
+    collect_consumed_idents ~is_user_fn ~is_user_method ~is_stdlib_call
+      ~lookup_value_ty e
   in
   List.iter
     (fun name ->
       match lookup_guard name with
       | Some guard -> Printf.bprintf buf "\n%s%s = false" indent guard
+      | None -> ())
+    consumed
+
+(* Inline variant: emits guard suppression without a leading newline,
+   so it can be placed at the start of a fresh line. *)
+let suppress_consumed_guards_inline ~(lookup_guard : string -> string option)
+    ~(is_user_fn : string -> bool) ~(is_user_method : string -> string -> bool)
+    ~(is_stdlib_call : string -> string -> bool)
+    ~(lookup_value_ty : string -> Ast.ty option) buf indent (e : Ast.expr) :
+    unit =
+  let consumed =
+    collect_consumed_idents ~is_user_fn ~is_user_method ~is_stdlib_call
+      ~lookup_value_ty e
+  in
+  List.iter
+    (fun name ->
+      match lookup_guard name with
+      | Some guard -> Printf.bprintf buf "%s%s = false\n" indent guard
       | None -> ())
     consumed
 

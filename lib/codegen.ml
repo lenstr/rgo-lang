@@ -111,6 +111,11 @@ type cg_env = {
   imported_packages : (string * string) SMap.t;
   (* Drop cleanup: binding name -> guard variable name *)
   drop_guards : string SMap.t;
+  (* Scope drops: stack of drop binding names per nested scope level.
+     Function scope is NOT tracked here (it uses defer). *)
+  scope_drops : string list list;
+  (* Loop body depths: stack of scope depths for enclosing loop bodies *)
+  loop_body_depths : int list;
   (* Shared mutable state *)
   shared : cg_shared;
 }
@@ -120,7 +125,80 @@ let fresh_tmp env prefix =
   env.shared.tmp_counter <- n + 1;
   Printf.sprintf "__%s_%d" prefix n
 
-let push_scope env = { env with values = SMap.empty :: env.values }
+let push_scope ?(is_function = false) env =
+  let new_scope_drops =
+    if is_function then env.scope_drops else [] :: env.scope_drops
+  in
+  { env with values = SMap.empty :: env.values; scope_drops = new_scope_drops }
+
+(* ---------- Scope cleanup helpers ---------- *)
+
+let emit_scope_cleanup env buf indent =
+  match env.scope_drops with
+  | current_drops :: _ ->
+      List.iter
+        (fun name ->
+          match SMap.find_opt name env.drop_guards with
+          | Some guard ->
+              let esc = escape_ident name in
+              Printf.bprintf buf "%sif %s {\n" indent guard;
+              Printf.bprintf buf "%s\t%s.Drop()\n" indent esc;
+              Printf.bprintf buf "%s}\n" indent;
+              Printf.bprintf buf "%s%s = false\n" indent guard
+          | None -> ())
+        (List.rev current_drops)
+  | [] -> ()
+
+let emit_all_nested_cleanup env buf indent =
+  let rec clean drops_list =
+    match drops_list with
+    | [] -> ()
+    | drops :: rest ->
+        clean rest;
+        List.iter
+          (fun name ->
+            match SMap.find_opt name env.drop_guards with
+            | Some guard ->
+                let esc = escape_ident name in
+                Printf.bprintf buf "%sif %s {\n" indent guard;
+                Printf.bprintf buf "%s\t%s.Drop()\n" indent esc;
+                Printf.bprintf buf "%s}\n" indent;
+                Printf.bprintf buf "%s%s = false\n" indent guard
+            | None -> ())
+          (List.rev drops)
+  in
+  clean env.scope_drops
+
+let emit_loop_cleanup env buf indent =
+  match env.loop_body_depths with
+  | target_depth :: _ ->
+      let current_depth = List.length env.values in
+      let scopes_to_clean = current_depth - target_depth in
+      let rec take_n n lst acc =
+        if n <= 0 then (List.rev acc, lst)
+        else
+          match lst with
+          | [] -> (List.rev acc, [])
+          | x :: xs -> take_n (n - 1) xs (x :: acc)
+      in
+      let scopes_to_clean_list, _rest =
+        take_n scopes_to_clean env.scope_drops []
+      in
+      List.iter
+        (fun drops ->
+          List.iter
+            (fun name ->
+              match SMap.find_opt name env.drop_guards with
+              | Some guard ->
+                  let esc = escape_ident name in
+                  Printf.bprintf buf "%sif %s {\n" indent guard;
+                  Printf.bprintf buf "%s\t%s.Drop()\n" indent esc;
+                  Printf.bprintf buf "%s}\n" indent;
+                  Printf.bprintf buf "%s%s = false\n" indent guard
+              | None -> ())
+            (List.rev drops))
+        scopes_to_clean_list
+  | [] -> ()
 
 (* ---------- Drop-type helpers (delegated to Codegen_ownership) ---------- *)
 
@@ -613,6 +691,8 @@ let collect_env (prog : Ast.program) : cg_env =
       values = [ SMap.empty ];
       imported_packages = imported_pkgs;
       drop_guards = SMap.empty;
+      scope_drops = [];
+      loop_body_depths = [];
       shared;
     }
   in
@@ -1013,19 +1093,45 @@ let rec gen_expr env buf indent (ctx : expr_ctx) (e : Ast.expr) : unit =
   | ExprReturn (Some (ExprIdent { node = "None"; _ })) ->
       gen_return_none env buf
   | ExprReturn (Some (ExprIdent { node = name; _ } as e)) ->
-      (* Ownership: if returning a Drop-type binding by value, suppress its
-         deferred cleanup so ownership transfers to the caller. *)
+      (* Ownership: emit cleanup for nested scope drops before returning,
+         and suppress the returned binding's guard. *)
+      emit_all_nested_cleanup env buf indent;
       (match SMap.find_opt name env.drop_guards with
-      | Some guard -> Printf.bprintf buf "%s = false\n%s" guard indent
+      | Some guard -> Printf.bprintf buf "%s%s = false\n" indent guard
       | None -> ());
+      Buffer.add_string buf indent;
       Buffer.add_string buf "return ";
       gen_expr env buf indent CtxExpr e
   | ExprReturn (Some e) ->
+      (* Ownership: emit cleanup for nested scope drops before returning,
+         and suppress guards for consumed identifiers in the return expr. *)
+      emit_all_nested_cleanup env buf indent;
+      Codegen_ownership.suppress_consumed_guards_inline
+        ~lookup_guard:(fun n -> SMap.find_opt n env.drop_guards)
+        ~is_user_fn:(fun n -> SMap.mem n env.fns)
+        ~is_user_method:(fun tn mn ->
+          match SMap.find_opt tn env.impls with
+          | Some ii -> SMap.mem mn ii.ii_methods
+          | None -> false)
+        ~is_stdlib_call:(fun pkg _member ->
+          is_imported_package pkg env || SMap.mem pkg env.enums)
+        ~lookup_value_ty:(fun n -> lookup_value_ty n env)
+        buf indent e;
+      Buffer.add_string buf indent;
       Buffer.add_string buf "return ";
       gen_expr env buf indent CtxExpr e
-  | ExprReturn None -> Buffer.add_string buf "return"
-  | ExprBreak -> Buffer.add_string buf "break"
-  | ExprContinue -> Buffer.add_string buf "continue"
+  | ExprReturn None ->
+      emit_all_nested_cleanup env buf indent;
+      Buffer.add_string buf indent;
+      Buffer.add_string buf "return"
+  | ExprBreak ->
+      emit_loop_cleanup env buf indent;
+      Buffer.add_string buf indent;
+      Buffer.add_string buf "break"
+  | ExprContinue ->
+      emit_loop_cleanup env buf indent;
+      Buffer.add_string buf indent;
+      Buffer.add_string buf "continue"
   | ExprAssign (op, lhs, rhs) ->
       gen_expr env buf indent CtxExpr lhs;
       Buffer.add_char buf ' ';
@@ -1047,21 +1153,33 @@ let rec gen_expr env buf indent (ctx : expr_ctx) (e : Ast.expr) : unit =
       Buffer.add_char buf ')'
   | ExprLoop (None, blk) ->
       Buffer.add_string buf "for {\n";
-      gen_block_stmts env buf (indent ^ "\t") blk;
+      let loop_body_depth = List.length env.values + 1 in
+      let inner =
+        { env with loop_body_depths = loop_body_depth :: env.loop_body_depths }
+      in
+      gen_block_stmts inner buf (indent ^ "\t") blk;
       Buffer.add_string buf indent;
       Buffer.add_char buf '}'
   | ExprLoop (Some cond, blk) ->
       Buffer.add_string buf "for ";
       gen_expr env buf indent CtxExpr cond;
       Buffer.add_string buf " {\n";
-      gen_block_stmts env buf (indent ^ "\t") blk;
+      let loop_body_depth = List.length env.values + 1 in
+      let inner =
+        { env with loop_body_depths = loop_body_depth :: env.loop_body_depths }
+      in
+      gen_block_stmts inner buf (indent ^ "\t") blk;
       Buffer.add_string buf indent;
       Buffer.add_char buf '}'
   | ExprWhile (cond, blk) ->
       Buffer.add_string buf "for ";
       gen_expr env buf indent CtxExpr cond;
       Buffer.add_string buf " {\n";
-      gen_block_stmts env buf (indent ^ "\t") blk;
+      let loop_body_depth = List.length env.values + 1 in
+      let inner =
+        { env with loop_body_depths = loop_body_depth :: env.loop_body_depths }
+      in
+      gen_block_stmts inner buf (indent ^ "\t") blk;
       Buffer.add_string buf indent;
       Buffer.add_char buf '}'
   | ExprFor (binding, iter_expr, blk) ->
@@ -1070,7 +1188,14 @@ let rec gen_expr env buf indent (ctx : expr_ctx) (e : Ast.expr) : unit =
       Buffer.add_string buf " := range ";
       gen_expr env buf indent CtxExpr iter_expr;
       Buffer.add_string buf " {\n";
-      let inner = push_scope env in
+      let inner = push_scope ~is_function:false env in
+      let loop_body_depth = List.length inner.values + 1 in
+      let inner =
+        {
+          inner with
+          loop_body_depths = loop_body_depth :: inner.loop_body_depths;
+        }
+      in
       let inner =
         add_value binding.node
           (infer_iter_elem_type env iter_expr)
@@ -1884,12 +2009,10 @@ and gen_final_expr_as_return env buf indent e =
   | ExprReturn _ ->
       if contains_question e then begin
         let e' = hoist_question_exprs env buf indent e in
-        Buffer.add_string buf indent;
         gen_expr env buf indent CtxStmt e';
         Buffer.add_char buf '\n'
       end
       else begin
-        Buffer.add_string buf indent;
         gen_expr env buf indent CtxStmt e;
         Buffer.add_char buf '\n'
       end
@@ -1974,10 +2097,32 @@ and gen_final_expr_as_return env buf indent e =
         let e' = hoist_question_exprs env buf indent e in
         match env.ret_ty with
         | None | Some (TyName { node = "void"; _ }) ->
+            Codegen_ownership.suppress_consumed_guards_inline
+              ~lookup_guard:(fun n -> SMap.find_opt n env.drop_guards)
+              ~is_user_fn:(fun n -> SMap.mem n env.fns)
+              ~is_user_method:(fun tn mn ->
+                match SMap.find_opt tn env.impls with
+                | Some ii -> SMap.mem mn ii.ii_methods
+                | None -> false)
+              ~is_stdlib_call:(fun pkg _member ->
+                is_imported_package pkg env || SMap.mem pkg env.enums)
+              ~lookup_value_ty:(fun n -> lookup_value_ty n env)
+              buf indent e';
             Buffer.add_string buf indent;
             gen_expr env buf indent CtxStmt e';
             Buffer.add_char buf '\n'
         | _ ->
+            Codegen_ownership.suppress_consumed_guards_inline
+              ~lookup_guard:(fun n -> SMap.find_opt n env.drop_guards)
+              ~is_user_fn:(fun n -> SMap.mem n env.fns)
+              ~is_user_method:(fun tn mn ->
+                match SMap.find_opt tn env.impls with
+                | Some ii -> SMap.mem mn ii.ii_methods
+                | None -> false)
+              ~is_stdlib_call:(fun pkg _member ->
+                is_imported_package pkg env || SMap.mem pkg env.enums)
+              ~lookup_value_ty:(fun n -> lookup_value_ty n env)
+              buf indent e';
             Printf.bprintf buf "%sreturn " indent;
             gen_expr env buf indent CtxExpr e';
             Buffer.add_char buf '\n'
@@ -1985,10 +2130,32 @@ and gen_final_expr_as_return env buf indent e =
       else
         match env.ret_ty with
         | None | Some (TyName { node = "void"; _ }) ->
+            Codegen_ownership.suppress_consumed_guards_inline
+              ~lookup_guard:(fun n -> SMap.find_opt n env.drop_guards)
+              ~is_user_fn:(fun n -> SMap.mem n env.fns)
+              ~is_user_method:(fun tn mn ->
+                match SMap.find_opt tn env.impls with
+                | Some ii -> SMap.mem mn ii.ii_methods
+                | None -> false)
+              ~is_stdlib_call:(fun pkg _member ->
+                is_imported_package pkg env || SMap.mem pkg env.enums)
+              ~lookup_value_ty:(fun n -> lookup_value_ty n env)
+              buf indent e;
             Buffer.add_string buf indent;
             gen_expr env buf indent CtxStmt e;
             Buffer.add_char buf '\n'
         | _ ->
+            Codegen_ownership.suppress_consumed_guards_inline
+              ~lookup_guard:(fun n -> SMap.find_opt n env.drop_guards)
+              ~is_user_fn:(fun n -> SMap.mem n env.fns)
+              ~is_user_method:(fun tn mn ->
+                match SMap.find_opt tn env.impls with
+                | Some ii -> SMap.mem mn ii.ii_methods
+                | None -> false)
+              ~is_stdlib_call:(fun pkg _member ->
+                is_imported_package pkg env || SMap.mem pkg env.enums)
+              ~lookup_value_ty:(fun n -> lookup_value_ty n env)
+              buf indent e;
             Printf.bprintf buf "%sreturn " indent;
             gen_expr env buf indent CtxExpr e;
             Buffer.add_char buf '\n')
@@ -2249,7 +2416,7 @@ and gen_option_match_as_return env buf indent scrutinee arms inner_ty =
   Printf.bprintf buf "%s}\n" indent
 
 and gen_block_with_return env buf indent blk =
-  let inner = push_scope env in
+  let inner = push_scope ~is_function:false env in
   let inner =
     List.fold_left
       (fun env s ->
@@ -2259,12 +2426,21 @@ and gen_block_with_return env buf indent blk =
         env)
       inner blk.stmts
   in
-  match blk.final_expr with
+  (match blk.final_expr with
   | Some e -> gen_final_expr_as_return inner buf indent e
-  | None -> ()
+  | None -> ());
+  let ends_with_early_exit =
+    match blk.final_expr with
+    | Some (ExprReturn _ | ExprBreak | ExprContinue) -> true
+    | _ -> (
+        match List.rev blk.stmts with
+        | StmtExpr (ExprReturn _ | ExprBreak | ExprContinue) :: _ -> true
+        | _ -> false)
+  in
+  if not ends_with_early_exit then emit_scope_cleanup inner buf indent
 
 and gen_block_stmts env buf indent blk =
-  let inner = push_scope env in
+  let inner = push_scope ~is_function:false env in
   let inner =
     List.fold_left
       (fun env s ->
@@ -2273,6 +2449,14 @@ and gen_block_stmts env buf indent blk =
         Buffer.add_char buf '\n';
         env)
       inner blk.stmts
+  in
+  let ends_with_early_exit =
+    match blk.final_expr with
+    | Some (ExprReturn _ | ExprBreak | ExprContinue) -> true
+    | _ -> (
+        match List.rev blk.stmts with
+        | StmtExpr (ExprReturn _ | ExprBreak | ExprContinue) :: _ -> true
+        | _ -> false)
   in
   match blk.final_expr with
   | Some e ->
@@ -2286,8 +2470,9 @@ and gen_block_stmts env buf indent blk =
         Buffer.add_string buf indent;
         gen_expr inner buf indent CtxStmt e;
         Buffer.add_char buf '\n'
-      end
-  | None -> ()
+      end;
+      if not ends_with_early_exit then emit_scope_cleanup inner buf indent
+  | None -> if not ends_with_early_exit then emit_scope_cleanup inner buf indent
 
 and gen_block_expr env buf indent ctx blk =
   match ctx with
@@ -2486,6 +2671,8 @@ and suppress_consumed_guards env buf indent (e : Ast.expr) : unit =
       match SMap.find_opt tn env.impls with
       | Some ii -> SMap.mem mn ii.ii_methods
       | None -> false)
+    ~is_stdlib_call:(fun pkg _member ->
+      is_imported_package pkg env || SMap.mem pkg env.enums)
     ~lookup_value_ty:(fun n -> lookup_value_ty n env)
     buf indent e
 
@@ -2532,7 +2719,7 @@ and gen_stmt env buf indent (s : Ast.stmt) : cg_env =
           Buffer.add_string buf esc_name;
           Buffer.add_string buf " := ";
           gen_let_init env buf indent ty init);
-      Printf.bprintf buf "\n%s_ = %s" indent esc_name;
+      Printf.bprintf buf "\n%s_ = %s\n" indent esc_name;
       (* Ownership: suppress guard for source binding if assignment moves a Drop value *)
       (match init with
       | ExprIdent { node = src_name; _ } ->
@@ -2540,13 +2727,41 @@ and gen_stmt env buf indent (s : Ast.stmt) : cg_env =
             ~lookup_guard:(fun n -> SMap.find_opt n env.drop_guards)
             buf indent src_name
       | _ -> ());
-      (* Ownership: emit defer cleanup for Drop-type bindings *)
+      (* Ownership: suppress guards for identifiers consumed by calls in init *)
+      Codegen_ownership.suppress_consumed_guards_inline
+        ~lookup_guard:(fun n -> SMap.find_opt n env.drop_guards)
+        ~is_user_fn:(fun n -> SMap.mem n env.fns)
+        ~is_user_method:(fun tn mn ->
+          match SMap.find_opt tn env.impls with
+          | Some ii -> SMap.mem mn ii.ii_methods
+          | None -> false)
+        ~is_stdlib_call:(fun pkg _member ->
+          is_imported_package pkg env || SMap.mem pkg env.enums)
+        ~lookup_value_ty:(fun n -> lookup_value_ty n env)
+        buf indent init;
+      (* Ownership: emit defer cleanup for Drop-type bindings at function scope,
+         or track for explicit cleanup at nested scope exit. *)
       match binding_ty with
       | Some t when is_drop_type_cg env t ->
           let guard = fresh_tmp env "live" in
-          Codegen_ownership.emit_drop_defer buf ~indent ~guard ~binding:esc_name;
           let env = add_value name.node binding_ty ~is_mut env in
-          { env with drop_guards = SMap.add name.node guard env.drop_guards }
+          let env =
+            { env with drop_guards = SMap.add name.node guard env.drop_guards }
+          in
+          if env.scope_drops = [] then (
+            (* Function scope: use defer *)
+            Codegen_ownership.emit_drop_defer buf ~indent ~guard
+              ~binding:esc_name;
+            env)
+          else (
+            (* Nested scope: declare guard and track for explicit cleanup.
+               Track the source binding name (not the guard name) so that
+               emit_scope_cleanup can look up the guard via drop_guards. *)
+            Printf.bprintf buf "%s%s := true\n" indent guard;
+            match env.scope_drops with
+            | current_drops :: rest ->
+                { env with scope_drops = (name.node :: current_drops) :: rest }
+            | [] -> env)
       | _ -> add_value name.node binding_ty ~is_mut env)
   | StmtLet { pat = PatWild; init = ExprQuestion inner_e; _ } ->
       gen_question_stmt env buf indent inner_e;
@@ -2582,6 +2797,57 @@ and gen_stmt env buf indent (s : Ast.stmt) : cg_env =
       Codegen_ownership.emit_overwrite_drop buf indent esc;
       gen_expr env buf indent CtxStmt e;
       env
+  | StmtExpr (ExprBlock blk as e) ->
+      (* Block expressions in statement context: the outer fold_stmts has
+         already written [indent] to the buffer.  gen_block_stmts adds its own
+         [indent] per inner statement, so the stray outer indent must be
+         consumed by a newline to avoid double-indenting the first line.
+
+         After processing the block, restore the outer scope so that
+         subsequent function-level Drop bindings still use defer rather than
+         being tracked in the (now exited) inner scope. *)
+      Buffer.add_char buf '\n';
+      let outer_scope_drops = env.scope_drops in
+      let outer_values = env.values in
+      let inner = push_scope ~is_function:false env in
+      let inner =
+        List.fold_left
+          (fun env s ->
+            Buffer.add_string buf indent;
+            let env = gen_stmt env buf indent s in
+            Buffer.add_char buf '\n';
+            env)
+          inner blk.stmts
+      in
+      let ends_with_early_exit =
+        match blk.final_expr with
+        | Some (ExprReturn _ | ExprBreak | ExprContinue) -> true
+        | _ -> (
+            match List.rev blk.stmts with
+            | StmtExpr (ExprReturn _ | ExprBreak | ExprContinue) :: _ -> true
+            | _ -> false)
+      in
+      (match blk.final_expr with
+      | Some e ->
+          if contains_question e then begin
+            let e' = hoist_question_exprs inner buf indent e in
+            Buffer.add_string buf indent;
+            gen_expr inner buf indent CtxStmt e';
+            Buffer.add_char buf '\n'
+          end
+          else begin
+            Buffer.add_string buf indent;
+            gen_expr inner buf indent CtxStmt e;
+            Buffer.add_char buf '\n'
+          end;
+          if not ends_with_early_exit then emit_scope_cleanup inner buf indent
+      | None ->
+          if not ends_with_early_exit then emit_scope_cleanup inner buf indent);
+      suppress_consumed_guards env buf indent e;
+      (* Restore outer scope, but keep inner scope's updates to
+         drop_guards (which may have been suppressed by inner moves)
+         and shared mutable state. *)
+      { inner with scope_drops = outer_scope_drops; values = outer_values }
   | StmtExpr e ->
       if contains_question e then begin
         let e' = hoist_question_exprs env buf indent e in
@@ -2731,7 +2997,7 @@ let rec gen_fn_decl env buf (fd : fn_decl) =
         @ env.type_params;
     }
   in
-  let fn_env = push_scope fn_env in
+  let fn_env = push_scope ~is_function:true fn_env in
   (* Add params to scope *)
   let fn_env =
     List.fold_left
@@ -2768,7 +3034,7 @@ let rec gen_fn_decl env buf (fd : fn_decl) =
 
 and gen_fn_body env buf body _ret_ty =
   let indent = "\t" in
-  let inner = push_scope env in
+  let inner = push_scope ~is_function:true env in
   let has_return_type =
     match env.ret_ty with
     | None -> false
@@ -2987,7 +3253,7 @@ and gen_struct_method env buf type_name _generics_decl fd self_param =
         @ env.type_params;
     }
   in
-  let fn_env = push_scope fn_env in
+  let fn_env = push_scope ~is_function:true fn_env in
   let fn_env =
     add_value "self" (Some type_name)
       ~is_mut:(match self_param with SelfMutRef -> true | _ -> false)

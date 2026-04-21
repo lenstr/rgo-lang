@@ -7,6 +7,7 @@ val is_non_consuming_builtin : string -> bool
 val collect_consumed_idents :
   is_user_fn:(string -> bool) ->
   is_user_method:(string -> string -> bool) ->
+  is_stdlib_call:(string -> string -> bool) ->
   lookup_value_ty:(string -> Ast.ty option) ->
   Ast.expr ->
   string list
@@ -15,6 +16,18 @@ val suppress_consumed_guards :
   lookup_guard:(string -> string option) ->
   is_user_fn:(string -> bool) ->
   is_user_method:(string -> string -> bool) ->
+  is_stdlib_call:(string -> string -> bool) ->
+  lookup_value_ty:(string -> Ast.ty option) ->
+  Buffer.t ->
+  string ->
+  Ast.expr ->
+  unit
+
+val suppress_consumed_guards_inline :
+  lookup_guard:(string -> string option) ->
+  is_user_fn:(string -> bool) ->
+  is_user_method:(string -> string -> bool) ->
+  is_stdlib_call:(string -> string -> bool) ->
   lookup_value_ty:(string -> Ast.ty option) ->
   Buffer.t ->
   string ->
