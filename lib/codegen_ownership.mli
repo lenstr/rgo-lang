@@ -7,6 +7,7 @@ val is_non_consuming_builtin : string -> bool
 val collect_consumed_idents :
   is_user_fn:(string -> bool) ->
   is_user_method:(string -> string -> bool) ->
+  is_imported_call:(string -> string -> bool) ->
   lookup_value_ty:(string -> Ast.ty option) ->
   Ast.expr ->
   string list
@@ -15,6 +16,7 @@ val suppress_consumed_guards :
   lookup_guard:(string -> string option) ->
   is_user_fn:(string -> bool) ->
   is_user_method:(string -> string -> bool) ->
+  is_imported_call:(string -> string -> bool) ->
   lookup_value_ty:(string -> Ast.ty option) ->
   Buffer.t ->
   string ->
@@ -28,4 +30,8 @@ val emit_drop_defer :
   Buffer.t -> indent:string -> guard:string -> binding:string -> unit
 
 val emit_param_drop_defer : Buffer.t -> guard:string -> binding:string -> unit
+
+val emit_cleanup_list :
+  Buffer.t -> string -> (string * string) list -> unit
+
 val emit_overwrite_drop : Buffer.t -> string -> string -> unit

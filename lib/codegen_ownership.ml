@@ -32,6 +32,7 @@ let is_non_consuming_builtin name =
    builtins and imported stdlib calls do not. *)
 let collect_consumed_idents ~(is_user_fn : string -> bool)
     ~(is_user_method : string -> string -> bool)
+    ~(is_imported_call : string -> string -> bool)
     ~(lookup_value_ty : string -> Ast.ty option) (e : Ast.expr) : string list =
   let ident_names args =
     List.filter_map
@@ -43,12 +44,14 @@ let collect_consumed_idents ~(is_user_fn : string -> bool)
   | ExprCall (ExprIdent { node = callee; _ }, args)
     when (not (is_non_consuming_builtin callee)) && is_user_fn callee ->
       ident_names args
-  | ExprCall (ExprPath _, args) ->
-      (* Associated function calls (Type::method) are user-defined *)
-      ident_names args
+  | ExprCall (ExprPath (pkg, fn), args) ->
+      (* Imported stdlib calls do not consume; user-defined associated
+         functions (Type::method) do. *)
+      if is_imported_call pkg.node fn.node then [] else ident_names args
   | ExprCall _ -> []
   | ExprMethodCall (receiver, method_name, args) ->
-      (* Only user-defined methods consume; check impls registry *)
+      (* Only user-defined methods consume; check impls registry.
+         Imported stdlib receiver methods do not consume. *)
       let recv_type_name =
         match receiver with
         | ExprIdent { node = n; _ } -> (
@@ -73,10 +76,12 @@ let collect_consumed_idents ~(is_user_fn : string -> bool)
    Drop-type identifiers that were consumed by by-value calls. *)
 let suppress_consumed_guards ~(lookup_guard : string -> string option)
     ~(is_user_fn : string -> bool) ~(is_user_method : string -> string -> bool)
+    ~(is_imported_call : string -> string -> bool)
     ~(lookup_value_ty : string -> Ast.ty option) buf indent (e : Ast.expr) :
     unit =
   let consumed =
-    collect_consumed_idents ~is_user_fn ~is_user_method ~lookup_value_ty e
+    collect_consumed_idents ~is_user_fn ~is_user_method ~is_imported_call
+      ~lookup_value_ty e
   in
   List.iter
     (fun name ->
@@ -94,15 +99,23 @@ let suppress_move_guard ~(lookup_guard : string -> string option) buf indent
 
 (* ---------- cleanup emit helpers ---------- *)
 
-(* Emit a defer-based Drop cleanup block for a let binding. *)
-let emit_drop_defer buf ~indent ~guard ~binding =
+(* Emit just the guard init (no defer). Used for lexical-scope cleanup. *)
+let emit_guard_init buf ~indent ~guard =
   Printf.bprintf buf "\n%s%s := true" indent guard;
+  Printf.bprintf buf "\n%s_ = %s" indent guard
+
+(* Emit just the defer wrapper around a guard. *)
+let emit_defer_cleanup buf ~indent ~guard ~binding =
   Printf.bprintf buf "\n%sdefer func() {\n" indent;
   Printf.bprintf buf "%s\tif %s {\n" indent guard;
   Printf.bprintf buf "%s\t\t%s.Drop()\n" indent binding;
   Printf.bprintf buf "%s\t}\n" indent;
-  Printf.bprintf buf "%s}()" indent;
-  Printf.bprintf buf "\n%s_ = %s" indent guard
+  Printf.bprintf buf "%s}()" indent
+
+(* Emit a defer-based Drop cleanup block for a let binding. *)
+let emit_drop_defer buf ~indent ~guard ~binding =
+  emit_guard_init buf ~indent ~guard;
+  emit_defer_cleanup buf ~indent ~guard ~binding
 
 (* Emit a defer-based Drop cleanup block for a by-value parameter (tab-indented). *)
 let emit_param_drop_defer buf ~guard ~binding =
@@ -113,6 +126,16 @@ let emit_param_drop_defer buf ~guard ~binding =
   Printf.bprintf buf "\t\t}\n";
   Printf.bprintf buf "\t}()\n";
   Printf.bprintf buf "\t_ = %s\n" guard
+
+(* Emit explicit cleanup for a list of (escaped_binding, guard) pairs.
+   Used for lexical-scope-aware cleanup at block/loop exit. *)
+let emit_cleanup_list buf indent guards =
+  List.iter
+    (fun (esc_binding, guard) ->
+      Printf.bprintf buf "\n%sif %s {\n" indent guard;
+      Printf.bprintf buf "%s\t%s.Drop()\n" indent esc_binding;
+      Printf.bprintf buf "%s}" indent)
+    (List.rev guards)
 
 (* Emit overwrite cleanup: drop the old value before reassigning. *)
 let emit_overwrite_drop buf indent binding =

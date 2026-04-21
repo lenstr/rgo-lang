@@ -109,8 +109,12 @@ type cg_env = {
   values : (Ast.ty option * bool) SMap.t list;
   (* Import metadata: alias -> (go_import_path, go_package_name) *)
   imported_packages : (string * string) SMap.t;
-  (* Drop cleanup: binding name -> guard variable name *)
+  (* Drop cleanup: binding name -> guard variable name
+     Function-level guards only; used with defer. *)
   drop_guards : string SMap.t;
+  (* Per-scope nested drop guards: each scope is a list of
+     (original_name, escaped_binding, guard) for explicit cleanup. *)
+  scope_drop_guards : (string * string * string) list list;
   (* Shared mutable state *)
   shared : cg_shared;
 }
@@ -120,7 +124,12 @@ let fresh_tmp env prefix =
   env.shared.tmp_counter <- n + 1;
   Printf.sprintf "__%s_%d" prefix n
 
-let push_scope env = { env with values = SMap.empty :: env.values }
+let push_scope env =
+  {
+    env with
+    values = SMap.empty :: env.values;
+    scope_drop_guards = [] :: env.scope_drop_guards;
+  }
 
 (* ---------- Drop-type helpers (delegated to Codegen_ownership) ---------- *)
 
@@ -128,6 +137,49 @@ let is_drop_type_cg env (t : Ast.ty) : bool =
   Codegen_ownership.is_drop_type
     ~has_trait_impl:(fun k -> SMap.mem k env.trait_impls)
     t
+
+(* Look up a guard by searching function-level drop_guards first,
+   then per-scope nested drop_guards. *)
+let lookup_guard name env =
+  match SMap.find_opt name env.drop_guards with
+  | Some g -> Some g
+  | None -> (
+      let rec go = function
+        | [] -> None
+        | scope :: rest -> (
+            match List.find_opt (fun (n, _, _) -> n = name) scope with
+            | Some (_, _, g) -> Some g
+            | None -> go rest)
+      in
+      go env.scope_drop_guards)
+
+let is_nested_scope env =
+  match env.scope_drop_guards with _ :: _ :: _ -> true | _ -> false
+
+let add_scope_guard env name esc guard =
+  match env.scope_drop_guards with
+  | scope :: rest ->
+      { env with scope_drop_guards = ((name, esc, guard) :: scope) :: rest }
+  | [] -> { env with scope_drop_guards = [ [ (name, esc, guard) ] ] }
+
+(* Emit explicit cleanup for all nested scopes, innermost first. *)
+let emit_all_nested_cleanup env buf indent =
+  let rec collect acc = function
+    | [] -> acc
+    | scope :: rest ->
+        let guards = List.map (fun (_, esc, g) -> (esc, g)) (List.rev scope) in
+        collect (guards @ acc) rest
+  in
+  let all_guards = collect [] env.scope_drop_guards in
+  Codegen_ownership.emit_cleanup_list buf indent all_guards
+
+(* Emit explicit cleanup for only the current (innermost) scope. *)
+let emit_current_scope_cleanup env buf indent =
+  match env.scope_drop_guards with
+  | scope :: _ ->
+      let guards = List.map (fun (_, esc, g) -> (esc, g)) (List.rev scope) in
+      Codegen_ownership.emit_cleanup_list buf indent guards
+  | [] -> ()
 
 let add_value name ty_opt ~is_mut env =
   match env.values with
@@ -613,6 +665,7 @@ let collect_env (prog : Ast.program) : cg_env =
       values = [ SMap.empty ];
       imported_packages = imported_pkgs;
       drop_guards = SMap.empty;
+      scope_drop_guards = [];
       shared;
     }
   in
@@ -1014,18 +1067,32 @@ let rec gen_expr env buf indent (ctx : expr_ctx) (e : Ast.expr) : unit =
       gen_return_none env buf
   | ExprReturn (Some (ExprIdent { node = name; _ } as e)) ->
       (* Ownership: if returning a Drop-type binding by value, suppress its
-         deferred cleanup so ownership transfers to the caller. *)
-      (match SMap.find_opt name env.drop_guards with
+         cleanup guard so ownership transfers to the caller. *)
+      (match lookup_guard name env with
       | Some guard -> Printf.bprintf buf "%s = false\n%s" guard indent
       | None -> ());
+      (* Ownership: suppress guards for consumed idents in return expr,
+         then emit nested scope cleanup before returning. *)
+      suppress_consumed_guards env buf indent e;
+      emit_all_nested_cleanup env buf indent;
       Buffer.add_string buf "return ";
       gen_expr env buf indent CtxExpr e
   | ExprReturn (Some e) ->
+      (* Ownership: suppress guards for consumed idents in return expr,
+         then emit nested scope cleanup before returning. *)
+      suppress_consumed_guards env buf indent e;
+      emit_all_nested_cleanup env buf indent;
       Buffer.add_string buf "return ";
       gen_expr env buf indent CtxExpr e
-  | ExprReturn None -> Buffer.add_string buf "return"
-  | ExprBreak -> Buffer.add_string buf "break"
-  | ExprContinue -> Buffer.add_string buf "continue"
+  | ExprReturn None ->
+      emit_all_nested_cleanup env buf indent;
+      Buffer.add_string buf "return"
+  | ExprBreak ->
+      emit_current_scope_cleanup env buf indent;
+      Buffer.add_string buf "break"
+  | ExprContinue ->
+      emit_current_scope_cleanup env buf indent;
+      Buffer.add_string buf "continue"
   | ExprAssign (op, lhs, rhs) ->
       gen_expr env buf indent CtxExpr lhs;
       Buffer.add_char buf ' ';
@@ -2480,11 +2547,15 @@ and gen_repeat env buf indent elem count =
    Drop-type identifiers that were consumed by by-value calls. *)
 and suppress_consumed_guards env buf indent (e : Ast.expr) : unit =
   Codegen_ownership.suppress_consumed_guards
-    ~lookup_guard:(fun n -> SMap.find_opt n env.drop_guards)
+    ~lookup_guard:(fun n -> lookup_guard n env)
     ~is_user_fn:(fun n -> SMap.mem n env.fns)
     ~is_user_method:(fun tn mn ->
       match SMap.find_opt tn env.impls with
       | Some ii -> SMap.mem mn ii.ii_methods
+      | None -> false)
+    ~is_imported_call:(fun pkg fn ->
+      match SMap.find_opt pkg env.imported_packages with
+      | Some _ -> true
       | None -> false)
     ~lookup_value_ty:(fun n -> lookup_value_ty n env)
     buf indent e
