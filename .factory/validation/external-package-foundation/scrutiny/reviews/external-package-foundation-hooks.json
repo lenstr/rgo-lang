@@ -1,40 +1,21 @@
 {
   "featureId": "external-package-foundation-hooks",
-  "reviewedAt": "2026-04-21T02:19:09Z",
-  "commitId": "b142f75",
+  "reviewedAt": "2026-04-21T02:35:24Z",
+  "commitId": "e9d67b0",
   "transcriptSkeletonReviewed": true,
   "diffReviewed": true,
-  "status": "fail",
+  "status": "pass",
   "codeReview": {
-    "summary": "I reviewed the feature metadata, worker transcript skeleton, handoff, skill instructions, shared-state docs, and commit `b142f75`. The new `Interop` registry is a solid refactor and resolver/typecheck now delegate the approved `net/http` surface through it, but the implementation does not fully satisfy the feature's core requirement that codegen stop relying on ad hoc `net/http` special cases. `lib/codegen.ml` still hardcodes imported-package return inference for `http::new_serve_mux`, `Request.method`, and `Request.form_value`, so future foreign-package support would still require editing codegen logic instead of only registering metadata.",
-    "issues": [
-      {
-        "file": "lib/codegen.ml",
-        "line": 337,
-        "severity": "blocking",
-        "description": "`infer_expr_type` still special-cases the imported call `(\"http\", \"new_serve_mux\") -> ServeMux` instead of consulting `Interop`. That leaves codegen with a direct `net/http` dependency, which contradicts the feature's expected behavior that resolver/typecheck/codegen preserve symbol-origin metadata without ad hoc `net/http` branches."
-      },
-      {
-        "file": "lib/codegen.ml",
-        "line": 379,
-        "severity": "blocking",
-        "description": "Imported field inference still hardcodes `(\"Request\", \"method\") -> str`. This means receiver-field typing for foreign symbols is not actually registry-driven in codegen, so extending imported packages or even expanding the approved surface would still require editing this branch."
-      },
-      {
-        "file": "lib/codegen.ml",
-        "line": 451,
-        "severity": "blocking",
-        "description": "Imported receiver-method inference still hardcodes `form_value -> str` for any `TyPath` receiver. This is another remaining ad hoc `net/http` special case in codegen, so the feature only partially removes hardcoded stdlib knowledge and does not fully deliver the promised external-package foundation hooks."
-      }
-    ]
+    "summary": "I reviewed the prior failing review, the round-1 synthesis, the latest worker handoff/transcript skeleton, and the fix diff in commit `e9d67b0`. The three prior blocking `lib/codegen.ml` branches are now gone: imported call return inference uses `Interop.fn_type`, imported field inference uses `Interop.receiver_field`, and imported receiver-method inference uses `Interop.receiver_method`, with `interop_ty_to_ast_ty` bridging registry `Types.ty` values back into codegen inference. The current `Interop` registry still defines `http::new_serve_mux`, `Request.method`, and `Request.form_value`, so the affected paths remain correct while codegen no longer hardcodes those `net/http` cases.",
+    "issues": []
   },
   "sharedStateObservations": [
     {
       "area": "skills",
-      "observation": "The `compiler-worker` skill says interop/codegen work should write tests first and add at least one real `.rg -> .go` acceptance check, but this session's transcript shows production refactors before the later addition of `test/test_interop.ml`, and the handoff still reports `followedProcedure: true`. The skill guidance or handoff expectations should be clarified so scrutiny can trust `followedProcedure` as evidence.",
-      "evidence": "`.factory/skills/compiler-worker/SKILL.md:22` says \"Write tests first\" and to add a real `.rg -> .go` acceptance check when interop affects codegen. The `worker-transcripts.jsonl` entry for session `006d14b1-6b1c-43c3-97e2-b724408a8d91` shows `lib/interop.ml`/consumer refactors before the later `test/test_interop.ml` creation, while the handoff at `.../handoffs/2026-04-21T02-15-32-259Z__external-package-foundation-hooks__006d14b1-6b1c-43c3-97e2-b724408a8d91.json:147-149` reports `\"followedProcedure\": true`."
+      "observation": "The `compiler-worker` skill's tests-first rule is still ambiguous for narrow follow-up fixes that intentionally rely on existing coverage. This re-run reported `followedProcedure: true` while adding no tests and explicitly relying on pre-existing suites plus a manual `.rg -> .go` check.",
+      "evidence": ".factory/skills/compiler-worker/SKILL.md:22 requires workers to 'Write tests first' and add a real `.rg -> .go` acceptance check for codegen-affecting interop work, while SKILL.md:28 says tests-first deviations should set `skillFeedback.followedProcedure` to `false`. The latest handoff at /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/handoffs/2026-04-21T02-31-30-002Z__external-package-foundation-hooks__2a6024b7-3f08-4012-b1ba-1502e796d781.json:53-60 records `tests.added = []`, existing-suite reuse, and `followedProcedure = true`."
     }
   ],
-  "addressesFailureFrom": null,
-  "summary": "Fail. The registry refactor improves shared interop metadata, but `lib/codegen.ml` still contains blocking hardcoded `net/http` inference branches for `http::new_serve_mux`, `Request.method`, and `form_value`, so the feature does not fully meet its requirement to replace ad hoc stdlib special cases with reusable external-package foundation hooks."
+  "addressesFailureFrom": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/external-package-foundation/scrutiny/reviews/external-package-foundation-hooks.json",
+  "summary": "Pass. The fix in `e9d67b0` resolves the three prior blocking `lib/codegen.ml` issues by routing `http::new_serve_mux`, `Request.method`, and `form_value` inference through shared interop metadata, and I did not find any new feature-scoped correctness issues."
 }
