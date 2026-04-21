@@ -74,6 +74,68 @@ let is_wrong_case_stdlib (pkg_alias : string) (member : string) : string option
           | None -> None))
   | _ -> None
 
+(* ---------- stdlib receiver/member surface ---------- *)
+
+(* Receiver method info: params (excluding receiver), return type *)
+type stdlib_method_info = { smi_params : Types.ty list; smi_ret : Types.ty }
+
+(* Receiver field info: rgo_name, type *)
+type stdlib_field_info = { sfi_ty : Types.ty }
+
+let stdlib_receiver_methods (pkg : string) (type_name : string)
+    (method_name : string) : stdlib_method_info option =
+  match (pkg, type_name, method_name) with
+  | "http", "ServeMux", "handle_func" ->
+      (* mux.HandleFunc(pattern string, handler func(ResponseWriter, *Request)) *)
+      Some
+        {
+          smi_params =
+            [
+              Types.TString;
+              Types.TFn
+                ( [
+                    TImported ("http", "ResponseWriter");
+                    TImported ("http", "Request");
+                  ],
+                  TVoid );
+            ];
+          smi_ret = TVoid;
+        }
+  | "http", "Request", "form_value" ->
+      (* req.FormValue(key string) string *)
+      Some { smi_params = [ Types.TString ]; smi_ret = TString }
+  | "http", "ResponseWriter", "write_header" ->
+      (* w.WriteHeader(statusCode int) *)
+      Some { smi_params = [ Types.TInt 64 ]; smi_ret = TVoid }
+  | "http", "ResponseWriter", "write" ->
+      (* w.Write(data []byte) (int, error) -- simplified to (String) -> () *)
+      Some { smi_params = [ Types.TString ]; smi_ret = TVoid }
+  | _ -> None
+
+let stdlib_receiver_fields (pkg : string) (type_name : string)
+    (field_name : string) : stdlib_field_info option =
+  match (pkg, type_name, field_name) with
+  | "http", "Request", "method" -> Some { sfi_ty = Types.TString }
+  | _ -> None
+
+(* Check if a receiver method/field name is a Go-cased spelling that should be rejected *)
+let is_wrong_case_receiver (pkg : string) (type_name : string) (member : string)
+    : string option =
+  match (pkg, type_name) with
+  | "http", "ServeMux" -> (
+      match member with "HandleFunc" -> Some "handle_func" | _ -> None)
+  | "http", "Request" -> (
+      match member with
+      | "FormValue" -> Some "form_value"
+      | "Method" -> Some "method"
+      | _ -> None)
+  | "http", "ResponseWriter" -> (
+      match member with
+      | "WriteHeader" -> Some "write_header"
+      | "Write" -> Some "write"
+      | _ -> None)
+  | _ -> None
+
 (* ---------- stdlib type resolution (non-recursive) ---------- *)
 
 let stdlib_type_ty_simple (pkg_alias : string) (type_name : string) :
@@ -916,6 +978,24 @@ and check_user_method_call env receiver recv_ty method_name arg_types =
       | [] ->
           error_at method_name.span "no method '%s' on type %s" method_name.node
             (show_ty resolved_recv))
+  (* Imported stdlib receiver methods *)
+  | TImported (pkg, tname) -> (
+      match stdlib_receiver_methods pkg tname method_name.node with
+      | Some smi ->
+          check_fn_args ~env ~span:method_name.span ~name:method_name.node
+            smi.smi_params arg_types;
+          smi.smi_ret
+      | None -> (
+          (* Check for wrong-case receiver member *)
+          match is_wrong_case_receiver pkg tname method_name.node with
+          | Some correct ->
+              error_at method_name.span
+                "wrong case: '%s' should be '%s' (rgo uses snake_case for \
+                 methods)"
+                method_name.node correct
+          | None ->
+              error_at method_name.span "no method '%s' on type %s::%s"
+                method_name.node pkg tname))
   | _ -> (
       let type_name = ty_name resolved_recv in
       (* Check for ambiguous trait method resolution *)
@@ -995,6 +1075,19 @@ and check_field_access env e field =
               error_at field.span "no field '%s' on struct '%s'" field.node name
           )
       | None -> error_at field.span "unknown struct '%s'" name)
+  | TImported (pkg, tname) -> (
+      match stdlib_receiver_fields pkg tname field.node with
+      | Some sfi -> sfi.sfi_ty
+      | None -> (
+          match is_wrong_case_receiver pkg tname field.node with
+          | Some correct ->
+              error_at field.span
+                "wrong case: '%s' should be '%s' (rgo uses snake_case for \
+                 fields)"
+                field.node correct
+          | None ->
+              error_at field.span "no field '%s' on type %s::%s" field.node pkg
+                tname))
   | _ -> error_at field.span "field access on non-struct type %s" (show_ty t)
 
 and check_path env type_name member =

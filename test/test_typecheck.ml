@@ -1450,6 +1450,168 @@ let import_negative_tests =
       fail ~expect:"is a type, not a callable" stdlib_type_called );
   ]
 
+(* ======== Receiver/member interop ======== *)
+
+(* Positive: mux.handle_func with handler function *)
+let valid_mux_handle_func =
+  {|
+use net::http;
+fn handler(w: http::ResponseWriter, r: http::Request) {
+    println("handled");
+}
+fn main() {
+    let mux = http::new_serve_mux();
+    mux.handle_func("/path", handler);
+}
+|}
+
+(* Positive: req.form_value *)
+let valid_req_form_value =
+  {|
+use net::http;
+fn handler(w: http::ResponseWriter, r: http::Request) {
+    let name = r.form_value("name");
+    println(name);
+}
+fn main() {
+}
+|}
+
+(* Positive: req.method *)
+let valid_req_method =
+  {|
+use net::http;
+fn handler(w: http::ResponseWriter, r: http::Request) {
+    let m = r.method;
+    println(m);
+}
+fn main() {
+}
+|}
+
+(* Positive: w.write_header *)
+let valid_write_header =
+  {|
+use net::http;
+fn handler(w: http::ResponseWriter, r: http::Request) {
+    w.write_header(200);
+}
+fn main() {
+}
+|}
+
+(* Positive: w.write *)
+let valid_write =
+  {|
+use net::http;
+fn handler(w: http::ResponseWriter, r: http::Request) {
+    w.write("hello");
+}
+fn main() {
+}
+|}
+
+(* Positive: combined handler body *)
+let valid_combined_handler =
+  {|
+use net::http;
+fn handler(w: http::ResponseWriter, r: http::Request) {
+    let m = r.method;
+    let name = r.form_value("name");
+    w.write_header(200);
+    w.write("ok");
+}
+fn main() {
+    let mux = http::new_serve_mux();
+    mux.handle_func("/items", handler);
+    http::listen_and_serve(":8080", mux);
+}
+|}
+
+(* Negative: Go-cased receiver methods *)
+let wrong_case_handle_func =
+  {|
+use net::http;
+fn handler(w: http::ResponseWriter, r: http::Request) {
+    println("ok");
+}
+fn main() {
+    let mux = http::new_serve_mux();
+    mux.HandleFunc("/path", handler);
+}
+|}
+
+let wrong_case_form_value =
+  {|
+use net::http;
+fn handler(w: http::ResponseWriter, r: http::Request) {
+    let name = r.FormValue("name");
+}
+fn main() {
+}
+|}
+
+let wrong_case_method =
+  {|
+use net::http;
+fn handler(w: http::ResponseWriter, r: http::Request) {
+    let m = r.Method;
+}
+fn main() {
+}
+|}
+
+let wrong_case_write_header =
+  {|
+use net::http;
+fn handler(w: http::ResponseWriter, r: http::Request) {
+    w.WriteHeader(200);
+}
+fn main() {
+}
+|}
+
+let wrong_case_write =
+  {|
+use net::http;
+fn handler(w: http::ResponseWriter, r: http::Request) {
+    w.Write("hello");
+}
+fn main() {
+}
+|}
+
+let receiver_member_positive_tests =
+  [
+    ("mux.handle_func with handler", `Quick, pass valid_mux_handle_func);
+    ("req.form_value call", `Quick, pass valid_req_form_value);
+    ("req.method field access", `Quick, pass valid_req_method);
+    ("w.write_header call", `Quick, pass valid_write_header);
+    ("w.write call", `Quick, pass valid_write);
+    ( "combined handler body with all receiver members",
+      `Quick,
+      pass valid_combined_handler );
+  ]
+
+let receiver_member_negative_tests =
+  [
+    ( "Go-cased HandleFunc rejected",
+      `Quick,
+      fail ~expect:"wrong case" wrong_case_handle_func );
+    ( "Go-cased FormValue rejected",
+      `Quick,
+      fail ~expect:"wrong case" wrong_case_form_value );
+    ( "Go-cased Method rejected",
+      `Quick,
+      fail ~expect:"wrong case" wrong_case_method );
+    ( "Go-cased WriteHeader rejected",
+      `Quick,
+      fail ~expect:"wrong case" wrong_case_write_header );
+    ( "Go-cased Write rejected",
+      `Quick,
+      fail ~expect:"wrong case" wrong_case_write );
+  ]
+
 let () =
   Alcotest.run "typecheck"
     [
@@ -1457,4 +1619,6 @@ let () =
       ("negative", negative_tests);
       ("import-positive", import_positive_tests);
       ("import-negative", import_negative_tests);
+      ("receiver-member-positive", receiver_member_positive_tests);
+      ("receiver-member-negative", receiver_member_negative_tests);
     ]

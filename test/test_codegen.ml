@@ -2097,6 +2097,185 @@ fn main() {
   (* Must NOT contain http. qualified references *)
   Alcotest.(check bool) "no http.* qualified calls" false (contains go "http.")
 
+(* ======== receiver/member interop codegen tests ======== *)
+
+(* Positive: mux.handle_func lowers to mux.HandleFunc *)
+let test_stdlib_receiver_handle_func () =
+  let src =
+    {|
+use net::http;
+fn handler(w: http::ResponseWriter, r: http::Request) {
+    println("handled");
+}
+fn main() {
+    let mux = http::new_serve_mux();
+    mux.handle_func("/path", handler);
+}
+|}
+  in
+  let go = compile_and_check src in
+  Alcotest.(check bool) "has mux.HandleFunc" true (contains go "mux.HandleFunc");
+  Alcotest.(check bool)
+    "has http.NewServeMux" true
+    (contains go "http.NewServeMux()")
+
+(* Positive: req.form_value lowers to r.FormValue *)
+let test_stdlib_receiver_form_value () =
+  let src =
+    {|
+use net::http;
+fn handler(w: http::ResponseWriter, r: http::Request) {
+    let name = r.form_value("name");
+    println(name);
+}
+fn main() {
+}
+|}
+  in
+  let go = compile_and_check src in
+  Alcotest.(check bool) "has r.FormValue" true (contains go ".FormValue")
+
+(* Positive: req.method lowers to r.Method *)
+let test_stdlib_receiver_method_field () =
+  let src =
+    {|
+use net::http;
+fn handler(w: http::ResponseWriter, r: http::Request) {
+    let m = r.method;
+    println(m);
+}
+fn main() {
+}
+|}
+  in
+  let go = compile_and_check src in
+  Alcotest.(check bool) "has r.Method" true (contains go ".Method")
+
+(* Positive: w.write_header lowers to w.WriteHeader *)
+let test_stdlib_receiver_write_header () =
+  let src =
+    {|
+use net::http;
+fn handler(w: http::ResponseWriter, r: http::Request) {
+    w.write_header(200);
+}
+fn main() {
+}
+|}
+  in
+  let go = compile_and_check src in
+  Alcotest.(check bool) "has w.WriteHeader" true (contains go ".WriteHeader")
+
+(* Positive: w.write lowers to w.Write *)
+let test_stdlib_receiver_write () =
+  let src =
+    {|
+use net::http;
+fn handler(w: http::ResponseWriter, r: http::Request) {
+    w.write("hello");
+}
+fn main() {
+}
+|}
+  in
+  let go = compile_and_check src in
+  Alcotest.(check bool) "has w.Write" true (contains go ".Write(")
+
+(* Positive: combined handler with all receiver members *)
+let test_stdlib_receiver_combined () =
+  let src =
+    {|
+use net::http;
+fn handler(w: http::ResponseWriter, r: http::Request) {
+    let m = r.method;
+    let name = r.form_value("name");
+    w.write_header(200);
+    w.write("ok");
+}
+fn main() {
+    let mux = http::new_serve_mux();
+    mux.handle_func("/items", handler);
+    http::listen_and_serve(":8080", mux);
+}
+|}
+  in
+  let go = compile_and_check src in
+  Alcotest.(check bool) "has net/http import" true (contains go "\"net/http\"");
+  Alcotest.(check bool) "has mux.HandleFunc" true (contains go "mux.HandleFunc");
+  Alcotest.(check bool) "has .FormValue" true (contains go ".FormValue");
+  Alcotest.(check bool) "has .Method" true (contains go ".Method");
+  Alcotest.(check bool) "has .WriteHeader" true (contains go ".WriteHeader");
+  Alcotest.(check bool) "has .Write" true (contains go ".Write(");
+  Alcotest.(check bool)
+    "has http.ListenAndServe" true
+    (contains go "http.ListenAndServe");
+  Alcotest.(check bool)
+    "has http.NewServeMux" true
+    (contains go "http.NewServeMux()")
+
+(* Negative: Go-cased receiver methods rejected *)
+let test_stdlib_receiver_wrong_case_handle_func () =
+  compile_expect_error ~expect:"wrong case"
+    {|
+use net::http;
+fn handler(w: http::ResponseWriter, r: http::Request) {
+    println("ok");
+}
+fn main() {
+    let mux = http::new_serve_mux();
+    mux.HandleFunc("/path", handler);
+}
+|}
+    ()
+
+let test_stdlib_receiver_wrong_case_form_value () =
+  compile_expect_error ~expect:"wrong case"
+    {|
+use net::http;
+fn handler(w: http::ResponseWriter, r: http::Request) {
+    let name = r.FormValue("name");
+}
+fn main() {
+}
+|}
+    ()
+
+let test_stdlib_receiver_wrong_case_method () =
+  compile_expect_error ~expect:"wrong case"
+    {|
+use net::http;
+fn handler(w: http::ResponseWriter, r: http::Request) {
+    let m = r.Method;
+}
+fn main() {
+}
+|}
+    ()
+
+let test_stdlib_receiver_wrong_case_write_header () =
+  compile_expect_error ~expect:"wrong case"
+    {|
+use net::http;
+fn handler(w: http::ResponseWriter, r: http::Request) {
+    w.WriteHeader(200);
+}
+fn main() {
+}
+|}
+    ()
+
+let test_stdlib_receiver_wrong_case_write () =
+  compile_expect_error ~expect:"wrong case"
+    {|
+use net::http;
+fn handler(w: http::ResponseWriter, r: http::Request) {
+    w.Write("hello");
+}
+fn main() {
+}
+|}
+    ()
+
 let () =
   Alcotest.run "codegen"
     [
@@ -2303,5 +2482,30 @@ let () =
             test_stdlib_type_in_expr_rejected;
           Alcotest.test_case "local http without import" `Quick
             test_local_http_without_import;
+        ] );
+      ( "stdlib-receiver-members",
+        [
+          Alcotest.test_case "mux.handle_func lowers to HandleFunc" `Quick
+            test_stdlib_receiver_handle_func;
+          Alcotest.test_case "req.form_value lowers to FormValue" `Quick
+            test_stdlib_receiver_form_value;
+          Alcotest.test_case "req.method lowers to Method" `Quick
+            test_stdlib_receiver_method_field;
+          Alcotest.test_case "w.write_header lowers to WriteHeader" `Quick
+            test_stdlib_receiver_write_header;
+          Alcotest.test_case "w.write lowers to Write" `Quick
+            test_stdlib_receiver_write;
+          Alcotest.test_case "combined handler receiver members" `Quick
+            test_stdlib_receiver_combined;
+          Alcotest.test_case "Go-cased HandleFunc rejected" `Quick
+            test_stdlib_receiver_wrong_case_handle_func;
+          Alcotest.test_case "Go-cased FormValue rejected" `Quick
+            test_stdlib_receiver_wrong_case_form_value;
+          Alcotest.test_case "Go-cased Method rejected" `Quick
+            test_stdlib_receiver_wrong_case_method;
+          Alcotest.test_case "Go-cased WriteHeader rejected" `Quick
+            test_stdlib_receiver_wrong_case_write_header;
+          Alcotest.test_case "Go-cased Write rejected" `Quick
+            test_stdlib_receiver_wrong_case_write;
         ] );
     ]

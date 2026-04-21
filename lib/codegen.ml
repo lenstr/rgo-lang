@@ -382,6 +382,11 @@ let rec infer_expr_type env (e : Ast.expr) : Ast.ty option =
               | Some f -> Some f.fd_ty
               | None -> None)
           | None -> None)
+      | Some (TyPath (_, { node = tname; _ })) -> (
+          (* Stdlib field access return types *)
+          match (tname, field.node) with
+          | "Request", "method" -> Some (TyName (dummy_loc "str"))
+          | _ -> None)
       | _ -> None)
   | ExprStruct (ty, _) -> Some ty
   | ExprStructVariant (type_name, _, _) -> (
@@ -449,6 +454,11 @@ and infer_method_ret_type env recv method_name =
           | Some mi -> mi.mi_ret
           | None -> None)
       | None -> None)
+  | Some (TyPath (_, _)) -> (
+      (* Stdlib receiver methods return types *)
+      match method_name.node with
+      | "form_value" -> Some (TyName (dummy_loc "str"))
+      | _ -> None)
   | _ -> None
 
 (* Check whether a trait uses Self in any method signature *)
@@ -817,12 +827,22 @@ let rec gen_expr env buf indent (ctx : expr_ctx) (e : Ast.expr) : unit =
       Buffer.add_char buf ')'
   | ExprMethodCall (recv, method_name, args) ->
       gen_method_call env buf indent recv method_name args
-  | ExprFieldAccess (e, field) ->
-      gen_expr env buf indent CtxExpr e;
-      Buffer.add_char buf '.';
-      (* Field names: capitalize for pub fields *)
-      let is_pub = field_is_pub env e field.node in
-      Buffer.add_string buf (go_field_name is_pub field.node)
+  | ExprFieldAccess (e, field) -> (
+      let recv_ty = infer_expr_type env e in
+      match recv_ty with
+      | Some (TyPath (pkg_alias, _)) when is_imported_package pkg_alias.node env
+        ->
+          (* Stdlib field access: snake_case -> PascalCase *)
+          env.shared.needs_net_http <- true;
+          gen_expr env buf indent CtxExpr e;
+          Buffer.add_char buf '.';
+          Buffer.add_string buf (snake_to_pascal field.node)
+      | _ ->
+          gen_expr env buf indent CtxExpr e;
+          Buffer.add_char buf '.';
+          (* Field names: capitalize for pub fields *)
+          let is_pub = field_is_pub env e field.node in
+          Buffer.add_string buf (go_field_name is_pub field.node))
   | ExprPath (type_name, member_name) ->
       if is_imported_package type_name.node env then begin
         (* Imported stdlib member in value position (e.g., function value) *)
@@ -1144,6 +1164,9 @@ and gen_method_call env buf indent recv method_name args =
       gen_hashmap_method env buf indent recv method_name args v
   | Some (TyName { node = "str" | "String"; _ }) ->
       gen_string_method env buf indent recv method_name
+  | Some (TyPath (pkg_alias, _type_name))
+    when is_imported_package pkg_alias.node env ->
+      gen_stdlib_method_call env buf indent recv method_name args
   | _ -> gen_user_method_call env buf indent recv method_name args
 
 and gen_vec_method env buf indent recv method_name args =
@@ -1304,6 +1327,23 @@ and gen_string_method env buf indent recv method_name =
       gen_expr env buf indent CtxExpr recv;
       Buffer.add_string buf "))"
   | _ -> failwith ("codegen: unsupported string method " ^ method_name.node)
+
+and gen_stdlib_method_call env buf indent recv method_name args =
+  (* Stdlib receiver methods: snake_case -> PascalCase *)
+  env.shared.needs_net_http <- true;
+  let go_method = snake_to_pascal method_name.node in
+  gen_expr env buf indent CtxExpr recv;
+  Buffer.add_char buf '.';
+  Buffer.add_string buf go_method;
+  Buffer.add_char buf '(';
+  (* ResponseWriter.Write takes []byte; wrap string args *)
+  (match (go_method, args) with
+  | "Write", [ arg ] ->
+      Buffer.add_string buf "[]byte(";
+      gen_expr env buf indent CtxExpr arg;
+      Buffer.add_char buf ')'
+  | _ -> gen_args env buf indent args);
+  Buffer.add_char buf ')'
 
 and gen_user_method_call env buf indent recv method_name args =
   (* Look up method pub status from impl info *)
