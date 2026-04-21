@@ -96,6 +96,7 @@ type env = {
       (* type_param_name -> list of required trait names *)
   imported_packages : string list SMap.t;
       (* alias -> path segments, for import-aware diagnostics *)
+  moved : SSet.t ref; (* mutable set of bindings that have been moved *)
 }
 
 let empty_env =
@@ -113,6 +114,7 @@ let empty_env =
     type_params = [];
     param_bounds = SMap.empty;
     imported_packages = SMap.empty;
+    moved = ref SSet.empty;
   }
 
 let push_scope env = { env with values = SMap.empty :: env.values }
@@ -130,6 +132,67 @@ let lookup_value name env =
         match SMap.find_opt name scope with Some v -> Some v | None -> go rest)
   in
   go env.values
+
+(* ---------- ownership: Copy / move tracking ---------- *)
+
+(* A type is Copy-eligible when it is a primitive, a reference, or a
+   user-defined nominal type that has `impl Copy`. *)
+let rec is_copy_type (env : env) (t : ty) : bool =
+  match t with
+  | TInt _ | TUint _ | TFloat _ | TBool -> true
+  | TRef _ -> true
+  | TTuple ts -> List.for_all (fun t' -> is_copy_type env t') ts
+  | TStruct (name, _) | TEnum (name, _) -> (
+      match SMap.find_opt name env.trait_impls with
+      | Some traits -> SSet.mem "Copy" traits
+      | None -> false)
+  | TParam p -> (
+      match SMap.find_opt p env.param_bounds with
+      | Some bounds -> List.mem "Copy" bounds
+      | None -> false)
+  (* Imported types, strings, containers, fn types: not Copy *)
+  | TString | TVec _ | THashMap _ | TOption _ | TResult _ | TFn _ | TVoid
+  | TVar _ | TSelf | TImported _ ->
+      false
+
+(* Check whether a type has Drop implemented.
+   Used by downstream features for cleanup scheduling. *)
+let _is_drop_type (env : env) (t : ty) : bool =
+  match t with
+  | TStruct (name, _) | TEnum (name, _) -> (
+      match SMap.find_opt name env.trait_impls with
+      | Some traits -> SSet.mem "Drop" traits
+      | None -> false)
+  | _ -> false
+
+(* Check whether a type has Clone implemented. *)
+let is_clone_type (env : env) (t : ty) : bool =
+  match t with
+  | TStruct (name, _) | TEnum (name, _) -> (
+      match SMap.find_opt name env.trait_impls with
+      | Some traits -> SSet.mem "Clone" traits
+      | None -> false)
+  (* Primitives are trivially cloneable *)
+  | TInt _ | TUint _ | TFloat _ | TBool | TString -> true
+  | _ -> false
+
+(* Mark a binding as moved. *)
+let mark_moved (env : env) (name : string) : unit =
+  env.moved := SSet.add name !(env.moved)
+
+(* Check that a binding has not been moved; raise if it has. *)
+let check_not_moved (env : env) (span : span) (name : string) : unit =
+  if SSet.mem name !(env.moved) then
+    error_at span "use of moved value '%s'" name
+
+(* When a non-Copy value is consumed (assigned to another binding or passed
+   by value), mark the source as moved. *)
+let consume_if_non_copy (env : env) (span : span) (name : string) (t : ty) :
+    unit =
+  if not (is_copy_type env t) then begin
+    check_not_moved env span name;
+    mark_moved env name
+  end
 
 (* ---------- AST type -> internal type ---------- *)
 let rec resolve_ast_ty env (t : Ast.ty) : ty =
@@ -327,7 +390,9 @@ let rec check_expr env (e : expr) : ty =
           | _ -> TOption TVoid)
       | _ -> (
           match lookup_value name.node env with
-          | Some (ty, _) -> ty
+          | Some (ty, _) ->
+              check_not_moved env name.span name.node;
+              ty
           | None -> (
               (* Check if it's a function name *)
               match SMap.find_opt name.node env.fns with
@@ -445,12 +510,14 @@ and check_call env callee args =
               check_fn_args ~env ~span:name.span ~name:name.node fi.fi_params
                 arg_types;
               check_bounds env name.span fi.fi_bounds fi.fi_params arg_types;
+              consume_call_args env args arg_types;
               maybe_subst_self env fi.fi_ret
           | None -> (
               match builtin_fn_type name.node with
               | Some fi ->
                   check_fn_args ~env ~span:name.span ~name:name.node
                     fi.fi_params arg_types;
+                  consume_call_args env args arg_types;
                   fi.fi_ret
               | None -> (
                   (* Could be a variable holding a function value *)
@@ -458,6 +525,7 @@ and check_call env callee args =
                   | Some (TFn (params, ret), _) ->
                       check_fn_args ~env ~span:name.span ~name:name.node params
                         arg_types;
+                      consume_call_args env args arg_types;
                       ret
                   | Some _ ->
                       error_at name.span "'%s' is not callable" name.node
@@ -466,7 +534,9 @@ and check_call env callee args =
   | ExprPath (type_name, fn_name) ->
       (* Associated function call: Type::method(...) *)
       let arg_types = List.map (check_expr env) args in
-      check_assoc_fn_call env type_name fn_name arg_types
+      let result = check_assoc_fn_call env type_name fn_name arg_types in
+      consume_call_args env args arg_types;
+      result
   | _ -> (
       let ct = check_expr env callee in
       let arg_types = List.map (check_expr env) args in
@@ -474,8 +544,19 @@ and check_call env callee args =
       | TFn (params, ret) ->
           check_fn_args ~env ~span:(expr_span callee) ~name:"<expr>" params
             arg_types;
+          consume_call_args env args arg_types;
           ret
       | _ -> error_at (expr_span callee) "expression is not callable")
+
+(* Ownership: after a by-value call, mark each identifier argument as
+   moved when its type is non-Copy. *)
+and consume_call_args env (args : expr list) (arg_types : ty list) : unit =
+  List.iter2
+    (fun arg ty ->
+      match arg with
+      | ExprIdent name -> consume_if_non_copy env name.span name.node ty
+      | _ -> ())
+    args arg_types
 
 and check_fn_args ~env:_ ~span ~name expected actual =
   let expected_len = List.length expected in
@@ -750,50 +831,59 @@ and check_builtin_assoc_fn type_name fn_name arg_types =
 and check_method_call env receiver method_name args =
   let recv_ty = check_expr env receiver in
   let arg_types = List.map (check_expr env) args in
-  (* Check built-in methods on container types *)
-  match (recv_ty, method_name.node) with
-  | TVec _, "len" -> TInt 64
-  | TVec inner, "push" -> (
-      check_mutability env receiver method_name;
-      match arg_types with
-      | [ arg ] ->
-          expect_type ~env ~span:method_name.span ~expected:inner ~actual:arg;
-          TVoid
-      | _ -> error_at method_name.span "push expects exactly 1 argument")
-  | TVec inner, "pop" ->
-      check_mutability env receiver method_name;
-      TOption inner
-  | THashMap (_, _), "len" -> TInt 64
-  | THashMap (k, v), "insert" -> (
-      check_mutability env receiver method_name;
-      match arg_types with
-      | [ ak; av ] ->
-          expect_type ~env ~span:method_name.span ~expected:k ~actual:ak;
-          expect_type ~env ~span:method_name.span ~expected:v ~actual:av;
-          TVoid
-      | _ -> error_at method_name.span "insert expects exactly 2 arguments")
-  | THashMap (k, v), "get" -> (
-      match arg_types with
-      | [ ak ] ->
-          expect_type ~env ~span:method_name.span ~expected:k ~actual:ak;
-          TOption v
-      | _ -> error_at method_name.span "get expects exactly 1 argument")
-  | THashMap (k, _), "contains_key" -> (
-      match arg_types with
-      | [ ak ] ->
-          expect_type ~env ~span:method_name.span ~expected:k ~actual:ak;
-          TBool
-      | _ -> error_at method_name.span "contains_key expects exactly 1 argument"
-      )
-  | THashMap (k, _), "remove" -> (
-      check_mutability env receiver method_name;
-      match arg_types with
-      | [ ak ] ->
-          expect_type ~env ~span:method_name.span ~expected:k ~actual:ak;
-          TVoid
-      | _ -> error_at method_name.span "remove expects exactly 1 argument")
-  | TString, "len" -> TInt 64
-  | _ -> check_user_method_call env receiver recv_ty method_name arg_types
+  (* Ownership: handle clone() as a special method that does not consume
+     the receiver. It returns a deep copy of the value. *)
+  if method_name.node = "clone" && arg_types = [] then begin
+    if not (is_clone_type env recv_ty) then
+      error_at method_name.span "type %s does not implement Clone"
+        (show_ty recv_ty);
+    recv_ty
+  end
+  else
+    (* Check built-in methods on container types *)
+    match (recv_ty, method_name.node) with
+    | TVec _, "len" -> TInt 64
+    | TVec inner, "push" -> (
+        check_mutability env receiver method_name;
+        match arg_types with
+        | [ arg ] ->
+            expect_type ~env ~span:method_name.span ~expected:inner ~actual:arg;
+            TVoid
+        | _ -> error_at method_name.span "push expects exactly 1 argument")
+    | TVec inner, "pop" ->
+        check_mutability env receiver method_name;
+        TOption inner
+    | THashMap (_, _), "len" -> TInt 64
+    | THashMap (k, v), "insert" -> (
+        check_mutability env receiver method_name;
+        match arg_types with
+        | [ ak; av ] ->
+            expect_type ~env ~span:method_name.span ~expected:k ~actual:ak;
+            expect_type ~env ~span:method_name.span ~expected:v ~actual:av;
+            TVoid
+        | _ -> error_at method_name.span "insert expects exactly 2 arguments")
+    | THashMap (k, v), "get" -> (
+        match arg_types with
+        | [ ak ] ->
+            expect_type ~env ~span:method_name.span ~expected:k ~actual:ak;
+            TOption v
+        | _ -> error_at method_name.span "get expects exactly 1 argument")
+    | THashMap (k, _), "contains_key" -> (
+        match arg_types with
+        | [ ak ] ->
+            expect_type ~env ~span:method_name.span ~expected:k ~actual:ak;
+            TBool
+        | _ ->
+            error_at method_name.span "contains_key expects exactly 1 argument")
+    | THashMap (k, _), "remove" -> (
+        check_mutability env receiver method_name;
+        match arg_types with
+        | [ ak ] ->
+            expect_type ~env ~span:method_name.span ~expected:k ~actual:ak;
+            TVoid
+        | _ -> error_at method_name.span "remove expects exactly 1 argument")
+    | TString, "len" -> TInt 64
+    | _ -> check_user_method_call env receiver recv_ty method_name arg_types
 
 and check_user_method_call env receiver recv_ty method_name arg_types =
   (* Resolve TSelf to concrete type before looking up impls *)
@@ -1216,6 +1306,12 @@ and check_stmt env (s : stmt) : env =
       | TVoid, _ ->
           error_at (expr_span init) "cannot bind result of void expression"
       | _ -> ());
+      (* Ownership: if RHS is a simple identifier with a non-Copy type,
+         mark the source as moved. *)
+      (match init with
+      | ExprIdent src_name ->
+          consume_if_non_copy env src_name.span src_name.node declared_ty
+      | _ -> ());
       bind_let_pattern env declared_ty is_mut pat
   | StmtExpr e ->
       let _ = check_expr env e in
@@ -1266,6 +1362,12 @@ and check_assign env lhs rhs =
       | _ -> ())
   | _ -> ());
   expect_type ~env ~span:(expr_span rhs) ~expected:lhs_ty ~actual:rhs_ty;
+  (* Ownership: if RHS is a simple identifier with a non-Copy type,
+     mark the source as moved. *)
+  (match rhs with
+  | ExprIdent src_name ->
+      consume_if_non_copy env src_name.span src_name.node rhs_ty
+  | _ -> ());
   TVoid
 
 and check_question env e =
@@ -1462,6 +1564,11 @@ let rec collect_type_info env (items : item list) : env =
             error_at ti_trait.span "duplicate impl of trait '%s' for type '%s'"
               ti_trait.node type_name;
           let updated_traits = SSet.add ti_trait.node existing_traits in
+          (* Ownership: reject Drop + Copy overlap *)
+          if SSet.mem "Drop" updated_traits && SSet.mem "Copy" updated_traits
+          then
+            error_at ti_trait.span
+              "type '%s' cannot implement both Drop and Copy" type_name;
           let env =
             {
               env with
@@ -1684,6 +1791,8 @@ let check_fn_decl env (fd : fn_decl) =
       env with
       type_params = generics @ env.type_params;
       param_bounds = bounds_map;
+      moved = ref SSet.empty;
+      (* fresh move set per function body *)
     }
   in
   let fn_env = push_scope fn_env in

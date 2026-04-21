@@ -1695,6 +1695,266 @@ let void_return_tests =
       fail ~expect:"cannot return void expression" void_return_println );
   ]
 
+(* ======== Ownership: move / copy / clone ======== *)
+
+(* VAL-OWN-002: Non-Copy assignment moves the source binding *)
+let own_assign_move_negative =
+  {|
+struct Resource {
+  pub name: str,
+}
+
+fn main() {
+  let a = Resource { name: "r1" };
+  let b = a;
+  println(a.name);
+}
+|}
+
+(* VAL-OWN-001: Non-Copy values move across consuming call boundaries *)
+let own_call_move_negative =
+  {|
+struct Resource {
+  pub name: str,
+}
+
+fn consume(r: Resource) {
+  println(r.name);
+}
+
+fn main() {
+  let r = Resource { name: "r1" };
+  consume(r);
+  println(r.name);
+}
+|}
+
+(* VAL-OWN-001: Second by-value pass after move *)
+let own_call_double_move_negative =
+  {|
+struct Resource {
+  pub name: str,
+}
+
+fn consume(r: Resource) {
+  println(r.name);
+}
+
+fn main() {
+  let r = Resource { name: "r1" };
+  consume(r);
+  consume(r);
+}
+|}
+
+(* VAL-OWN-003: Copy-eligible values remain usable after assignment *)
+let own_copy_assign_positive =
+  {|
+fn main() {
+  let x: i64 = 42;
+  let y = x;
+  println(x);
+  println(y);
+}
+|}
+
+(* VAL-OWN-003: Copy-eligible values remain usable after by-value call *)
+let own_copy_call_positive =
+  {|
+fn show(n: i64) {
+  println(n);
+}
+
+fn main() {
+  let x: i64 = 42;
+  show(x);
+  println(x);
+}
+|}
+
+(* VAL-OWN-003: Bool is Copy-eligible *)
+let own_copy_bool_positive =
+  {|
+fn check(b: bool) {
+  println(b);
+}
+
+fn main() {
+  let b = true;
+  check(b);
+  println(b);
+}
+|}
+
+(* VAL-OWN-003: Struct with impl Copy remains usable *)
+let own_copy_struct_positive =
+  {|
+trait Copy {}
+
+struct Point {
+  pub x: i64,
+  pub y: i64,
+}
+
+impl Copy for Point {}
+
+fn show_point(p: Point) {
+  println(p.x);
+}
+
+fn main() {
+  let p = Point { x: 1, y: 2 };
+  show_point(p);
+  println(p.y);
+}
+|}
+
+(* Clone escape hatch: clone() on a Clone type prevents move *)
+let own_clone_positive =
+  {|
+trait Clone {
+  fn clone(&self) -> Self;
+}
+
+struct Resource {
+  pub name: str,
+}
+
+impl Clone for Resource {
+  fn clone(&self) -> Self {
+    Resource { name: self.name }
+  }
+}
+
+fn consume(r: Resource) {
+  println(r.name);
+}
+
+fn main() {
+  let r = Resource { name: "r1" };
+  consume(r.clone());
+  println(r.name);
+}
+|}
+
+(* Clone negative: clone() on a non-Clone type is rejected *)
+let own_clone_no_impl_negative =
+  {|
+struct Resource {
+  pub name: str,
+}
+
+fn main() {
+  let r = Resource { name: "r1" };
+  let c = r.clone();
+  println(c.name);
+}
+|}
+
+(* VAL-OWN-012: Drop + Copy overlap is rejected *)
+let own_drop_copy_overlap_negative =
+  {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+trait Copy {}
+
+struct Resource {
+  pub name: str,
+}
+
+impl Drop for Resource {
+  fn drop(&mut self) {
+    println(self.name);
+  }
+}
+
+impl Copy for Resource {}
+
+fn main() {
+  let r = Resource { name: "r1" };
+  println(r.name);
+}
+|}
+
+(* VAL-OWN-001: method call on moved value is rejected *)
+let own_method_after_move_negative =
+  {|
+struct Resource {
+  pub name: str,
+}
+
+impl Resource {
+  fn get_name(&self) -> str {
+    self.name
+  }
+}
+
+fn consume(r: Resource) {
+  println(r.name);
+}
+
+fn main() {
+  let r = Resource { name: "r1" };
+  consume(r);
+  println(r.get_name());
+}
+|}
+
+(* VAL-OWN-001: field access on moved value is rejected *)
+let own_field_after_move_negative =
+  {|
+struct Resource {
+  pub name: str,
+}
+
+fn consume(r: Resource) {
+  println(r.name);
+}
+
+fn main() {
+  let r = Resource { name: "r1" };
+  consume(r);
+  println(r.name);
+}
+|}
+
+let ownership_positive_tests =
+  [
+    ("copy i64 survives assignment", `Quick, pass own_copy_assign_positive);
+    ("copy i64 survives call", `Quick, pass own_copy_call_positive);
+    ("copy bool survives call", `Quick, pass own_copy_bool_positive);
+    ("copy struct survives call", `Quick, pass own_copy_struct_positive);
+    ("clone escape hatch", `Quick, pass own_clone_positive);
+  ]
+
+let ownership_negative_tests =
+  [
+    ( "non-Copy assign moves source",
+      `Quick,
+      fail ~expect:"use of moved value" own_assign_move_negative );
+    ( "non-Copy call moves argument",
+      `Quick,
+      fail ~expect:"use of moved value" own_call_move_negative );
+    ( "non-Copy double call moves",
+      `Quick,
+      fail ~expect:"use of moved value" own_call_double_move_negative );
+    ( "clone on non-Clone type rejected",
+      `Quick,
+      fail ~expect:"does not implement Clone" own_clone_no_impl_negative );
+    ( "Drop + Copy overlap rejected",
+      `Quick,
+      fail ~expect:"cannot implement both Drop and Copy"
+        own_drop_copy_overlap_negative );
+    ( "method call after move rejected",
+      `Quick,
+      fail ~expect:"use of moved value" own_method_after_move_negative );
+    ( "field access after move rejected",
+      `Quick,
+      fail ~expect:"use of moved value" own_field_after_move_negative );
+  ]
+
 let () =
   Alcotest.run "typecheck"
     [
@@ -1706,4 +1966,6 @@ let () =
       ("receiver-member-negative", receiver_member_negative_tests);
       ("void-binding", void_binding_tests);
       ("void-return", void_return_tests);
+      ("ownership-positive", ownership_positive_tests);
+      ("ownership-negative", ownership_negative_tests);
     ]

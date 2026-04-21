@@ -1830,6 +1830,10 @@ trait Describe {
   fn describe(&self) -> str;
 }
 
+trait Clone {
+  fn clone(&self) -> Self;
+}
+
 struct Task {
   pub title: str,
   pub done: bool,
@@ -1842,6 +1846,12 @@ impl Task {
 
   pub fn complete(&mut self) {
     self.done = true;
+  }
+}
+
+impl Clone for Task {
+  fn clone(&self) -> Self {
+    Task { title: self.title, done: self.done }
   }
 }
 
@@ -1899,7 +1909,7 @@ fn maybe_parse(s: str) -> Result<i64, str> {
 
 fn main() {
   let mut task = Task::new("write compiler");
-  print_desc(task);
+  print_desc(task.clone());
   task.complete();
   print_desc(task);
 
@@ -2315,6 +2325,184 @@ fn main() {
 |}
     ()
 
+(* ======== Ownership codegen tests ======== *)
+
+(* VAL-OWN-003: Copy i64 survives assignment and by-value call *)
+let test_own_copy_i64_runtime () =
+  let src =
+    {|
+fn show(n: i64) {
+  println(n);
+}
+
+fn main() {
+  let x: i64 = 42;
+  let y = x;
+  show(x);
+  println(y);
+}
+|}
+  in
+  compile_and_check ~expected_output:"42\n42\n" src |> ignore
+
+(* VAL-OWN-003: Copy bool survives call *)
+let test_own_copy_bool_runtime () =
+  let src =
+    {|
+fn check(b: bool) {
+  println(b);
+}
+
+fn main() {
+  let b = true;
+  check(b);
+  println(b);
+}
+|}
+  in
+  compile_and_check ~expected_output:"true\ntrue\n" src |> ignore
+
+(* VAL-OWN-003: Copy struct with impl Copy survives call *)
+let test_own_copy_struct_runtime () =
+  let src =
+    {|
+trait Copy {}
+
+struct Point {
+  pub x: i64,
+  pub y: i64,
+}
+
+impl Copy for Point {}
+
+fn show_point(p: Point) {
+  println(p.x);
+}
+
+fn main() {
+  let p = Point { x: 1, y: 2 };
+  show_point(p);
+  println(p.y);
+}
+|}
+  in
+  compile_and_check ~expected_output:"1\n2\n" src |> ignore
+
+(* VAL-OWN-004: clone() escape hatch - runtime output proves both original
+   and clone remain independently usable *)
+let test_own_clone_runtime () =
+  let src =
+    {|
+trait Clone {
+  fn clone(&self) -> Self;
+}
+
+struct Resource {
+  pub name: str,
+}
+
+impl Clone for Resource {
+  fn clone(&self) -> Self {
+    Resource { name: self.name }
+  }
+}
+
+fn consume(r: Resource) {
+  println("consumed: " + r.name);
+}
+
+fn main() {
+  let r = Resource { name: "original" };
+  consume(r.clone());
+  println("still here: " + r.name);
+}
+|}
+  in
+  compile_and_check
+    ~expected_output:"consumed: original\nstill here: original\n" src
+  |> ignore
+
+(* VAL-OWN-002: Non-Copy assignment moves source — negative *)
+let test_own_assign_move_negative () =
+  compile_expect_error ~expect:"use of moved value"
+    {|
+struct Resource {
+  pub name: str,
+}
+
+fn main() {
+  let a = Resource { name: "r1" };
+  let b = a;
+  println(a.name);
+}
+|}
+    ()
+
+(* VAL-OWN-001: Non-Copy call moves argument — negative *)
+let test_own_call_move_negative () =
+  compile_expect_error ~expect:"use of moved value"
+    {|
+struct Resource {
+  pub name: str,
+}
+
+fn consume(r: Resource) {
+  println(r.name);
+}
+
+fn main() {
+  let r = Resource { name: "r1" };
+  consume(r);
+  println(r.name);
+}
+|}
+    ()
+
+(* VAL-OWN-012: Drop + Copy overlap rejected — negative *)
+let test_own_drop_copy_overlap () =
+  compile_expect_error ~expect:"cannot implement both Drop and Copy"
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+trait Copy {}
+
+struct Resource {
+  pub name: str,
+}
+
+impl Drop for Resource {
+  fn drop(&mut self) {
+    println(self.name);
+  }
+}
+
+impl Copy for Resource {}
+
+fn main() {
+  let r = Resource { name: "r1" };
+  println(r.name);
+}
+|}
+    ()
+
+(* Clone on non-Clone type rejected — negative *)
+let test_own_clone_no_impl () =
+  compile_expect_error ~expect:"does not implement Clone"
+    {|
+struct Resource {
+  pub name: str,
+}
+
+fn main() {
+  let r = Resource { name: "r1" };
+  let c = r.clone();
+  println(c.name);
+}
+|}
+    ()
+
 let () =
   Alcotest.run "codegen"
     [
@@ -2552,5 +2740,27 @@ let () =
             test_stdlib_receiver_write_return_position;
           Alcotest.test_case "return w.write_header(...) rejected" `Quick
             test_stdlib_receiver_write_header_return_position;
+        ] );
+      ( "ownership-positive",
+        [
+          Alcotest.test_case "copy i64 survives assignment and call" `Quick
+            test_own_copy_i64_runtime;
+          Alcotest.test_case "copy bool survives call" `Quick
+            test_own_copy_bool_runtime;
+          Alcotest.test_case "copy struct survives call" `Quick
+            test_own_copy_struct_runtime;
+          Alcotest.test_case "clone escape hatch runtime" `Quick
+            test_own_clone_runtime;
+        ] );
+      ( "ownership-negative",
+        [
+          Alcotest.test_case "non-Copy assign moves source" `Quick
+            test_own_assign_move_negative;
+          Alcotest.test_case "non-Copy call moves argument" `Quick
+            test_own_call_move_negative;
+          Alcotest.test_case "Drop + Copy overlap rejected" `Quick
+            test_own_drop_copy_overlap;
+          Alcotest.test_case "clone on non-Clone rejected" `Quick
+            test_own_clone_no_impl;
         ] );
     ]
