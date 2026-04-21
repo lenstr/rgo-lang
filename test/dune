@@ -38,10 +38,22 @@
  (modules test_exhaust)
  (libraries rgo alcotest))
 
+(library
+ (name codegen_test_helpers)
+ (modules codegen_test_helpers)
+ (libraries rgo alcotest))
+
 (test
  (name test_codegen)
  (modules test_codegen)
- (libraries rgo alcotest)
+ (libraries rgo alcotest codegen_test_helpers)
+ (deps
+  (glob_files ../examples/*.rg)))
+
+(test
+ (name test_codegen_ownership)
+ (modules test_codegen_ownership)
+ (libraries rgo alcotest codegen_test_helpers)
  (deps
   (glob_files ../examples/*.rg)))
 

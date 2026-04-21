@@ -122,20 +122,12 @@ let fresh_tmp env prefix =
 
 let push_scope env = { env with values = SMap.empty :: env.values }
 
-(* ---------- Drop-type helpers ---------- *)
+(* ---------- Drop-type helpers (delegated to Codegen_ownership) ---------- *)
 
-(* Extract the nominal type name from an Ast.ty, if it names a struct/enum *)
-let type_nominal_name (t : Ast.ty) : string option =
-  match t with
-  | TyName { node = n; _ } -> Some n
-  | TyGeneric ({ node = n; _ }, _) -> Some n
-  | _ -> None
-
-(* Check whether a type has a Drop impl in the codegen env *)
 let is_drop_type_cg env (t : Ast.ty) : bool =
-  match type_nominal_name t with
-  | Some n -> SMap.mem ("Drop:" ^ n) env.trait_impls
-  | None -> false
+  Codegen_ownership.is_drop_type
+    ~has_trait_impl:(fun k -> SMap.mem k env.trait_impls)
+    t
 
 let add_value name ty_opt ~is_mut env =
   match env.values with
@@ -2484,70 +2476,18 @@ and gen_repeat env buf indent elem count =
       gen_expr env buf indent CtxExpr count;
       Buffer.add_char buf ')'
 
-(* Non-consuming builtins: these calls never take ownership of their arguments *)
-and is_non_consuming_builtin name =
-  match name with
-  | "println" | "print" | "panic" | "sqrt" | "abs" | "to_string" | "len"
-  | "Some" | "Ok" | "Err" | "None" ->
-      true
-  | _ -> false
-
-(* Ownership: collect identifier names that are consumed as by-value call arguments.
-   Only user-defined rgo function/method calls consume ownership;
-   builtins and imported stdlib calls do not. *)
-and collect_consumed_idents env (e : Ast.expr) : string list =
-  match e with
-  | ExprCall (ExprIdent { node = callee; _ }, args)
-    when (not (is_non_consuming_builtin callee)) && SMap.mem callee env.fns ->
-      List.filter_map
-        (fun arg ->
-          match arg with ExprIdent { node = n; _ } -> Some n | _ -> None)
-        args
-  | ExprCall (ExprPath _, args) ->
-      (* Associated function calls (Type::method) are user-defined *)
-      List.filter_map
-        (fun arg ->
-          match arg with ExprIdent { node = n; _ } -> Some n | _ -> None)
-        args
-  | ExprCall _ -> []
-  | ExprMethodCall (receiver, method_name, args) ->
-      (* Only user-defined methods consume; check impls registry *)
-      let recv_type_name =
-        match receiver with
-        | ExprIdent { node = n; _ } -> (
-            match lookup_value_ty n env with
-            | Some (Ast.TyName { node = tn; _ })
-            | Some (Ast.TyGeneric ({ node = tn; _ }, _)) ->
-                Some tn
-            | _ -> None)
-        | _ -> None
-      in
-      let is_user_method =
-        match recv_type_name with
-        | Some tn -> (
-            match SMap.find_opt tn env.impls with
-            | Some ii -> SMap.mem method_name.Ast.node ii.ii_methods
-            | None -> false)
-        | None -> false
-      in
-      if is_user_method then
-        List.filter_map
-          (fun arg ->
-            match arg with ExprIdent { node = n; _ } -> Some n | _ -> None)
-          args
-      else []
-  | _ -> []
-
 (* Ownership: after emitting a statement expression, suppress guards for any
    Drop-type identifiers that were consumed by by-value calls. *)
 and suppress_consumed_guards env buf indent (e : Ast.expr) : unit =
-  let consumed = collect_consumed_idents env e in
-  List.iter
-    (fun name ->
-      match SMap.find_opt name env.drop_guards with
-      | Some guard -> Printf.bprintf buf "\n%s%s = false" indent guard
-      | None -> ())
-    consumed
+  Codegen_ownership.suppress_consumed_guards
+    ~lookup_guard:(fun n -> SMap.find_opt n env.drop_guards)
+    ~is_user_fn:(fun n -> SMap.mem n env.fns)
+    ~is_user_method:(fun tn mn ->
+      match SMap.find_opt tn env.impls with
+      | Some ii -> SMap.mem mn ii.ii_methods
+      | None -> false)
+    ~lookup_value_ty:(fun n -> lookup_value_ty n env)
+    buf indent e
 
 and gen_stmt env buf indent (s : Ast.stmt) : cg_env =
   match s with
@@ -2595,22 +2535,16 @@ and gen_stmt env buf indent (s : Ast.stmt) : cg_env =
       Printf.bprintf buf "\n%s_ = %s" indent esc_name;
       (* Ownership: suppress guard for source binding if assignment moves a Drop value *)
       (match init with
-      | ExprIdent { node = src_name; _ } -> (
-          match SMap.find_opt src_name env.drop_guards with
-          | Some guard -> Printf.bprintf buf "\n%s%s = false" indent guard
-          | None -> ())
+      | ExprIdent { node = src_name; _ } ->
+          Codegen_ownership.suppress_move_guard
+            ~lookup_guard:(fun n -> SMap.find_opt n env.drop_guards)
+            buf indent src_name
       | _ -> ());
       (* Ownership: emit defer cleanup for Drop-type bindings *)
       match binding_ty with
       | Some t when is_drop_type_cg env t ->
           let guard = fresh_tmp env "live" in
-          Printf.bprintf buf "\n%s%s := true" indent guard;
-          Printf.bprintf buf "\n%sdefer func() {\n" indent;
-          Printf.bprintf buf "%s\tif %s {\n" indent guard;
-          Printf.bprintf buf "%s\t\t%s.Drop()\n" indent esc_name;
-          Printf.bprintf buf "%s\t}\n" indent;
-          Printf.bprintf buf "%s}()" indent;
-          Printf.bprintf buf "\n%s_ = %s" indent guard;
+          Codegen_ownership.emit_drop_defer buf ~indent ~guard ~binding:esc_name;
           let env = add_value name.node binding_ty ~is_mut env in
           { env with drop_guards = SMap.add name.node guard env.drop_guards }
       | _ -> add_value name.node binding_ty ~is_mut env)
@@ -2645,8 +2579,7 @@ and gen_stmt env buf indent (s : Ast.stmt) : cg_env =
     when SMap.mem lhs_name env.drop_guards ->
       (* Ownership: overwrite cleanup — drop the old value before reassigning *)
       let esc = escape_ident lhs_name in
-      Printf.bprintf buf "%s.Drop()" esc;
-      Printf.bprintf buf "\n%s" indent;
+      Codegen_ownership.emit_overwrite_drop buf indent esc;
       gen_expr env buf indent CtxStmt e;
       env
   | StmtExpr e ->
@@ -2824,13 +2757,7 @@ let rec gen_fn_decl env buf (fd : fn_decl) =
         if is_drop_type_cg e p.p_ty then begin
           let esc = escape_ident p.p_name.node in
           let guard = fresh_tmp e "live" in
-          Printf.bprintf buf "\t%s := true\n" guard;
-          Printf.bprintf buf "\tdefer func() {\n";
-          Printf.bprintf buf "\t\tif %s {\n" guard;
-          Printf.bprintf buf "\t\t\t%s.Drop()\n" esc;
-          Printf.bprintf buf "\t\t}\n";
-          Printf.bprintf buf "\t}()\n";
-          Printf.bprintf buf "\t_ = %s\n" guard;
+          Codegen_ownership.emit_param_drop_defer buf ~guard ~binding:esc;
           { e with drop_guards = SMap.add p.p_name.node guard e.drop_guards }
         end
         else e)
@@ -3090,13 +3017,7 @@ and gen_struct_method env buf type_name _generics_decl fd self_param =
         if is_drop_type_cg e p.p_ty then begin
           let esc = escape_ident p.p_name.node in
           let guard = fresh_tmp e "live" in
-          Printf.bprintf buf "\t%s := true\n" guard;
-          Printf.bprintf buf "\tdefer func() {\n";
-          Printf.bprintf buf "\t\tif %s {\n" guard;
-          Printf.bprintf buf "\t\t\t%s.Drop()\n" esc;
-          Printf.bprintf buf "\t\t}\n";
-          Printf.bprintf buf "\t}()\n";
-          Printf.bprintf buf "\t_ = %s\n" guard;
+          Codegen_ownership.emit_param_drop_defer buf ~guard ~binding:esc;
           { e with drop_guards = SMap.add p.p_name.node guard e.drop_guards }
         end
         else e)
