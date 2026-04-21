@@ -1,0 +1,188 @@
+{
+  "milestone": "import-surface",
+  "groupId": "import-surface-cli-round3",
+  "surface": "rgoc CLI + generated Go artifacts",
+  "testedAt": "2026-04-21T04:41:57+03:00",
+  "isolation": {
+    "mode": "serial-only validation",
+    "repoRoot": "/home/lenstr/workspace/personal/hack/rgo-lang",
+    "missionDir": "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7",
+    "evidenceDir": "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round3",
+    "reportPath": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/import-surface/user-testing/flows/import-surface-cli-round3.json",
+    "sharedMutableStateAvoided": [
+      "repo worktree",
+      "_build/",
+      ".factory/runtime/",
+      "localhost:3111"
+    ],
+    "temporaryArtifactsRestrictedTo": "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round3",
+    "notes": "All validation commands used nix develop -c ... and DUNE_BUILD_DIR under the mission evidence directory so the shared _build/ tree was not touched."
+  },
+  "toolsUsed": [
+    "tuistory",
+    "nix develop -c env DUNE_BUILD_DIR=\"/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round3/dune-build\" dune exec rgoc -- \"/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round3/fixtures/stdlib_cross_bridge.rg\" -o \"/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round3/outputs/stdlib_cross_bridge.go\"",
+    "nix develop -c gofmt -d \"/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round3/outputs/stdlib_cross_bridge.go\"",
+    "cd \"/home/lenstr/workspace/personal/hack/rgo-lang\" && nix develop -c go build -o \"/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round3/outputs/stdlib_cross_bridge.bin\" \"/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round3/outputs/stdlib_cross_bridge.go\"",
+    "cd \"/home/lenstr/workspace/personal/hack/rgo-lang\" && nix develop -c go vet \"/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round3/outputs/stdlib_cross_bridge.go\"",
+    "rg -n \"import \\\"net/http\\\"|http.ListenAndServe|http.NewServeMux|mux.HandleFunc|\\*http.Request|http.ResponseWriter\" \"/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round3/outputs/stdlib_cross_bridge.go\""
+  ],
+  "assertions": [
+    {
+      "id": "VAL-STDLIB-001",
+      "title": "Stdlib call sites use snake_case while stdlib type names stay PascalCase",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile one representative fixture that imports net::http and uses http::listen_and_serve, http::new_serve_mux, mux.handle_func, http::Request, http::ResponseWriter, and http::ServeMux.",
+          "expected": "rgoc exits 0 and writes the requested generated Go file.",
+          "observed": "rgoc exited 0. The requested -o path did not exist before the compile and did exist afterward (`pre_compile_output_exists=false`, `post_compile_output_exists=true`). The compile log showed only the nix shell banner and parser-generator warnings, with no rgoc semantic diagnostic."
+        },
+        {
+          "action": "Run downstream Go acceptance checks on the generated file.",
+          "expected": "gofmt -d is clean, go build succeeds, and go vet succeeds.",
+          "observed": "gofmt -d exited 0 and emitted no diff hunks. The first go build/go vet attempt from the evidence directory failed because `nix develop` could not locate `flake.nix`; rerunning both from the repo root exited 0/0 and produced `outputs/stdlib_cross_bridge.bin`."
+        },
+        {
+          "action": "Inspect the generated Go for the lowered stdlib spellings.",
+          "expected": "The lowered Go uses `http.ListenAndServe`, `http.NewServeMux`, `mux.HandleFunc`, `*http.Request`, and `http.ResponseWriter`.",
+          "observed": "Generated Go contained `import \"net/http\"`, `func handle_request(w http.ResponseWriter, r *http.Request)`, `mux := http.NewServeMux()`, `mux.HandleFunc(\"/ok\", handle_request)`, and `http.ListenAndServe(\":8080\", mux)`."
+        }
+      ],
+      "evidence": {
+        "commands": [
+          "nix develop -c env DUNE_BUILD_DIR=\"/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round3/dune-build\" dune exec rgoc -- \"/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round3/fixtures/stdlib_cross_bridge.rg\" -o \"/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round3/outputs/stdlib_cross_bridge.go\"",
+          "nix develop -c gofmt -d \"/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round3/outputs/stdlib_cross_bridge.go\"",
+          "cd \"/home/lenstr/workspace/personal/hack/rgo-lang\" && nix develop -c go build -o \"/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round3/outputs/stdlib_cross_bridge.bin\" \"/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round3/outputs/stdlib_cross_bridge.go\"",
+          "cd \"/home/lenstr/workspace/personal/hack/rgo-lang\" && nix develop -c go vet \"/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round3/outputs/stdlib_cross_bridge.go\"",
+          "rg -n \"import \\\"net/http\\\"|http.ListenAndServe|http.NewServeMux|mux.HandleFunc|\\*http.Request|http.ResponseWriter\" \"/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round3/outputs/stdlib_cross_bridge.go\""
+        ],
+        "diagnostics": [
+          "rgoc compile exit code: 0",
+          "gofmt -d exit code: 0",
+          "initial go build exit code from evidence dir: 1 (`error: could not find a flake.nix file`)",
+          "initial go vet exit code from evidence dir: 1 (`error: could not find a flake.nix file`)",
+          "retry go build exit code from repo root: 0",
+          "retry go vet exit code from repo root: 0"
+        ],
+        "logs": [
+          "import-surface/import-surface-cli-round3/logs/command_plan.txt",
+          "import-surface/import-surface-cli-round3/logs/stdlib_cross_bridge_compile.log",
+          "import-surface/import-surface-cli-round3/logs/stdlib_cross_bridge_output_checks.log",
+          "import-surface/import-surface-cli-round3/logs/stdlib_cross_bridge_gofmt.log",
+          "import-surface/import-surface-cli-round3/logs/stdlib_cross_bridge_gobuild.log",
+          "import-surface/import-surface-cli-round3/logs/stdlib_cross_bridge_gobuild_retry.log",
+          "import-surface/import-surface-cli-round3/logs/stdlib_cross_bridge_govet.log",
+          "import-surface/import-surface-cli-round3/logs/stdlib_cross_bridge_govet_retry.log",
+          "import-surface/import-surface-cli-round3/logs/stdlib_cross_bridge_generated_go_refs.log",
+          "import-surface/import-surface-cli-round3/logs/stdlib_cross_bridge_command_statuses.log",
+          "import-surface/import-surface-cli-round3/logs/stdlib_cross_bridge_retry_statuses.log"
+        ],
+        "terminalSnapshots": [
+          "import-surface/import-surface-cli-round3/terminal/stdlib_cross_bridge_terminal_snapshot.txt",
+          "import-surface/import-surface-cli-round3/terminal/stdlib_cross_bridge_terminal_snapshot.png",
+          "import-surface/import-surface-cli-round3/terminal/stdlib_cross_bridge_terminal_read.txt"
+        ],
+        "codeRefs": [
+          "import-surface/import-surface-cli-round3/fixtures/stdlib_cross_bridge.rg",
+          "import-surface/import-surface-cli-round3/outputs/stdlib_cross_bridge.go"
+        ],
+        "outputChecks": [
+          {
+            "path": "import-surface/import-surface-cli-round3/outputs/stdlib_cross_bridge.go",
+            "existsBeforeCompile": false,
+            "existsAfterCompile": true
+          },
+          {
+            "path": "import-surface/import-surface-cli-round3/outputs/stdlib_cross_bridge.bin",
+            "existsAfterBuildRetry": true
+          }
+        ],
+        "generatedGoSnippets": [
+          "func handle_request(w http.ResponseWriter, r *http.Request) {",
+          "mux := http.NewServeMux()",
+          "mux.HandleFunc(\"/ok\", handle_request)",
+          "http.ListenAndServe(\":8080\", mux)"
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-001",
+      "title": "Import, naming, and stdlib type usage compose coherently in one program",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Use the same single fixture to combine `use net::http`, snake_case stdlib call names, and PascalCase stdlib types in one program.",
+          "expected": "The combined import+naming+type flow compiles cleanly to generated Go.",
+          "observed": "The combined fixture compiled successfully with `compile_exit_code=0`, and the requested generated-Go file existed after the command."
+        },
+        {
+          "action": "Validate the emitted Go with downstream Go tools.",
+          "expected": "Formatter, build, and vet checks succeed for the same combined program.",
+          "observed": "gofmt -d exited 0. After rerunning from the repo root so `nix develop` could resolve the flake, go build and go vet both exited 0 for the generated file."
+        },
+        {
+          "action": "Inspect the emitted Go to confirm the combined lowering of import namespace, callable names, and type positions.",
+          "expected": "Generated Go contains `import \"net/http\"` and the lowered function/type spellings together in one file.",
+          "observed": "The same generated file contained `import \"net/http\"`, `http.NewServeMux`, `mux.HandleFunc`, `http.ListenAndServe`, `http.ResponseWriter`, and `*http.Request` together."
+        }
+      ],
+      "evidence": {
+        "commands": [
+          "nix develop -c env DUNE_BUILD_DIR=\"/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round3/dune-build\" dune exec rgoc -- \"/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round3/fixtures/stdlib_cross_bridge.rg\" -o \"/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round3/outputs/stdlib_cross_bridge.go\"",
+          "nix develop -c gofmt -d \"/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round3/outputs/stdlib_cross_bridge.go\"",
+          "cd \"/home/lenstr/workspace/personal/hack/rgo-lang\" && nix develop -c go build -o \"/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round3/outputs/stdlib_cross_bridge.bin\" \"/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round3/outputs/stdlib_cross_bridge.go\"",
+          "cd \"/home/lenstr/workspace/personal/hack/rgo-lang\" && nix develop -c go vet \"/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round3/outputs/stdlib_cross_bridge.go\"",
+          "rg -n \"import \\\"net/http\\\"|http.ListenAndServe|http.NewServeMux|mux.HandleFunc|\\*http.Request|http.ResponseWriter\" \"/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli-round3/outputs/stdlib_cross_bridge.go\""
+        ],
+        "logs": [
+          "import-surface/import-surface-cli-round3/logs/stdlib_cross_bridge_compile.log",
+          "import-surface/import-surface-cli-round3/logs/stdlib_cross_bridge_output_checks.log",
+          "import-surface/import-surface-cli-round3/logs/stdlib_cross_bridge_gofmt.log",
+          "import-surface/import-surface-cli-round3/logs/stdlib_cross_bridge_gobuild_retry.log",
+          "import-surface/import-surface-cli-round3/logs/stdlib_cross_bridge_govet_retry.log",
+          "import-surface/import-surface-cli-round3/logs/stdlib_cross_bridge_generated_go_refs.log",
+          "import-surface/import-surface-cli-round3/logs/stdlib_cross_bridge_retry_statuses.log"
+        ],
+        "terminalSnapshots": [
+          "import-surface/import-surface-cli-round3/terminal/stdlib_cross_bridge_terminal_snapshot.txt",
+          "import-surface/import-surface-cli-round3/terminal/stdlib_cross_bridge_terminal_snapshot.png"
+        ],
+        "codeRefs": [
+          "import-surface/import-surface-cli-round3/fixtures/stdlib_cross_bridge.rg",
+          "import-surface/import-surface-cli-round3/outputs/stdlib_cross_bridge.go"
+        ],
+        "generatedGoSnippets": [
+          "import (\n\t\"fmt\"\n\t\"net/http\"\n)",
+          "func handle_request(w http.ResponseWriter, r *http.Request) {",
+          "mux := http.NewServeMux()",
+          "mux.HandleFunc(\"/ok\", handle_request)",
+          "http.ListenAndServe(\":8080\", mux)"
+        ]
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [
+    {
+      "description": "Running `nix develop` from the evidence `outputs/` directory failed because that directory is outside the repository and therefore outside the flake lookup path.",
+      "resolved": true,
+      "resolution": "Reran `go build` and `go vet` from `/home/lenstr/workspace/personal/hack/rgo-lang` while keeping outputs under the assigned evidence directory.",
+      "affectedAssertions": [
+        "VAL-STDLIB-001",
+        "VAL-CROSS-001"
+      ]
+    },
+    {
+      "description": "The compile and Go-tool logs include the flake shell banner, and the rgoc compile log also includes parser-generator warnings before the actual validation result.",
+      "resolved": true,
+      "resolution": "Captured explicit exit-code/status files plus a terminal snapshot and generated-Go reference log so the real outcomes remained easy to verify.",
+      "affectedAssertions": [
+        "VAL-STDLIB-001",
+        "VAL-CROSS-001"
+      ]
+    }
+  ],
+  "blockers": [],
+  "summary": "Retested 2 import-surface assertions. Both now pass: the representative fixture compiled with rgoc (exit 0), emitted generated Go containing `import \"net/http\"`, `http.ListenAndServe`, `http.NewServeMux`, `mux.HandleFunc`, `http.ResponseWriter`, and `*http.Request`, and the generated file passed `gofmt -d`, `go build`, and `go vet` after rerunning the Go commands from the repo root to satisfy flake lookup."
+}

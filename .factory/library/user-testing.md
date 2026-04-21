@@ -45,6 +45,7 @@ Representative validation flows:
 
 - Keep validation serial: this surface shares one repo worktree, one `_build/`, and one generated-artifact area.
 - Write temporary `.rg`, `.go`, and log artifacts under the mission evidence directory, not into tracked source paths.
+- When evidence outputs live outside the repository root, still invoke `nix develop -c ...` from the repo root (or another directory inside the flake) and pass absolute paths to the evidence artifacts; running `nix develop` directly from the evidence directory will fail flake discovery.
 - For positive import-surface assertions, prove behavior through the real CLI plus downstream Go checks (`gofmt -d`, `go build`, and `go vet` when the contract requires them).
 - For negative import-surface assertions, verify both the user-facing diagnostic text and the absence of a misleading output file at the requested `-o` path.
 - Use representative fixtures that exercise both package-qualified callable names (`http::listen_and_serve`, `http::new_serve_mux`) and PascalCase type names (`http::Request`, `http::ResponseWriter`) in the same flow where required.

@@ -1,25 +1,25 @@
 {
   "milestone": "import-surface",
-  "round": 2,
-  "status": "fail",
+  "round": 3,
+  "status": "pass",
   "assertionsSummary": {
     "total": 2,
-    "passed": 0,
-    "failed": 2,
+    "passed": 2,
+    "failed": 0,
     "blocked": 0
   },
-  "passedAssertions": [],
-  "failedAssertions": [
+  "passedAssertions": [
+    "VAL-STDLIB-001",
+    "VAL-CROSS-001"
+  ],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "appliedUpdates": [
     {
-      "id": "VAL-STDLIB-001",
-      "reason": "Representative source-level naming bridge still fails because `mux.handle_func(...)` is rejected with `no method 'handle_func' on type http::ServeMux`."
-    },
-    {
-      "id": "VAL-CROSS-001",
-      "reason": "A single program that combines `use net::http`, snake_case stdlib calls, PascalCase stdlib types, and `mux.handle_func(...)` still fails because `http::ServeMux` has no `handle_func` method."
+      "target": ".factory/library/user-testing.md",
+      "description": "Documented that validators must run `nix develop -c ...` from the repo root (or another directory inside the flake) when evidence artifacts live outside the repository, while still passing absolute evidence paths to Go tool commands.",
+      "source": "flow-report"
     }
   ],
-  "blockedAssertions": [],
-  "appliedUpdates": [],
-  "previousRound": ".factory/validation/import-surface/user-testing/synthesis.round1.json"
+  "previousRound": ".factory/validation/import-surface/user-testing/synthesis.round2.json"
 }

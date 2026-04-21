@@ -1,0 +1,25 @@
+{
+  "milestone": "import-surface",
+  "round": 2,
+  "status": "fail",
+  "assertionsSummary": {
+    "total": 2,
+    "passed": 0,
+    "failed": 2,
+    "blocked": 0
+  },
+  "passedAssertions": [],
+  "failedAssertions": [
+    {
+      "id": "VAL-STDLIB-001",
+      "reason": "Representative source-level naming bridge still fails because `mux.handle_func(...)` is rejected with `no method 'handle_func' on type http::ServeMux`."
+    },
+    {
+      "id": "VAL-CROSS-001",
+      "reason": "A single program that combines `use net::http`, snake_case stdlib calls, PascalCase stdlib types, and `mux.handle_func(...)` still fails because `http::ServeMux` has no `handle_func` method."
+    }
+  ],
+  "blockedAssertions": [],
+  "appliedUpdates": [],
+  "previousRound": ".factory/validation/import-surface/user-testing/synthesis.round1.json"
+}
