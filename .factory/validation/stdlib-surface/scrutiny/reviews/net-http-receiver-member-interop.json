@@ -1,34 +1,15 @@
 {
   "featureId": "net-http-receiver-member-interop",
-  "reviewedAt": "2026-04-21T01:06:35.101050+00:00",
-  "commitId": "e469d8f",
+  "reviewedAt": "2026-04-21T04:32:00+03:00",
+  "commitId": "acb8f21",
   "transcriptSkeletonReviewed": true,
   "diffReviewed": true,
-  "status": "fail",
+  "status": "pass",
   "codeReview": {
-    "summary": "The post-scrutiny fix closes the original let-binding hole: `StmtLet` now rejects `TVoid` initializers, and the new negative tests cover `let n = w.write(...)`. But the feature contract requires `w.write(...)` to be rejected anywhere it is used as a value expression unless its rgo-facing return contract is modeled explicitly, and that is still not true. `check_return` still accepts `TVoid` expressions in `return ...` position for void functions, and codegen emits the raw Go `return w.Write(...)`, which fails downstream because `http.ResponseWriter.Write` returns `(int, error)`. I reproduced this on a temporary fixture: `rgoc` succeeded, generated `return w.Write([]byte(\"hello\"))`, and `go build` then failed with `too many return values`.",
-    "issues": [
-      {
-        "file": "lib/typecheck.ml",
-        "line": 1351,
-        "severity": "blocking",
-        "description": "`check_return` still allows `return w.write(\"hello\")` in a void-returning handler because `w.write` is modeled as `TVoid`. Combined with `lib/codegen.ml:909`, this emits `return w.Write([]byte(\"hello\"))`, which is invalid Go because `http.ResponseWriter.Write` returns `(int, error)`. The fix only blocks let-binding (`StmtLet`) and does not yet reject all value-position uses before codegen."
-      },
-      {
-        "file": "test/test_codegen.ml",
-        "line": 2279,
-        "severity": "non_blocking",
-        "description": "The added regression coverage only checks let-binding value position. It does not cover other value-expression contexts such as `return w.write(...)`, so the remaining invalid-Go path is still untested."
-      }
-    ]
+    "summary": "Re-reviewed the feature after the prior failed scrutiny and inspected the latest handoff, transcript skeleton, and commit diff through acb8f21. The original blocking hole is fixed: `check_return` now rejects `TVoid` expressions in `return ...` position before codegen (`lib/typecheck.ml:1352`), so `return w.write(...)` and `return w.write_header(...)` no longer lower to invalid Go. Regression coverage now includes return-position negatives in both `test/test_typecheck.ml:1658` and `test/test_codegen.ml:2292`, while the representative generated fixture `.factory/runtime/net-http-members.go` still shows the approved receiver/member surface composing and lowering to `HandleFunc`, `FormValue`, `Method`, `WriteHeader`, and `Write`. I did not find remaining blocking gaps in the reviewed feature state for the contracted invalid-value-position behavior.",
+    "issues": []
   },
-  "sharedStateObservations": [
-    {
-      "area": "knowledge",
-      "observation": "The mission interop contract still names `w.write` as approved surface but does not state whether its underlying Go `(int, error)` result is exposed, discarded only in statement position, or rejected in every value-expression context. That ambiguity likely contributed to the incomplete fix that handled let-bindings but not returns.",
-      "evidence": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/library/go-interop.md lists `w.write` in the supported receiver surface without return-shape guidance, while `lib/typecheck.ml:110-112` still models it as `(String) -> ()`."
-    }
-  ],
+  "sharedStateObservations": [],
   "addressesFailureFrom": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/stdlib-surface/scrutiny/reviews/net-http-receiver-member-interop.json",
-  "summary": "Re-reviewed the amended feature at commit e469d8f against the prior failed scrutiny. Result: fail. The original let-binding bug is fixed, but `w.write(...)` is still accepted in return position and lowers to invalid Go, so the feature still does not fully satisfy the contracted requirement to reject unmodeled value-position uses before emission."
+  "summary": "Result: pass. The latest fix in acb8f21 addresses the prior blocking failure by rejecting `return w.write(...)`/other void expressions during semantic analysis, and the reviewed tests and representative fixture support the contracted receiver/member interop surface without remaining blocking issues."
 }
