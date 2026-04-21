@@ -104,6 +104,8 @@ type cg_env = {
   values : (Ast.ty option * bool) SMap.t list;
   (* Import metadata: alias -> (go_import_path, go_package_name) *)
   imported_packages : (string * string) SMap.t;
+  (* Drop cleanup: binding name -> guard variable name *)
+  drop_guards : string SMap.t;
   (* Shared mutable state *)
   shared : cg_shared;
 }
@@ -114,6 +116,21 @@ let fresh_tmp env prefix =
   Printf.sprintf "__%s_%d" prefix n
 
 let push_scope env = { env with values = SMap.empty :: env.values }
+
+(* ---------- Drop-type helpers ---------- *)
+
+(* Extract the nominal type name from an Ast.ty, if it names a struct/enum *)
+let type_nominal_name (t : Ast.ty) : string option =
+  match t with
+  | TyName { node = n; _ } -> Some n
+  | TyGeneric ({ node = n; _ }, _) -> Some n
+  | _ -> None
+
+(* Check whether a type has a Drop impl in the codegen env *)
+let is_drop_type_cg env (t : Ast.ty) : bool =
+  match type_nominal_name t with
+  | Some n -> SMap.mem ("Drop:" ^ n) env.trait_impls
+  | None -> false
 
 let add_value name ty_opt ~is_mut env =
   match env.values with
@@ -554,6 +571,7 @@ let collect_env (prog : Ast.program) : cg_env =
       type_params = [];
       values = [ SMap.empty ];
       imported_packages = imported_pkgs;
+      drop_guards = SMap.empty;
       shared;
     }
   in
@@ -938,6 +956,14 @@ let rec gen_expr env buf indent (ctx : expr_ctx) (e : Ast.expr) : unit =
           gen_some env buf indent arg)
   | ExprReturn (Some (ExprIdent { node = "None"; _ })) ->
       gen_return_none env buf
+  | ExprReturn (Some (ExprIdent { node = name; _ } as e)) ->
+      (* Ownership: if returning a Drop-type binding by value, suppress its
+         deferred cleanup so ownership transfers to the caller. *)
+      (match SMap.find_opt name env.drop_guards with
+      | Some guard -> Printf.bprintf buf "%s = false\n%s" guard indent
+      | None -> ());
+      Buffer.add_string buf "return ";
+      gen_expr env buf indent CtxExpr e
   | ExprReturn (Some e) ->
       Buffer.add_string buf "return ";
       gen_expr env buf indent CtxExpr e
@@ -1815,6 +1841,21 @@ and gen_final_expr_as_return env buf indent e =
       Printf.bprintf buf "%s" indent;
       gen_return_none env buf;
       Buffer.add_char buf '\n'
+  | ExprIdent { node = name; _ } -> (
+      (* Ownership: if returning a Drop-type binding by value, suppress its
+         deferred cleanup so ownership transfers to the caller. *)
+      (match SMap.find_opt name env.drop_guards with
+      | Some guard -> Printf.bprintf buf "%s%s = false\n" indent guard
+      | None -> ());
+      match env.ret_ty with
+      | None | Some (TyName { node = "void"; _ }) ->
+          Buffer.add_string buf indent;
+          gen_expr env buf indent CtxStmt e;
+          Buffer.add_char buf '\n'
+      | _ ->
+          Printf.bprintf buf "%sreturn " indent;
+          gen_expr env buf indent CtxExpr e;
+          Buffer.add_char buf '\n')
   | _ -> (
       if contains_question e then begin
         let e' = hoist_question_exprs env buf indent e in
@@ -2316,9 +2357,35 @@ and gen_repeat env buf indent elem count =
       gen_expr env buf indent CtxExpr count;
       Buffer.add_char buf ')'
 
+(* Ownership: collect identifier names that are consumed as by-value call arguments *)
+and collect_consumed_idents (e : Ast.expr) : string list =
+  match e with
+  | ExprCall (_, args) ->
+      List.filter_map
+        (fun arg ->
+          match arg with ExprIdent { node = n; _ } -> Some n | _ -> None)
+        args
+  | ExprMethodCall (_, _, args) ->
+      List.filter_map
+        (fun arg ->
+          match arg with ExprIdent { node = n; _ } -> Some n | _ -> None)
+        args
+  | _ -> []
+
+(* Ownership: after emitting a statement expression, suppress guards for any
+   Drop-type identifiers that were consumed by by-value calls. *)
+and suppress_consumed_guards env buf indent (e : Ast.expr) : unit =
+  let consumed = collect_consumed_idents e in
+  List.iter
+    (fun name ->
+      match SMap.find_opt name env.drop_guards with
+      | Some guard -> Printf.bprintf buf "\n%s%s = false" indent guard
+      | None -> ())
+    consumed
+
 and gen_stmt env buf indent (s : Ast.stmt) : cg_env =
   match s with
-  | StmtLet { pat = PatBind name; ty; init; is_mut } ->
+  | StmtLet { pat = PatBind name; ty; init; is_mut } -> (
       let binding_ty =
         match ty with Some t -> Some t | None -> infer_expr_type env init
       in
@@ -2360,7 +2427,27 @@ and gen_stmt env buf indent (s : Ast.stmt) : cg_env =
           Buffer.add_string buf " := ";
           gen_let_init env buf indent ty init);
       Printf.bprintf buf "\n%s_ = %s" indent esc_name;
-      add_value name.node binding_ty ~is_mut env
+      (* Ownership: suppress guard for source binding if assignment moves a Drop value *)
+      (match init with
+      | ExprIdent { node = src_name; _ } -> (
+          match SMap.find_opt src_name env.drop_guards with
+          | Some guard -> Printf.bprintf buf "\n%s%s = false" indent guard
+          | None -> ())
+      | _ -> ());
+      (* Ownership: emit defer cleanup for Drop-type bindings *)
+      match binding_ty with
+      | Some t when is_drop_type_cg env t ->
+          let guard = fresh_tmp env "live" in
+          Printf.bprintf buf "\n%s%s := true" indent guard;
+          Printf.bprintf buf "\n%sdefer func() {\n" indent;
+          Printf.bprintf buf "%s\tif %s {\n" indent guard;
+          Printf.bprintf buf "%s\t\t%s.Drop()\n" indent esc_name;
+          Printf.bprintf buf "%s\t}\n" indent;
+          Printf.bprintf buf "%s}()" indent;
+          Printf.bprintf buf "\n%s_ = %s" indent guard;
+          let env = add_value name.node binding_ty ~is_mut env in
+          { env with drop_guards = SMap.add name.node guard env.drop_guards }
+      | _ -> add_value name.node binding_ty ~is_mut env)
   | StmtLet { pat = PatWild; init = ExprQuestion inner_e; _ } ->
       gen_question_stmt env buf indent inner_e;
       env
@@ -2388,6 +2475,14 @@ and gen_stmt env buf indent (s : Ast.stmt) : cg_env =
       end
       else gen_expr env buf indent CtxStmt ret;
       env
+  | StmtExpr (ExprAssign (Assign, ExprIdent { node = lhs_name; _ }, _rhs) as e)
+    when SMap.mem lhs_name env.drop_guards ->
+      (* Ownership: overwrite cleanup — drop the old value before reassigning *)
+      let esc = escape_ident lhs_name in
+      Printf.bprintf buf "%s.Drop()" esc;
+      Printf.bprintf buf "\n%s" indent;
+      gen_expr env buf indent CtxStmt e;
+      env
   | StmtExpr e ->
       if contains_question e then begin
         let e' = hoist_question_exprs env buf indent e in
@@ -2395,6 +2490,8 @@ and gen_stmt env buf indent (s : Ast.stmt) : cg_env =
         gen_expr env buf indent CtxStmt e'
       end
       else gen_expr env buf indent CtxStmt e;
+      (* Ownership: suppress guards for Drop-type identifiers consumed by calls *)
+      suppress_consumed_guards env buf indent e;
       env
 
 and init_is_enum env (init : Ast.expr) : bool =
@@ -2551,6 +2648,25 @@ let rec gen_fn_decl env buf (fd : fn_decl) =
   Buffer.add_char buf ')';
   Buffer.add_string buf (go_ret_sig fn_env fd.fn_ret);
   Buffer.add_string buf " {\n";
+  (* Ownership: emit defer cleanup for Drop-type by-value parameters *)
+  let fn_env =
+    List.fold_left
+      (fun e (p : param) ->
+        if is_drop_type_cg e p.p_ty then begin
+          let esc = escape_ident p.p_name.node in
+          let guard = fresh_tmp e "live" in
+          Printf.bprintf buf "\t%s := true\n" guard;
+          Printf.bprintf buf "\tdefer func() {\n";
+          Printf.bprintf buf "\t\tif %s {\n" guard;
+          Printf.bprintf buf "\t\t\t%s.Drop()\n" esc;
+          Printf.bprintf buf "\t\t}\n";
+          Printf.bprintf buf "\t}()\n";
+          Printf.bprintf buf "\t_ = %s\n" guard;
+          { e with drop_guards = SMap.add p.p_name.node guard e.drop_guards }
+        end
+        else e)
+      fn_env fd.fn_params
+  in
   gen_fn_body fn_env buf fd.fn_body fd.fn_ret;
   Buffer.add_string buf "}\n"
 
@@ -2773,6 +2889,25 @@ and gen_struct_method env buf type_name _generics_decl fd self_param =
   Buffer.add_char buf ')';
   Buffer.add_string buf (go_ret_sig fn_env fd.fn_ret);
   Buffer.add_string buf " {\n";
+  (* Ownership: emit defer cleanup for Drop-type by-value parameters *)
+  let fn_env =
+    List.fold_left
+      (fun e (p : param) ->
+        if is_drop_type_cg e p.p_ty then begin
+          let esc = escape_ident p.p_name.node in
+          let guard = fresh_tmp e "live" in
+          Printf.bprintf buf "\t%s := true\n" guard;
+          Printf.bprintf buf "\tdefer func() {\n";
+          Printf.bprintf buf "\t\tif %s {\n" guard;
+          Printf.bprintf buf "\t\t\t%s.Drop()\n" esc;
+          Printf.bprintf buf "\t\t}\n";
+          Printf.bprintf buf "\t}()\n";
+          Printf.bprintf buf "\t_ = %s\n" guard;
+          { e with drop_guards = SMap.add p.p_name.node guard e.drop_guards }
+        end
+        else e)
+      fn_env fd.fn_params
+  in
   gen_fn_body fn_env buf fd.fn_body fd.fn_ret;
   Buffer.add_string buf "}\n"
 

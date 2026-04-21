@@ -2503,6 +2503,222 @@ fn main() {
 |}
     ()
 
+(* ---------- Ownership cleanup tests (VAL-OWN-005 through VAL-OWN-009) ---------- *)
+
+(* VAL-OWN-005: Drop cleanup remains exactly-once on normal scope exit,
+   reverse-declaration order *)
+let test_own_cleanup_normal_exit () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+struct Resource {
+  pub name: str,
+}
+
+impl Drop for Resource {
+  fn drop(&mut self) {
+    println("drop:" + self.name);
+  }
+}
+
+fn main() {
+  let a = Resource { name: "first" };
+  let b = Resource { name: "second" };
+  let c = Resource { name: "third" };
+  println("alive:" + a.name);
+  println("alive:" + b.name);
+  println("alive:" + c.name);
+}
+|}
+  in
+  compile_and_check
+    ~expected_output:
+      "alive:first\n\
+       alive:second\n\
+       alive:third\n\
+       drop:third\n\
+       drop:second\n\
+       drop:first\n"
+    src
+  |> ignore
+
+(* VAL-OWN-006: Drop cleanup remains exactly-once on early return *)
+let test_own_cleanup_early_return () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+struct Resource {
+  pub name: str,
+}
+
+impl Drop for Resource {
+  fn drop(&mut self) {
+    println("drop:" + self.name);
+  }
+}
+
+fn early() -> i64 {
+  let a = Resource { name: "first" };
+  let b = Resource { name: "second" };
+  println("before-return");
+  return 42;
+}
+
+fn main() {
+  let result = early();
+  println(result);
+}
+|}
+  in
+  compile_and_check
+    ~expected_output:"before-return\ndrop:second\ndrop:first\n42\n" src
+  |> ignore
+
+(* VAL-OWN-006: Drop cleanup remains exactly-once on nested ? exit *)
+let test_own_cleanup_question_exit () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+struct Resource {
+  pub name: str,
+}
+
+impl Drop for Resource {
+  fn drop(&mut self) {
+    println("drop:" + self.name);
+  }
+}
+
+fn might_fail(ok: bool) -> Result<i64, str> {
+  if ok {
+    Ok(1)
+  } else {
+    Err("fail")
+  }
+}
+
+fn try_work() -> Result<i64, str> {
+  let a = Resource { name: "r1" };
+  let val = might_fail(false)?;
+  println("unreachable");
+  Ok(val)
+}
+
+fn main() {
+  let result = try_work();
+  println("done");
+}
+|}
+  in
+  compile_and_check ~expected_output:"drop:r1\ndone\n" src |> ignore
+
+(* VAL-OWN-007: Overwrite cleanup runs exactly once for mutable rebinding *)
+let test_own_cleanup_overwrite () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+struct Resource {
+  pub name: str,
+}
+
+impl Drop for Resource {
+  fn drop(&mut self) {
+    println("drop:" + self.name);
+  }
+}
+
+fn main() {
+  let mut r = Resource { name: "old" };
+  println("before-overwrite");
+  r = Resource { name: "new" };
+  println("after-overwrite");
+}
+|}
+  in
+  compile_and_check
+    ~expected_output:"before-overwrite\ndrop:old\nafter-overwrite\ndrop:new\n"
+    src
+  |> ignore
+
+(* VAL-OWN-008: By-value returns transfer ownership without double cleanup *)
+let test_own_cleanup_byval_return () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+struct Resource {
+  pub name: str,
+}
+
+impl Drop for Resource {
+  fn drop(&mut self) {
+    println("drop:" + self.name);
+  }
+}
+
+fn make() -> Resource {
+  let r = Resource { name: "transferred" };
+  r
+}
+
+fn main() {
+  let owned = make();
+  println("caller:" + owned.name);
+}
+|}
+  in
+  compile_and_check ~expected_output:"caller:transferred\ndrop:transferred\n"
+    src
+  |> ignore
+
+(* VAL-OWN-009: By-value parameters are cleaned at callee exit when
+   ownership is retained there *)
+let test_own_cleanup_callee_param () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+struct Resource {
+  pub name: str,
+}
+
+impl Drop for Resource {
+  fn drop(&mut self) {
+    println("drop:" + self.name);
+  }
+}
+
+fn consume(r: Resource) {
+  println("inside:" + r.name);
+}
+
+fn main() {
+  let r = Resource { name: "param" };
+  consume(r);
+  println("after-call");
+}
+|}
+  in
+  compile_and_check ~expected_output:"inside:param\ndrop:param\nafter-call\n"
+    src
+  |> ignore
+
 let () =
   Alcotest.run "codegen"
     [
@@ -2762,5 +2978,20 @@ let () =
             test_own_drop_copy_overlap;
           Alcotest.test_case "clone on non-Clone rejected" `Quick
             test_own_clone_no_impl;
+        ] );
+      ( "ownership-cleanup",
+        [
+          Alcotest.test_case "normal exit reverse-order exactly-once" `Quick
+            test_own_cleanup_normal_exit;
+          Alcotest.test_case "early return exactly-once" `Quick
+            test_own_cleanup_early_return;
+          Alcotest.test_case "nested ? exit exactly-once" `Quick
+            test_own_cleanup_question_exit;
+          Alcotest.test_case "overwrite cleanup exactly once" `Quick
+            test_own_cleanup_overwrite;
+          Alcotest.test_case "by-value return transfers ownership" `Quick
+            test_own_cleanup_byval_return;
+          Alcotest.test_case "callee-exit cleanup for by-value params" `Quick
+            test_own_cleanup_callee_param;
         ] );
     ]
