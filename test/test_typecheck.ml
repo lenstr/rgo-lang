@@ -2174,6 +2174,52 @@ fn main() {
 }
 |}
 
+(* VAL-OWN-011: Repeated type param with conflicting types is rejected *)
+let own_generic_enum_repeated_tparam_conflict_negative =
+  {|
+enum Pair<T> {
+  Both(T, T),
+}
+
+fn main() {
+  let p = Pair::Both(42, "hello");
+}
+|}
+
+(* VAL-OWN-011: Repeated type param with compatible types is accepted *)
+let own_generic_enum_repeated_tparam_positive =
+  {|
+enum Pair<T> {
+  Both(T, T),
+}
+
+fn use_pair(p: Pair<i64>) {
+  println("used");
+}
+
+fn main() {
+  let p = Pair::Both(42, 99);
+  use_pair(p);
+}
+|}
+
+(* VAL-OWN-011: Nested generic enum payload preserves instantiation *)
+let own_generic_enum_nested_payload_positive =
+  {|
+enum Outer<T> {
+  Wrapped(Option<T>),
+}
+
+fn use_outer(o: Outer<i64>) {
+  println("used");
+}
+
+fn main() {
+  let o = Outer::Wrapped(Some(42));
+  use_outer(o);
+}
+|}
+
 (* VAL-OWN-001: Consuming self method moves non-Copy receiver *)
 let own_consuming_self_move_negative =
   {|
@@ -2381,6 +2427,12 @@ let ownership_positive_tests =
     ( "generic enum Clone with Self lowering",
       `Quick,
       pass own_generic_enum_clone_positive );
+    ( "generic enum repeated tparam compatible",
+      `Quick,
+      pass own_generic_enum_repeated_tparam_positive );
+    ( "generic enum nested payload preserves instantiation",
+      `Quick,
+      pass own_generic_enum_nested_payload_positive );
     ( "non-consuming &self keeps receiver usable",
       `Quick,
       pass own_ref_self_positive );
@@ -2443,6 +2495,10 @@ let ownership_negative_tests =
     ( "generic enum payload mismatch rejected",
       `Quick,
       fail ~expect:"type mismatch" own_generic_enum_payload_mismatch_negative );
+    ( "generic enum repeated tparam conflict rejected",
+      `Quick,
+      fail ~expect:"conflicting types for type parameter"
+        own_generic_enum_repeated_tparam_conflict_negative );
     ( "consuming self moves non-Copy receiver",
       `Quick,
       fail ~expect:"use of moved value" own_consuming_self_move_negative );

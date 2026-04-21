@@ -3280,6 +3280,103 @@ fn main() {
 |}
     ()
 
+(* VAL-OWN-011: Nested generic enum payload preserves concrete instantiation
+   in generated Go — Option<i64> payload keeps int64 type arg *)
+let test_own_generic_enum_nested_payload () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+enum Outer<T> {
+  Wrapped(Option<T>),
+  Empty,
+}
+
+impl<T> Drop for Outer<T> {
+  fn drop(&mut self) {
+    println("drop-outer");
+  }
+}
+
+fn main() {
+  let o = Outer::Wrapped(Some(42));
+  println("alive");
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"alive\ndrop-outer\n" src in
+  (* Verify the generated Go preserves nested generic instantiation *)
+  Alcotest.(check bool)
+    "nested generic enum variant type" true
+    (contains go "OuterWrapped[int64]")
+
+(* VAL-OWN-011: Repeated type param with conflicting types rejected *)
+let test_own_generic_enum_repeated_conflict () =
+  compile_expect_error ~expect:"conflicting types for type parameter"
+    {|
+enum Pair<T> {
+  Both(T, T),
+}
+
+fn main() {
+  let p = Pair::Both(42, "hello");
+}
+|}
+    ()
+
+(* VAL-OWN-011: Nested generic enum payload with move — ownership transfers *)
+let test_own_generic_enum_nested_move () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+enum Outer<T> {
+  Wrapped(Option<T>),
+  Empty,
+}
+
+impl<T> Drop for Outer<T> {
+  fn drop(&mut self) {
+    println("drop-outer");
+  }
+}
+
+fn main() {
+  let a = Outer::Wrapped(Some(42));
+  let b = a;
+  println("done");
+}
+|}
+  in
+  compile_and_check ~expected_output:"done\ndrop-outer\n" src |> ignore
+
+(* VAL-OWN-011: generic_enum_nested.rg example fixture builds and runs *)
+let test_generic_enum_nested_example () =
+  let src = read_file "../examples/generic_enum_nested.rg" in
+  let go =
+    compile_and_check
+      ~expected_output:
+        "a-alive\n\
+         b-moved\n\
+         d-copied\n\
+         pair-alive\n\
+         drop-pair\n\
+         drop-outer\n\
+         drop-outer\n"
+      src
+  in
+  (* Verify nested generic instantiation is preserved *)
+  Alcotest.(check bool)
+    "nested payload preserves type" true
+    (contains go "OuterWrapped[int64]");
+  Alcotest.(check bool)
+    "repeated tparam preserves type" true
+    (contains go "PairBoth[int64]")
+
 let () =
   Alcotest.run "codegen"
     [
@@ -3437,6 +3534,8 @@ let () =
           Alcotest.test_case "traits.rg runs" `Quick test_traits_example;
           Alcotest.test_case "generic_enum_clone.rg runs" `Quick
             test_generic_enum_clone_example;
+          Alcotest.test_case "generic_enum_nested.rg runs" `Quick
+            test_generic_enum_nested_example;
         ] );
       ( "generics",
         [
@@ -3596,5 +3695,11 @@ let () =
             test_own_generic_enum_clone_runtime;
           Alcotest.test_case "generic enum payload mismatch rejected" `Quick
             test_own_generic_enum_mismatch_negative;
+          Alcotest.test_case "nested generic enum payload preserves type" `Quick
+            test_own_generic_enum_nested_payload;
+          Alcotest.test_case "repeated tparam conflict rejected" `Quick
+            test_own_generic_enum_repeated_conflict;
+          Alcotest.test_case "nested generic enum move transfers cleanup" `Quick
+            test_own_generic_enum_nested_move;
         ] );
     ]

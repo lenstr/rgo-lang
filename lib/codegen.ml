@@ -329,6 +329,23 @@ let snake_to_pascal (s : string) : string =
         ^ String.sub part 1 (String.length part - 1))
   |> String.concat ""
 
+(* Recursively unify an AST formal type against an AST actual type to collect
+   type-parameter bindings.  Only binds parameters whose names appear in
+   [tparams].  Used by codegen to infer generic type arguments for enum
+   variant constructors with nested payload types. *)
+let unify_ast_tparams tparams bindings (formal : Ast.ty) (actual : Ast.ty) =
+  let rec go f a =
+    match (f, a) with
+    | TyName { node = tp; _ }, _ when List.mem tp tparams ->
+        if not (Hashtbl.mem bindings tp) then Hashtbl.replace bindings tp a
+    | TyGeneric ({ node = fn'; _ }, fargs), TyGeneric ({ node = an; _ }, aargs)
+      when fn' = an && List.length fargs = List.length aargs ->
+        List.iter2 go fargs aargs
+    | TyRef fi, TyRef ai -> go fi ai
+    | _ -> ()
+  in
+  go formal actual
+
 let rec infer_expr_type env (e : Ast.expr) : Ast.ty option =
   match e with
   | ExprLit l -> infer_lit_type l
@@ -395,13 +412,9 @@ let rec infer_expr_type env (e : Ast.expr) : Ast.ty option =
                     let bindings = Hashtbl.create 4 in
                     List.iter2
                       (fun ft arg ->
-                        match ft with
-                        | TyName { node = tp; _ } when List.mem tp tparams -> (
-                            if not (Hashtbl.mem bindings tp) then
-                              match infer_expr_type env arg with
-                              | Some t -> Hashtbl.replace bindings tp t
-                              | None -> ())
-                        | _ -> ())
+                        match infer_expr_type env arg with
+                        | Some t -> unify_ast_tparams tparams bindings ft t
+                        | None -> ())
                       field_tys args;
                     let type_args =
                       List.map
@@ -1208,19 +1221,19 @@ and gen_path_call env buf indent type_name fn_name args =
                   let bindings = Hashtbl.create 4 in
                   List.iter2
                     (fun ft arg ->
-                      match ft with
-                      | TyName { node = tp; _ } when List.mem tp tparams -> (
-                          if not (Hashtbl.mem bindings tp) then
-                            match infer_expr_type env arg with
-                            | Some t ->
-                                Hashtbl.replace bindings tp (go_type env t)
-                            | None -> ())
-                      | _ -> ())
+                      match infer_expr_type env arg with
+                      | Some t -> unify_ast_tparams tparams bindings ft t
+                      | None -> ())
                     field_tys args;
+                  (* Convert AST type bindings to Go type strings *)
+                  let go_bindings = Hashtbl.create 4 in
+                  Hashtbl.iter
+                    (fun k v -> Hashtbl.replace go_bindings k (go_type env v))
+                    bindings;
                   let tparam_types =
                     List.map
                       (fun tp ->
-                        match Hashtbl.find_opt bindings tp with
+                        match Hashtbl.find_opt go_bindings tp with
                         | Some t -> t
                         | None ->
                             (* If tp is an in-scope type parameter, use it

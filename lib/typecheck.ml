@@ -753,7 +753,9 @@ and check_assoc_fn_call env type_name fn_name arg_types =
                 ->
                   args
               | _tparams, _ ->
-                  let bindings = infer_tparam_bindings field_tys arg_types in
+                  let bindings =
+                    infer_tparam_bindings ~span:fn_name.span field_tys arg_types
+                  in
                   List.map
                     (fun tp ->
                       match List.assoc_opt tp bindings with
@@ -795,15 +797,22 @@ and concrete_type_for_name env name =
 
 (* Infer bindings for impl type parameters by matching formal param types
    against actual argument types. Returns a (string * ty) list mapping
-   TParam names to concrete types. *)
-and infer_tparam_bindings formals actuals =
+   TParam names to concrete types.
+   When ~span is provided, conflicting repeated bindings raise a type error. *)
+and infer_tparam_bindings ?span formals actuals =
   let bindings = Hashtbl.create 4 in
   let rec unify formal actual =
     match (formal, actual) with
     | TParam p, _ -> (
         match Hashtbl.find_opt bindings p with
         | None -> Hashtbl.replace bindings p actual
-        | Some _ -> ())
+        | Some prev -> (
+            if not (types_compatible prev actual) then
+              match span with
+              | Some s ->
+                  error_at s "conflicting types for type parameter %s: %s vs %s"
+                    p (show_ty prev) (show_ty actual)
+              | None -> ()))
     | TOption f, TOption a -> unify f a
     | TResult (f1, f2), TResult (a1, a2) ->
         unify f1 a1;
@@ -1273,7 +1282,8 @@ and check_struct_variant_literal env type_name variant_name fields =
                   fields
               in
               let bindings =
-                infer_tparam_bindings field_formals field_actuals
+                infer_tparam_bindings ~span:variant_name.span field_formals
+                  field_actuals
               in
               let type_args =
                 List.map
