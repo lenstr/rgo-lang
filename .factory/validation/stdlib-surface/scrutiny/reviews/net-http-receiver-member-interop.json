@@ -1,28 +1,34 @@
 {
   "featureId": "net-http-receiver-member-interop",
-  "reviewedAt": "2026-04-21T00:46:46+00:00",
-  "commitId": "f90c76c",
+  "reviewedAt": "2026-04-21T01:06:35.101050+00:00",
+  "commitId": "e469d8f",
   "transcriptSkeletonReviewed": true,
   "diffReviewed": true,
   "status": "fail",
   "codeReview": {
-    "summary": "The feature wires the contracted `net/http` receiver/member names through typecheck and codegen, and the positive statement-position cases look correct. However, `ResponseWriter.write` is modeled as `(str) -> void` in `lib/typecheck.ml:110-112` while `lib/codegen.ml:1331-1345` emits a raw `w.Write([]byte(...))` call. That lets `rgoc` accept value-position uses that only fail later in downstream Go. I reproduced this with `let n = w.write(\"hello\");`, which compiled through `rgoc` to `n := w.Write([]byte(\"hello\"))` and then failed under `go build` with `assignment mismatch: 1 variable but w.Write returns 2 values`.",
+    "summary": "The post-scrutiny fix closes the original let-binding hole: `StmtLet` now rejects `TVoid` initializers, and the new negative tests cover `let n = w.write(...)`. But the feature contract requires `w.write(...)` to be rejected anywhere it is used as a value expression unless its rgo-facing return contract is modeled explicitly, and that is still not true. `check_return` still accepts `TVoid` expressions in `return ...` position for void functions, and codegen emits the raw Go `return w.Write(...)`, which fails downstream because `http.ResponseWriter.Write` returns `(int, error)`. I reproduced this on a temporary fixture: `rgoc` succeeded, generated `return w.Write([]byte(\"hello\"))`, and `go build` then failed with `too many return values`.",
     "issues": [
       {
         "file": "lib/typecheck.ml",
-        "line": 110,
+        "line": 1351,
         "severity": "blocking",
-        "description": "`ResponseWriter.write` is declared as returning `TVoid`, but the generated Go calls `http.ResponseWriter.Write`, which returns `(int, error)`. Because codegen emits the call directly (`lib/codegen.ml:1331-1345`), programs such as `let n = w.write(\"hello\");` pass `rgoc` and only fail during `go build`. The compiler needs to either model the return shape correctly or reject value-position uses of `w.write` before codegen."
+        "description": "`check_return` still allows `return w.write(\"hello\")` in a void-returning handler because `w.write` is modeled as `TVoid`. Combined with `lib/codegen.ml:909`, this emits `return w.Write([]byte(\"hello\"))`, which is invalid Go because `http.ResponseWriter.Write` returns `(int, error)`. The fix only blocks let-binding (`StmtLet`) and does not yet reject all value-position uses before codegen."
+      },
+      {
+        "file": "test/test_codegen.ml",
+        "line": 2279,
+        "severity": "non_blocking",
+        "description": "The added regression coverage only checks let-binding value position. It does not cover other value-expression contexts such as `return w.write(...)`, so the remaining invalid-Go path is still untested."
       }
     ]
   },
   "sharedStateObservations": [
     {
       "area": "knowledge",
-      "observation": "The interop contract lists `w.write` as part of the approved receiver surface, but it does not state whether the underlying Go `(int, error)` result is exposed in rgo, discarded, or forbidden in value position. That ambiguity likely contributed to the current `TVoid` modeling.",
-      "evidence": "`.factory/library/go-interop.md:25-27,47-51` enumerates `w.write` in the supported surface without return-shape guidance, while `lib/typecheck.ml:110-112` simplifies `ResponseWriter.write` to `(String) -> ()`."
+      "observation": "The mission interop contract still names `w.write` as approved surface but does not state whether its underlying Go `(int, error)` result is exposed, discarded only in statement position, or rejected in every value-expression context. That ambiguity likely contributed to the incomplete fix that handled let-bindings but not returns.",
+      "evidence": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/library/go-interop.md lists `w.write` in the supported receiver surface without return-shape guidance, while `lib/typecheck.ml:110-112` still models it as `(String) -> ()`."
     }
   ],
-  "addressesFailureFrom": null,
-  "summary": "Reviewed the handoff, transcript skeleton, skill, and commit `f90c76c`. Result: fail. The receiver/member bridge is mostly present, but `w.write` is still semantically unsound because `rgoc` accepts value-position uses that lower to invalid Go due to the real `(int, error)` return signature."
+  "addressesFailureFrom": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/stdlib-surface/scrutiny/reviews/net-http-receiver-member-interop.json",
+  "summary": "Re-reviewed the amended feature at commit e469d8f against the prior failed scrutiny. Result: fail. The original let-binding bug is fixed, but `w.write(...)` is still accepted in return position and lowers to invalid Go, so the feature still does not fully satisfy the contracted requirement to reject unmodeled value-position uses before emission."
 }

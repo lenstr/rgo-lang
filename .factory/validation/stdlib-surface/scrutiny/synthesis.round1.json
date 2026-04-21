@@ -1,6 +1,6 @@
 {
   "milestone": "stdlib-surface",
-  "round": 2,
+  "round": 1,
   "status": "fail",
   "validatorsRun": {
     "test": {
@@ -31,16 +31,16 @@
     {
       "featureId": "net-http-receiver-member-interop",
       "severity": "blocking",
-      "description": "The prior let-binding hole is fixed, but `check_return` still accepts `return w.write(\"hello\")` in void-returning handlers. Codegen emits `return w.Write([]byte(\"hello\"))`, so `rgoc` still allows an unmodeled value-position `w.write(...)` use that only fails later in `go build` with `too many return values`."
+      "description": "`ResponseWriter.write` is typed as returning `void`, but codegen emits the raw Go `http.ResponseWriter.Write` call, so value-position uses like `let n = w.write(\"hello\");` pass `rgoc` and only fail later in `go build` with an assignment-mismatch error."
     }
   ],
   "appliedUpdates": [],
   "suggestedGuidanceUpdates": [],
   "rejectedObservations": [
     {
-      "observation": "Clarify the `.factory/library/go-interop.md` contract for `w.write` to state whether the underlying Go `(int, error)` result is exposed in rgo, discarded only in statement position, or forbidden in every value-expression context.",
+      "observation": "Clarify the `.factory/library/go-interop.md` contract for `w.write` to state whether the underlying Go `(int, error)` result is exposed in rgo, discarded, or forbidden in value position.",
       "reason": "ambiguous"
     }
   ],
-  "previousRound": ".factory/validation/stdlib-surface/scrutiny/synthesis.round1.json"
+  "previousRound": null
 }
