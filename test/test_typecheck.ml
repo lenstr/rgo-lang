@@ -2064,6 +2064,84 @@ fn main() {
 }
 |}
 
+(* VAL-OWN-011: Generic enum variant constructor infers type params *)
+let own_generic_enum_constructor_positive =
+  {|
+enum Wrapper<T> {
+  Some(T),
+  None,
+}
+
+fn use_wrapper(w: Wrapper<i64>) {
+  println("used");
+}
+
+fn main() {
+  let w = Wrapper::Some(42);
+  use_wrapper(w);
+}
+|}
+
+(* VAL-OWN-011: Generic enum variant constructor with Copy stays usable *)
+let own_generic_enum_copy_positive =
+  {|
+trait Copy {}
+
+enum Wrapper<T> {
+  Some(T),
+  None,
+}
+
+impl<T> Copy for Wrapper<T> {}
+
+fn use_wrapper<T>(w: Wrapper<T>) {
+  println("used");
+}
+
+fn main() {
+  let w = Wrapper::Some(42);
+  use_wrapper(w);
+  use_wrapper(w);
+}
+|}
+
+(* VAL-OWN-011: Generic enum variant constructor move is rejected *)
+let own_generic_enum_move_negative =
+  {|
+enum Wrapper<T> {
+  Some(T),
+  None,
+}
+
+fn consume<T>(w: Wrapper<T>) {
+  println("consumed");
+}
+
+fn main() {
+  let w = Wrapper::Some(42);
+  consume(w);
+  consume(w);
+}
+|}
+
+(* Negative: mismatched generic enum payload type *)
+let own_generic_enum_payload_mismatch_negative =
+  {|
+enum Wrapper<T> {
+  Some(T),
+  None,
+}
+
+fn take_wrapper(w: Wrapper<i64>) {
+  println("ok");
+}
+
+fn main() {
+  let w = Wrapper::Some("hello");
+  take_wrapper(w);
+}
+|}
+
 let ownership_positive_tests =
   [
     ("copy i64 survives assignment", `Quick, pass own_copy_assign_positive);
@@ -2074,6 +2152,10 @@ let ownership_positive_tests =
     ("copy field access allowed", `Quick, pass own_field_read_copy_positive);
     ("string field access allowed", `Quick, pass own_field_read_str_positive);
     ("generic Copy struct reusable", `Quick, pass own_generic_copy_positive);
+    ( "generic enum constructor infers type",
+      `Quick,
+      pass own_generic_enum_constructor_positive );
+    ("generic enum Copy reusable", `Quick, pass own_generic_enum_copy_positive);
   ]
 
 let ownership_negative_tests =
@@ -2115,6 +2197,12 @@ let ownership_negative_tests =
     ( "generic struct move double-use rejected",
       `Quick,
       fail ~expect:"use of moved value" own_generic_move_negative );
+    ( "generic enum variant move double-use rejected",
+      `Quick,
+      fail ~expect:"use of moved value" own_generic_enum_move_negative );
+    ( "generic enum payload mismatch rejected",
+      `Quick,
+      fail ~expect:"type mismatch" own_generic_enum_payload_mismatch_negative );
   ]
 
 let () =

@@ -46,7 +46,11 @@ module SMap = Map.Make (String)
 
 type struct_info = { si_fields : (string * ty * bool (* pub *)) list }
 
-type enum_info = { ei_variants : (string * variant_shape) list }
+type enum_info = {
+  ei_variants : (string * variant_shape) list;
+  ei_tparams : string list;
+}
+
 and variant_shape = VUnit | VTuple of ty list | VStruct of (string * ty) list
 
 type fn_info = {
@@ -718,11 +722,33 @@ and check_assoc_fn_call env type_name fn_name arg_types =
               error_at fn_name.span
                 "variant '%s::%s' expects %d field(s), got %d" type_name.node
                 fn_name.node expected_len actual_len;
+            (* Type-check args: enum tparams act as wildcards *)
             List.iter2
               (fun exp act ->
-                expect_type ~env ~span:fn_name.span ~expected:exp ~actual:act)
+                if not (types_compatible ~type_params:ei.ei_tparams exp act)
+                then
+                  error_at fn_name.span "type mismatch: expected %s, got %s"
+                    (show_ty exp) (show_ty act))
               field_tys arg_types;
-            TEnum (type_name.node, [])
+            (* Infer concrete type args for generic enums from payload.
+               Inside an impl block for the same enum, inherit type args
+               from Self instead of re-inferring (they may be generic). *)
+            let type_args =
+              match (ei.ei_tparams, env.self_ty) with
+              | [], _ -> []
+              | _, Some (TEnum (sn, (_ :: _ as args))) when sn = type_name.node
+                ->
+                  args
+              | _tparams, _ ->
+                  let bindings = infer_tparam_bindings field_tys arg_types in
+                  List.map
+                    (fun tp ->
+                      match List.assoc_opt tp bindings with
+                      | Some t -> t
+                      | None -> TParam tp)
+                    ei.ei_tparams
+            in
+            TEnum (type_name.node, type_args)
         | Some VUnit ->
             if arg_types <> [] then
               error_at fn_name.span "unit variant '%s::%s' takes no arguments"
@@ -1169,27 +1195,60 @@ and check_struct_variant_literal env type_name variant_name fields =
   | Some ei -> (
       match List.assoc_opt variant_name.node ei.ei_variants with
       | Some (VStruct expected_fields) -> (
-          List.iter
-            (fun (sf : struct_field_init) ->
-              match
-                List.find_opt
-                  (fun (n, _) -> n = sf.sf_name.node)
-                  expected_fields
-              with
-              | Some (_, expected) ->
-                  let actual = check_expr env sf.sf_expr in
-                  expect_type ~env ~span:sf.sf_name.span ~expected ~actual
-              | None ->
-                  error_at sf.sf_name.span "no field '%s' in variant '%s::%s'"
-                    sf.sf_name.node type_name.node variant_name.node)
-            fields;
-          (* If the struct variant literal uses a bare enum name inside
-             an impl block for a generic enum like Box<T>, inherit the
-             type arguments from Self so the result is Box<T> not Box. *)
+          let field_actuals =
+            List.map
+              (fun (sf : struct_field_init) ->
+                let actual = check_expr env sf.sf_expr in
+                (match
+                   List.find_opt
+                     (fun (n, _) -> n = sf.sf_name.node)
+                     expected_fields
+                 with
+                | Some (_, expected) ->
+                    if
+                      not
+                        (types_compatible ~type_params:ei.ei_tparams expected
+                           actual)
+                    then
+                      error_at sf.sf_name.span
+                        "type mismatch: expected %s, got %s" (show_ty expected)
+                        (show_ty actual)
+                | None ->
+                    error_at sf.sf_name.span "no field '%s' in variant '%s::%s'"
+                      sf.sf_name.node type_name.node variant_name.node);
+                actual)
+              fields
+          in
+          (* Infer concrete type args for generic enums from struct fields *)
           let base = TEnum (type_name.node, []) in
-          match (base, env.self_ty) with
-          | TEnum (n, []), Some (TEnum (sn, (_ :: _ as args))) when n = sn ->
+          match (base, env.self_ty, ei.ei_tparams) with
+          | TEnum (n, []), Some (TEnum (sn, (_ :: _ as args))), _ when n = sn ->
               TEnum (n, args)
+          | TEnum (n, []), _, _ :: _ ->
+              let field_formals =
+                List.filter_map
+                  (fun (sf : struct_field_init) ->
+                    match
+                      List.find_opt
+                        (fun (n, _) -> n = sf.sf_name.node)
+                        expected_fields
+                    with
+                    | Some (_, ty) -> Some ty
+                    | None -> None)
+                  fields
+              in
+              let bindings =
+                infer_tparam_bindings field_formals field_actuals
+              in
+              let type_args =
+                List.map
+                  (fun tp ->
+                    match List.assoc_opt tp bindings with
+                    | Some t -> t
+                    | None -> TParam tp)
+                  ei.ei_tparams
+              in
+              TEnum (n, type_args)
           | _ -> base)
       | Some VUnit ->
           error_at variant_name.span
@@ -1546,7 +1605,7 @@ let rec collect_type_info env (items : item list) : env =
                 (v.var_name.node, shape))
               e_variants
           in
-          let ei = { ei_variants = variants } in
+          let ei = { ei_variants = variants; ei_tparams = generics } in
           { env with enums = SMap.add e_name.node ei env.enums }
       | ItemFn fd ->
           let generics =

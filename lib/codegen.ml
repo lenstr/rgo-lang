@@ -57,7 +57,12 @@ module SMap = Map.Make (String)
 
 type variant_shape = VUnit | VTuple of Ast.ty list | VStruct of Ast.field list
 type struct_info = { si_fields : Ast.field list }
-type enum_info = { ei_variants : (string * variant_shape) list }
+
+type enum_info = {
+  ei_variants : (string * variant_shape) list;
+  ei_tparams : string list;
+}
+
 type fn_info = { fi_ret : Ast.ty option }
 
 type method_info_cg = {
@@ -364,7 +369,7 @@ let rec infer_expr_type env (e : Ast.expr) : Ast.ty option =
       match SMap.find_opt fn_name.node env.fns with
       | Some fi -> fi.fi_ret
       | None -> None)
-  | ExprCall (ExprPath (type_name, fn_name), _) -> (
+  | ExprCall (ExprPath (type_name, fn_name), args) -> (
       if
         (* Check for imported stdlib package call *)
         is_imported_package type_name.node env
@@ -376,7 +381,35 @@ let rec infer_expr_type env (e : Ast.expr) : Ast.ty option =
       else
         (* Enum variant constructor or associated function *)
         match SMap.find_opt type_name.node env.enums with
-        | Some _ -> Some (TyName type_name)
+        | Some ei -> (
+            match ei.ei_tparams with
+            | [] -> Some (TyName type_name)
+            | tparams -> (
+                (* Infer generic args from variant payload *)
+                match List.assoc_opt fn_name.node ei.ei_variants with
+                | Some (VTuple field_tys)
+                  when List.length field_tys = List.length args ->
+                    let bindings = Hashtbl.create 4 in
+                    List.iter2
+                      (fun ft arg ->
+                        match ft with
+                        | TyName { node = tp; _ } when List.mem tp tparams -> (
+                            if not (Hashtbl.mem bindings tp) then
+                              match infer_expr_type env arg with
+                              | Some t -> Hashtbl.replace bindings tp t
+                              | None -> ())
+                        | _ -> ())
+                      field_tys args;
+                    let type_args =
+                      List.map
+                        (fun tp ->
+                          match Hashtbl.find_opt bindings tp with
+                          | Some t -> t
+                          | None -> TyName (dummy_loc "any"))
+                        tparams
+                    in
+                    Some (TyGeneric (type_name, type_args))
+                | _ -> Some (TyName type_name)))
         | None -> (
             match SMap.find_opt type_name.node env.impls with
             | Some ii -> (
@@ -595,8 +628,10 @@ let collect_env (prog : Ast.program) : cg_env =
                 (v.var_name.node, shape))
               e_variants
           in
-          ignore e_generics;
-          let ei = { ei_variants = variants } in
+          let tparams =
+            List.map (fun (tp : type_param) -> tp.tp_name.node) e_generics
+          in
+          let ei = { ei_variants = variants; ei_tparams = tparams } in
           { env with enums = SMap.add e_name.node ei env.enums }
       | ItemFn fd ->
           let fi = { fi_ret = fd.fn_ret } in
@@ -1148,8 +1183,36 @@ and gen_path_call env buf indent type_name fn_name args =
     match SMap.find_opt type_name.node env.enums with
     | Some ei -> (
         match List.assoc_opt fn_name.node ei.ei_variants with
-        | Some (VTuple _) ->
-            Buffer.add_string buf (type_name.node ^ fn_name.node ^ "{");
+        | Some (VTuple field_tys) ->
+            let type_suffix =
+              match ei.ei_tparams with
+              | [] -> ""
+              | tparams ->
+                  (* Build tparam -> Go type mapping from field types + args *)
+                  let bindings = Hashtbl.create 4 in
+                  List.iter2
+                    (fun ft arg ->
+                      match ft with
+                      | TyName { node = tp; _ } when List.mem tp tparams -> (
+                          if not (Hashtbl.mem bindings tp) then
+                            match infer_expr_type env arg with
+                            | Some t ->
+                                Hashtbl.replace bindings tp (go_type env t)
+                            | None -> ())
+                      | _ -> ())
+                    field_tys args;
+                  let tparam_types =
+                    List.map
+                      (fun tp ->
+                        match Hashtbl.find_opt bindings tp with
+                        | Some t -> t
+                        | None -> "any")
+                      tparams
+                  in
+                  "[" ^ String.concat ", " tparam_types ^ "]"
+            in
+            Buffer.add_string buf
+              (type_name.node ^ fn_name.node ^ type_suffix ^ "{");
             List.iteri
               (fun i a ->
                 if i > 0 then Buffer.add_string buf ", ";
@@ -2500,11 +2563,14 @@ and init_is_enum env (init : Ast.expr) : bool =
   | ExprCall (ExprPath (type_name, _), _) -> SMap.mem type_name.node env.enums
   | _ -> false
 
-and infer_enum_name _env (init : Ast.expr) : string =
-  match init with
-  | ExprPath (type_name, _) -> type_name.node
-  | ExprCall (ExprPath (type_name, _), _) -> type_name.node
-  | _ -> "any"
+and infer_enum_name env (init : Ast.expr) : string =
+  match infer_expr_type env init with
+  | Some t -> go_type env t
+  | None -> (
+      match init with
+      | ExprPath (type_name, _) -> type_name.node
+      | ExprCall (ExprPath (type_name, _), _) -> type_name.node
+      | _ -> "any")
 
 and init_is_result env (init : Ast.expr) : bool =
   match infer_expr_type env init with
@@ -2755,13 +2821,24 @@ and gen_enum_decl env buf e_name e_generics e_variants _impl_methods =
   | None -> ());
   Buffer.add_string buf "}\n";
   (* Variant types *)
+  let generics_use = go_generics_use e_generics in
   List.iter
     (fun (v : variant) ->
       let vtype = e_name.node ^ v.var_name.node in
+      (* For generic enums, variant structs carry the same type params *)
+      let needs_generics =
+        match v.var_fields with
+        | Some (TupleFields _) | Some (StructFields _) -> e_generics <> []
+        | None -> false
+      in
+      let vtype_decl =
+        if needs_generics then vtype ^ generics_decl else vtype
+      in
+      let vtype_recv = if needs_generics then vtype ^ generics_use else vtype in
       (match v.var_fields with
-      | None -> Printf.bprintf buf "\ntype %s struct{}\n" vtype
+      | None -> Printf.bprintf buf "\ntype %s struct{}\n" vtype_decl
       | Some (TupleFields tys) ->
-          Printf.bprintf buf "\ntype %s struct {\n" vtype;
+          Printf.bprintf buf "\ntype %s struct {\n" vtype_decl;
           let n = List.length tys in
           let max_field_len =
             String.length (Printf.sprintf "Field%d" (n - 1))
@@ -2776,7 +2853,7 @@ and gen_enum_decl env buf e_name e_generics e_variants _impl_methods =
             tys;
           Buffer.add_string buf "}\n"
       | Some (StructFields fields) ->
-          Printf.bprintf buf "\ntype %s struct {\n" vtype;
+          Printf.bprintf buf "\ntype %s struct {\n" vtype_decl;
           let names =
             List.map (fun (f : field) -> capitalize f.fd_name.node) fields
           in
@@ -2792,7 +2869,7 @@ and gen_enum_decl env buf e_name e_generics e_variants _impl_methods =
                 (go_type env f.fd_ty))
             fields names;
           Buffer.add_string buf "}\n");
-      Printf.bprintf buf "\nfunc (%s) is%s() {}\n" vtype e_name.node)
+      Printf.bprintf buf "\nfunc (%s) is%s() {}\n" vtype_recv e_name.node)
     e_variants
 
 and gen_impl_methods ?(is_trait_impl = false) env buf type_name generics_decl
@@ -2916,13 +2993,31 @@ and gen_enum_method env buf enum_name _generics_decl fd _self_param =
   let helper_name =
     uncapitalize enum_name ^ capitalize fd.fn_name.node ^ "Impl"
   in
+  (* Determine if the enum is generic from the codegen env *)
+  let enum_tparams =
+    match SMap.find_opt enum_name env.enums with
+    | Some ei -> ei.ei_tparams
+    | None -> []
+  in
+  let helper_generics_decl =
+    match enum_tparams with
+    | [] -> ""
+    | tps ->
+        "[" ^ String.concat ", " (List.map (fun tp -> tp ^ " any") tps) ^ "]"
+  in
+  let helper_generics_use =
+    match enum_tparams with
+    | [] -> ""
+    | tps -> "[" ^ String.concat ", " tps ^ "]"
+  in
   let fn_env =
     {
       env with
       ret_ty = fd.fn_ret;
       self_type_name = Some enum_name;
       type_params =
-        List.map (fun (tp : type_param) -> tp.tp_name.node) fd.fn_generics
+        enum_tparams
+        @ List.map (fun (tp : type_param) -> tp.tp_name.node) fd.fn_generics
         @ env.type_params;
     }
   in
@@ -2937,7 +3032,8 @@ and gen_enum_method env buf enum_name _generics_decl fd _self_param =
       fn_env fd.fn_params
   in
   (* Shared helper *)
-  Printf.bprintf buf "\nfunc %s(self %s" helper_name enum_name;
+  Printf.bprintf buf "\nfunc %s%s(self %s%s" helper_name helper_generics_decl
+    enum_name helper_generics_use;
   List.iter
     (fun (p : param) ->
       Printf.bprintf buf ", %s %s"
@@ -2953,9 +3049,16 @@ and gen_enum_method env buf enum_name _generics_decl fd _self_param =
   match SMap.find_opt enum_name env.enums with
   | Some ei ->
       List.iter
-        (fun (vname, _shape) ->
+        (fun (vname, vshape) ->
           let vtype = enum_name ^ vname in
-          Printf.bprintf buf "\nfunc (self %s) %s(" vtype method_name;
+          (* Variant structs with fields carry enum generics *)
+          let variant_has_generics =
+            enum_tparams <> [] && match vshape with VUnit -> false | _ -> true
+          in
+          let vtype_recv =
+            if variant_has_generics then vtype ^ helper_generics_use else vtype
+          in
+          Printf.bprintf buf "\nfunc (self %s) %s(" vtype_recv method_name;
           List.iteri
             (fun i (p : param) ->
               if i > 0 then Buffer.add_string buf ", ";
@@ -2966,7 +3069,21 @@ and gen_enum_method env buf enum_name _generics_decl fd _self_param =
           Buffer.add_char buf ')';
           Buffer.add_string buf (go_ret_sig fn_env fd.fn_ret);
           Buffer.add_string buf " {\n";
-          Printf.bprintf buf "\treturn %s(self" helper_name;
+          (* For generic helper, pass type args; use return for non-void *)
+          let has_return =
+            match fd.fn_ret with None -> false | Some _ -> true
+          in
+          Printf.bprintf buf "\t%s%s%s(self"
+            (if has_return then "return " else "")
+            helper_name
+            (if enum_tparams <> [] && variant_has_generics then
+               helper_generics_use
+             else if enum_tparams <> [] then
+               (* Unit variant: use [any] *)
+               "["
+               ^ String.concat ", " (List.map (fun _ -> "any") enum_tparams)
+               ^ "]"
+             else "");
           List.iter
             (fun (p : param) ->
               Printf.bprintf buf ", %s" (escape_ident p.p_name.node))

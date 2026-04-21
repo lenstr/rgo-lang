@@ -2946,6 +2946,143 @@ fn main() {
   in
   compile_and_check ~expected_output:"consumed\nstill-alive\n" src |> ignore
 
+(* VAL-OWN-011: Generic enum variant constructor with Drop — direct
+   construction preserves concrete instantiation and cleanup fires once *)
+let test_own_generic_enum_drop () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+enum Wrapper<T> {
+  Some(T),
+  None,
+}
+
+impl<T> Drop for Wrapper<T> {
+  fn drop(&mut self) {
+    println("drop-wrapper");
+  }
+}
+
+fn main() {
+  let w = Wrapper::Some(42);
+  println("alive");
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"alive\ndrop-wrapper\n" src in
+  (* Verify the generated Go preserves generic instantiation *)
+  Alcotest.(check bool)
+    "generic enum variant type" true
+    (contains go "WrapperSome[int64]")
+
+(* VAL-OWN-011: Generic enum variant constructor with move — moved value
+   has cleanup transferred to destination *)
+let test_own_generic_enum_move () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+enum Wrapper<T> {
+  Some(T),
+  None,
+}
+
+impl<T> Drop for Wrapper<T> {
+  fn drop(&mut self) {
+    println("drop-wrapper");
+  }
+}
+
+fn main() {
+  let a = Wrapper::Some("hello");
+  let b = a;
+  println("done");
+}
+|}
+  in
+  compile_and_check ~expected_output:"done\ndrop-wrapper\n" src |> ignore
+
+(* VAL-OWN-011: Generic enum variant constructor with Copy — copies keep
+   original alive *)
+let test_own_generic_enum_copy () =
+  let src =
+    {|
+trait Copy {}
+
+enum Wrapper<T> {
+  Some(T),
+  None,
+}
+
+impl<T> Copy for Wrapper<T> {}
+
+fn main() {
+  let w = Wrapper::Some(42);
+  let w2 = w;
+  let w3 = w;
+  println("still-alive");
+}
+|}
+  in
+  compile_and_check ~expected_output:"still-alive\n" src |> ignore
+
+(* VAL-OWN-011: Generic enum variant constructor with Clone — explicit
+   clone at boundary *)
+(* VAL-OWN-011: Two distinct generic enum instantiations have independent
+   cleanup scheduling *)
+let test_own_generic_enum_clone () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+enum Wrapper<T> {
+  Some(T),
+  None,
+}
+
+impl<T> Drop for Wrapper<T> {
+  fn drop(&mut self) {
+    println("drop-wrapper");
+  }
+}
+
+fn main() {
+  let a = Wrapper::Some(42);
+  let b = Wrapper::Some("hello");
+  println("alive");
+}
+|}
+  in
+  compile_and_check ~expected_output:"alive\ndrop-wrapper\ndrop-wrapper\n" src
+  |> ignore
+
+(* Negative: mismatched generic enum payload type is rejected *)
+let test_own_generic_enum_mismatch_negative () =
+  compile_expect_error ~expect:"type mismatch"
+    {|
+enum Wrapper<T> {
+  Some(T),
+  None,
+}
+
+fn take_wrapper(w: Wrapper<i64>) {
+  println("ok");
+}
+
+fn main() {
+  let w = Wrapper::Some("hello");
+  take_wrapper(w);
+}
+|}
+    ()
+
 let () =
   Alcotest.run "codegen"
     [
@@ -3237,5 +3374,15 @@ let () =
             test_own_generic_two_instantiations;
           Alcotest.test_case "generic clone escape hatch" `Quick
             test_own_generic_clone_runtime;
+          Alcotest.test_case "generic enum Drop cleanup once" `Quick
+            test_own_generic_enum_drop;
+          Alcotest.test_case "generic enum move transfers cleanup" `Quick
+            test_own_generic_enum_move;
+          Alcotest.test_case "generic enum Copy reusable" `Quick
+            test_own_generic_enum_copy;
+          Alcotest.test_case "generic enum two instantiations" `Quick
+            test_own_generic_enum_clone;
+          Alcotest.test_case "generic enum payload mismatch rejected" `Quick
+            test_own_generic_enum_mismatch_negative;
         ] );
     ]
