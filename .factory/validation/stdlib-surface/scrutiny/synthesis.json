@@ -1,0 +1,46 @@
+{
+  "milestone": "stdlib-surface",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "nix develop -c dune runtest -j 16",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "nix develop -c dune build -j 16",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "nix develop -c dune build @fmt",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "failedFeatures": [
+      "net-http-receiver-member-interop"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "net-http-receiver-member-interop",
+      "severity": "blocking",
+      "description": "`ResponseWriter.write` is typed as returning `void`, but codegen emits the raw Go `http.ResponseWriter.Write` call, so value-position uses like `let n = w.write(\"hello\");` pass `rgoc` and only fail later in `go build` with an assignment-mismatch error."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [],
+  "rejectedObservations": [
+    {
+      "observation": "Clarify the `.factory/library/go-interop.md` contract for `w.write` to state whether the underlying Go `(int, error)` result is exposed in rgo, discarded, or forbidden in value position.",
+      "reason": "ambiguous"
+    }
+  ],
+  "previousRound": null
+}

@@ -1,0 +1,28 @@
+{
+  "featureId": "net-http-receiver-member-interop",
+  "reviewedAt": "2026-04-21T00:46:46+00:00",
+  "commitId": "f90c76c",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The feature wires the contracted `net/http` receiver/member names through typecheck and codegen, and the positive statement-position cases look correct. However, `ResponseWriter.write` is modeled as `(str) -> void` in `lib/typecheck.ml:110-112` while `lib/codegen.ml:1331-1345` emits a raw `w.Write([]byte(...))` call. That lets `rgoc` accept value-position uses that only fail later in downstream Go. I reproduced this with `let n = w.write(\"hello\");`, which compiled through `rgoc` to `n := w.Write([]byte(\"hello\"))` and then failed under `go build` with `assignment mismatch: 1 variable but w.Write returns 2 values`.",
+    "issues": [
+      {
+        "file": "lib/typecheck.ml",
+        "line": 110,
+        "severity": "blocking",
+        "description": "`ResponseWriter.write` is declared as returning `TVoid`, but the generated Go calls `http.ResponseWriter.Write`, which returns `(int, error)`. Because codegen emits the call directly (`lib/codegen.ml:1331-1345`), programs such as `let n = w.write(\"hello\");` pass `rgoc` and only fail during `go build`. The compiler needs to either model the return shape correctly or reject value-position uses of `w.write` before codegen."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "knowledge",
+      "observation": "The interop contract lists `w.write` as part of the approved receiver surface, but it does not state whether the underlying Go `(int, error)` result is exposed in rgo, discarded, or forbidden in value position. That ambiguity likely contributed to the current `TVoid` modeling.",
+      "evidence": "`.factory/library/go-interop.md:25-27,47-51` enumerates `w.write` in the supported surface without return-shape guidance, while `lib/typecheck.ml:110-112` simplifies `ResponseWriter.write` to `(String) -> ()`."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed the handoff, transcript skeleton, skill, and commit `f90c76c`. Result: fail. The receiver/member bridge is mostly present, but `w.write` is still semantically unsound because `rgoc` accepts value-position uses that lower to invalid Go due to the real `(int, error)` return signature."
+}
