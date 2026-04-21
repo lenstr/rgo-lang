@@ -1,0 +1,467 @@
+{
+  "milestone": "import-surface",
+  "groupId": "import-surface-cli",
+  "surface": "rgoc CLI + generated Go artifacts",
+  "testedAt": "2026-04-21T00:12:12.535131+00:00",
+  "isolation": {
+    "mode": "serial-only validation",
+    "repoRoot": "/home/lenstr/workspace/personal/hack/rgo-lang",
+    "missionDir": "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7",
+    "evidenceDir": "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli",
+    "reportPath": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/import-surface/user-testing/flows/import-surface-cli.json",
+    "sharedMutableStateAvoided": [
+      "repo worktree",
+      "_build/",
+      ".factory/runtime/",
+      "localhost:3111"
+    ],
+    "temporaryArtifactsRestrictedTo": "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/import-surface/import-surface-cli",
+    "notes": "All project commands executed via nix develop -c ...; negative cases used -o paths inside the evidence directory so output absence could be checked safely."
+  },
+  "toolsUsed": [
+    "tuistory",
+    "nix develop -c dune exec rgoc -- ... -o ...",
+    "nix develop -c gofmt -d ...",
+    "nix develop -c go build -o ... ...",
+    "nix develop -c go vet ..."
+  ],
+  "assertions": [
+    {
+      "id": "VAL-IMPORT-001",
+      "title": "`use net::http` introduces a usable stdlib package namespace",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile the positive namespace fixture through rgoc.",
+          "expected": "Compilation succeeds and writes Go output.",
+          "observed": "Exited 0 and wrote outputs/positive_base.go."
+        },
+        {
+          "action": "Inspect the generated Go and run downstream Go checks.",
+          "expected": "Go output imports net/http and passes gofmt -d, go build, and go vet.",
+          "observed": "Generated Go imports \"net/http\" and contains http.NewServeMux, http.ListenAndServe, http.ResponseWriter, and *http.Request; gofmt -d, go build, and go vet all exited 0."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "import-surface/import-surface-cli/terminal/positive_base_flow.txt",
+          "import-surface/import-surface-cli/terminal/positive_base_flow.png"
+        ],
+        "codeRefs": [
+          "import-surface/import-surface-cli/fixtures/positive_base.rg",
+          "import-surface/import-surface-cli/outputs/positive_base.go"
+        ],
+        "commands": [
+          "nix develop -c dune exec rgoc -- <evidence>/fixtures/positive_base.rg -o <evidence>/outputs/positive_base.go",
+          "nix develop -c gofmt -d <evidence>/outputs/positive_base.go",
+          "nix develop -c go build -o <evidence>/outputs/positive_base.bin <evidence>/outputs/positive_base.go",
+          "nix develop -c go vet <evidence>/outputs/positive_base.go"
+        ],
+        "commandLogs": [
+          "import-surface/import-surface-cli/logs/positive_base_compile.log",
+          "import-surface/import-surface-cli/logs/positive_base_gofmt.log",
+          "import-surface/import-surface-cli/logs/positive_base_gobuild.log",
+          "import-surface/import-surface-cli/logs/positive_base_govet.log"
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-IMPORT-002",
+      "title": "Imported stdlib members stay package-qualified",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Use the qualified positive fixture as the control case.",
+          "expected": "Qualified http:: calls compile.",
+          "observed": "The positive fixture compiled successfully."
+        },
+        {
+          "action": "Compile a fixture that calls new_serve_mux() without the http:: qualifier after use net::http.",
+          "expected": "Compilation fails with an unresolved-name diagnostic and leaves no output file.",
+          "observed": "Exited 1 with `undefined name 'new_serve_mux'`; outputs/unqualified_call.go was not created."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "import-surface/import-surface-cli/terminal/unqualified_call.txt"
+        ],
+        "codeRefs": [
+          "import-surface/import-surface-cli/fixtures/positive_base.rg",
+          "import-surface/import-surface-cli/fixtures/unqualified_call.rg"
+        ],
+        "commands": [
+          "nix develop -c dune exec rgoc -- <evidence>/fixtures/unqualified_call.rg -o <evidence>/outputs/unqualified_call.go"
+        ],
+        "commandLogs": [
+          "import-surface/import-surface-cli/logs/unqualified_call.log"
+        ],
+        "outputChecks": [
+          {
+            "path": "import-surface/import-surface-cli/outputs/unqualified_call.go",
+            "exists": false
+          }
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-IMPORT-003",
+      "title": "Imported stdlib symbols resolve coherently in both type and value positions",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile a fixture that uses http::ResponseWriter and http::Request in a handler signature while also calling http::new_serve_mux and http::listen_and_serve.",
+          "expected": "The same program compiles through rgoc and downstream Go build succeeds.",
+          "observed": "Compilation exited 0 and downstream go build/go vet both exited 0."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "import-surface/import-surface-cli/terminal/positive_base_flow.txt"
+        ],
+        "codeRefs": [
+          "import-surface/import-surface-cli/fixtures/positive_base.rg",
+          "import-surface/import-surface-cli/outputs/positive_base.go"
+        ],
+        "commands": [
+          "nix develop -c dune exec rgoc -- <evidence>/fixtures/positive_base.rg -o <evidence>/outputs/positive_base.go",
+          "nix develop -c go build -o <evidence>/outputs/positive_base.bin <evidence>/outputs/positive_base.go",
+          "nix develop -c go vet <evidence>/outputs/positive_base.go"
+        ],
+        "commandLogs": [
+          "import-surface/import-surface-cli/logs/positive_base_compile.log",
+          "import-surface/import-surface-cli/logs/positive_base_gobuild.log",
+          "import-surface/import-surface-cli/logs/positive_base_govet.log"
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-IMPORT-004",
+      "title": "Missing imports fail with package-aware diagnostics",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile a fixture using http::new_serve_mux/http::listen_and_serve without use net::http.",
+          "expected": "Compilation fails with a package-aware diagnostic and no Go output.",
+          "observed": "Exited 1 with `package 'http' is not imported; add 'use ...::http;' at the top of the file`; outputs/missing_import_call.go was not created."
+        },
+        {
+          "action": "Compile a fixture using http::ResponseWriter and http::Request in type position without the import.",
+          "expected": "Compilation fails with the same package-aware diagnostic and no Go output.",
+          "observed": "Exited 1 with `package 'http' is not imported; add 'use ...::http;' at the top of the file`; outputs/missing_import_type.go was not created."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "import-surface/import-surface-cli/terminal/missing_imports.txt"
+        ],
+        "codeRefs": [
+          "import-surface/import-surface-cli/fixtures/missing_import_call.rg",
+          "import-surface/import-surface-cli/fixtures/missing_import_type.rg"
+        ],
+        "commands": [
+          "nix develop -c dune exec rgoc -- <evidence>/fixtures/missing_import_call.rg -o <evidence>/outputs/missing_import_call.go",
+          "nix develop -c dune exec rgoc -- <evidence>/fixtures/missing_import_type.rg -o <evidence>/outputs/missing_import_type.go"
+        ],
+        "commandLogs": [
+          "import-surface/import-surface-cli/logs/missing_import_call.log",
+          "import-surface/import-surface-cli/logs/missing_import_type.log"
+        ],
+        "outputChecks": [
+          {
+            "path": "import-surface/import-surface-cli/outputs/missing_import_call.go",
+            "exists": false
+          },
+          {
+            "path": "import-surface/import-surface-cli/outputs/missing_import_type.go",
+            "exists": false
+          }
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-IMPORT-005",
+      "title": "Unknown stdlib members fail with member-aware diagnostics",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile a fixture that references http::missing_symbol after a valid use net::http import.",
+          "expected": "Compilation fails with a member-oriented diagnostic and leaves no output file.",
+          "observed": "Exited 1 with `undefined member 'missing_symbol' in imported package 'http'`; outputs/unknown_member.go was not created."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "import-surface/import-surface-cli/terminal/unknown_member.txt"
+        ],
+        "codeRefs": [
+          "import-surface/import-surface-cli/fixtures/unknown_member.rg"
+        ],
+        "commands": [
+          "nix develop -c dune exec rgoc -- <evidence>/fixtures/unknown_member.rg -o <evidence>/outputs/unknown_member.go"
+        ],
+        "commandLogs": [
+          "import-surface/import-surface-cli/logs/unknown_member.log"
+        ],
+        "outputChecks": [
+          {
+            "path": "import-surface/import-surface-cli/outputs/unknown_member.go",
+            "exists": false
+          }
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-IMPORT-006",
+      "title": "Malformed import syntax is rejected cleanly",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile representative malformed imports: single-segment `use http;`, trailing `use net::http::;`, and slash-form `use net/http;`.",
+          "expected": "Each fixture fails deterministically with syntax/import diagnostics and leaves no output file.",
+          "observed": "The single-segment form failed with `malformed import: expected 'use pkg::sub'`; the trailing and slash forms failed with syntax errors; none of the requested output files were created."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "import-surface/import-surface-cli/terminal/malformed_imports.txt"
+        ],
+        "codeRefs": [
+          "import-surface/import-surface-cli/fixtures/malformed_single_segment.rg",
+          "import-surface/import-surface-cli/fixtures/malformed_trailing_colons.rg",
+          "import-surface/import-surface-cli/fixtures/malformed_slash.rg"
+        ],
+        "commands": [
+          "nix develop -c dune exec rgoc -- <evidence>/fixtures/malformed_single_segment.rg -o <evidence>/outputs/malformed_single_segment.go",
+          "nix develop -c dune exec rgoc -- <evidence>/fixtures/malformed_trailing_colons.rg -o <evidence>/outputs/malformed_trailing_colons.go",
+          "nix develop -c dune exec rgoc -- <evidence>/fixtures/malformed_slash.rg -o <evidence>/outputs/malformed_slash.go"
+        ],
+        "commandLogs": [
+          "import-surface/import-surface-cli/logs/malformed_single_segment.log",
+          "import-surface/import-surface-cli/logs/malformed_trailing_colons.log",
+          "import-surface/import-surface-cli/logs/malformed_slash.log"
+        ],
+        "outputChecks": [
+          {
+            "path": "import-surface/import-surface-cli/outputs/malformed_single_segment.go",
+            "exists": false
+          },
+          {
+            "path": "import-surface/import-surface-cli/outputs/malformed_trailing_colons.go",
+            "exists": false
+          },
+          {
+            "path": "import-surface/import-surface-cli/outputs/malformed_slash.go",
+            "exists": false
+          }
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-IMPORT-007",
+      "title": "Imported namespaces do not silently collide with local names",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile a fixture that imports net::http and also declares a local fn http().",
+          "expected": "Compilation fails with an explicit collision diagnostic rather than silently resolving to the wrong namespace.",
+          "observed": "Exited 1 with `import alias 'http' collides with an existing declaration`; outputs/collision_fn.go was not created."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "import-surface/import-surface-cli/terminal/collision.txt"
+        ],
+        "codeRefs": [
+          "import-surface/import-surface-cli/fixtures/collision_fn.rg"
+        ],
+        "commands": [
+          "nix develop -c dune exec rgoc -- <evidence>/fixtures/collision_fn.rg -o <evidence>/outputs/collision_fn.go"
+        ],
+        "commandLogs": [
+          "import-surface/import-surface-cli/logs/collision_fn.log"
+        ],
+        "outputChecks": [
+          {
+            "path": "import-surface/import-surface-cli/outputs/collision_fn.go",
+            "exists": false
+          }
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-IMPORT-008",
+      "title": "Non-stdlib package paths fail explicitly until external packages are implemented",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile a fixture importing github::gin.",
+          "expected": "Compilation fails with an explicit external-package-not-supported diagnostic and no Go output.",
+          "observed": "Exited 1 with `unsupported external package 'github::gin'`; outputs/external_package.go was not created."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "import-surface/import-surface-cli/terminal/external_package.txt"
+        ],
+        "codeRefs": [
+          "import-surface/import-surface-cli/fixtures/external_package.rg"
+        ],
+        "commands": [
+          "nix develop -c dune exec rgoc -- <evidence>/fixtures/external_package.rg -o <evidence>/outputs/external_package.go"
+        ],
+        "commandLogs": [
+          "import-surface/import-surface-cli/logs/external_package.log"
+        ],
+        "outputChecks": [
+          {
+            "path": "import-surface/import-surface-cli/outputs/external_package.go",
+            "exists": false
+          }
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-STDLIB-001",
+      "title": "Stdlib call sites use snake_case while stdlib type names stay PascalCase",
+      "status": "fail",
+      "steps": [
+        {
+          "action": "Compile a representative fixture that combines http::listen_and_serve, http::new_serve_mux, mux.handle_func, http::Request, http::ResponseWriter, and http::ServeMux.",
+          "expected": "Compilation succeeds and the generated Go lowers to http.ListenAndServe, http.NewServeMux, mux.HandleFunc, *http.Request, and http.ResponseWriter.",
+          "observed": "Compilation exited 1 with `no method 'handle_func' on type http::ServeMux`; outputs/positive_bridge.go was not created."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "import-surface/import-surface-cli/terminal/positive_bridge_failure.txt",
+          "import-surface/import-surface-cli/terminal/positive_bridge_failure.png"
+        ],
+        "codeRefs": [
+          "import-surface/import-surface-cli/fixtures/positive_bridge.rg"
+        ],
+        "commands": [
+          "nix develop -c dune exec rgoc -- <evidence>/fixtures/positive_bridge.rg -o <evidence>/outputs/positive_bridge.go"
+        ],
+        "commandLogs": [
+          "import-surface/import-surface-cli/logs/positive_bridge_compile.log"
+        ],
+        "outputChecks": [
+          {
+            "path": "import-surface/import-surface-cli/outputs/positive_bridge.go",
+            "exists": false
+          }
+        ]
+      },
+      "issues": "The directional naming bridge works for package-level functions and PascalCase Request/ResponseWriter types, but mux.handle_func is not implemented on http::ServeMux, so the representative source-level contract cannot be satisfied yet."
+    },
+    {
+      "id": "VAL-STDLIB-002",
+      "title": "Wrong-case stdlib references are rejected",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile a wrong-case callable fixture using http::NewServeMux().",
+          "expected": "Compilation fails with a clear wrong-case missing-symbol diagnostic and no output file.",
+          "observed": "Exited 1 with `wrong case: 'http::NewServeMux' should be 'http::new_serve_mux' ...`; outputs/wrong_case_callable.go was not created."
+        },
+        {
+          "action": "Compile a wrong-case type fixture using http::response_writer/http::request.",
+          "expected": "Compilation fails with a clear wrong-case missing-symbol diagnostic and no output file.",
+          "observed": "Exited 1 with `wrong case: 'http::response_writer' should be 'http::ResponseWriter' ...`; outputs/wrong_case_type.go was not created."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "import-surface/import-surface-cli/terminal/wrong_case_stdlib.txt"
+        ],
+        "codeRefs": [
+          "import-surface/import-surface-cli/fixtures/wrong_case_callable.rg",
+          "import-surface/import-surface-cli/fixtures/wrong_case_type.rg"
+        ],
+        "commands": [
+          "nix develop -c dune exec rgoc -- <evidence>/fixtures/wrong_case_callable.rg -o <evidence>/outputs/wrong_case_callable.go",
+          "nix develop -c dune exec rgoc -- <evidence>/fixtures/wrong_case_type.rg -o <evidence>/outputs/wrong_case_type.go"
+        ],
+        "commandLogs": [
+          "import-surface/import-surface-cli/logs/wrong_case_callable.log",
+          "import-surface/import-surface-cli/logs/wrong_case_type.log"
+        ],
+        "outputChecks": [
+          {
+            "path": "import-surface/import-surface-cli/outputs/wrong_case_callable.go",
+            "exists": false
+          },
+          {
+            "path": "import-surface/import-surface-cli/outputs/wrong_case_type.go",
+            "exists": false
+          }
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-001",
+      "title": "Import, naming, and stdlib type usage compose coherently in one program",
+      "status": "fail",
+      "steps": [
+        {
+          "action": "Compile a single program that imports use net::http and combines package-qualified snake_case calls with PascalCase stdlib types in the same file, including mux.handle_func.",
+          "expected": "Compilation succeeds and generated Go shows the lowered names composing together.",
+          "observed": "Compilation exited 1 with `no method 'handle_func' on type http::ServeMux`; outputs/positive_bridge.go was not created."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "import-surface/import-surface-cli/terminal/positive_bridge_failure.txt"
+        ],
+        "codeRefs": [
+          "import-surface/import-surface-cli/fixtures/positive_bridge.rg"
+        ],
+        "commands": [
+          "nix develop -c dune exec rgoc -- <evidence>/fixtures/positive_bridge.rg -o <evidence>/outputs/positive_bridge.go"
+        ],
+        "commandLogs": [
+          "import-surface/import-surface-cli/logs/positive_bridge_compile.log"
+        ],
+        "outputChecks": [
+          {
+            "path": "import-surface/import-surface-cli/outputs/positive_bridge.go",
+            "exists": false
+          }
+        ]
+      },
+      "issues": "The same program composes package-level net/http names and Request/ResponseWriter types successfully only until mux.handle_func is introduced; at that point rgoc rejects the program because http::ServeMux has no handle_func method."
+    }
+  ],
+  "frictions": [
+    {
+      "description": "Every nix develop invocation printed the flake shell banner and a dirty-tree warning, so gofmt cleanliness had to be confirmed by the absence of any diff after the banner rather than by empty stdout.",
+      "resolved": true,
+      "resolution": "Used the saved gofmt log together with the generated Go file inspection; the log contains only the shell banner/warning and no diff hunks.",
+      "affectedAssertions": [
+        "VAL-IMPORT-001",
+        "VAL-IMPORT-003"
+      ]
+    },
+    {
+      "description": "The tuistory shell session reported `clear: xterm-truecolor: unknown terminal type`, which made initial terminal snapshots noisy.",
+      "resolved": true,
+      "resolution": "Regenerated the terminal snapshots using raw ANSI clear sequences before each log view.",
+      "affectedAssertions": [
+        "VAL-IMPORT-001",
+        "VAL-STDLIB-001",
+        "VAL-CROSS-001"
+      ]
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 11 assertions on the rgoc CLI/generated-Go surface: 9 passed and 2 failed. The failures were VAL-STDLIB-001 and VAL-CROSS-001 because a representative program using mux.handle_func is rejected with `no method 'handle_func' on type http::ServeMux`, while the rest of the import-surface contract behaved as specified."
+}
