@@ -2719,6 +2719,144 @@ fn main() {
     src
   |> ignore
 
+(* ======== Non-consuming call guard suppression tests ======== *)
+
+(* Passing a Drop-managed binding to println does not suppress cleanup *)
+let test_own_non_consuming_println_cleanup () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+struct Resource {
+  pub name: str,
+}
+
+impl Drop for Resource {
+  fn drop(&mut self) {
+    println("drop:" + self.name);
+  }
+}
+
+fn main() {
+  let a = Resource { name: "alpha" };
+  println(a.name);
+  println("still-alive");
+}
+|}
+  in
+  compile_and_check ~expected_output:"alpha\nstill-alive\ndrop:alpha\n" src
+  |> ignore
+
+(* println with the binding itself (not field) still keeps cleanup *)
+let test_own_non_consuming_println_binding () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+trait Display {
+  fn to_str(&self) -> str;
+}
+
+struct Resource {
+  pub name: str,
+}
+
+impl Drop for Resource {
+  fn drop(&mut self) {
+    println("drop:" + self.name);
+  }
+}
+
+impl Display for Resource {
+  fn to_str(&self) -> str {
+    self.name
+  }
+}
+
+fn main() {
+  let a = Resource { name: "alpha" };
+  println(a.to_str());
+  println("still-alive");
+}
+|}
+  in
+  compile_and_check ~expected_output:"alpha\nstill-alive\ndrop:alpha\n" src
+  |> ignore
+
+(* Consuming call still suppresses cleanup guard correctly *)
+let test_own_consuming_call_still_suppresses () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+struct Resource {
+  pub name: str,
+}
+
+impl Drop for Resource {
+  fn drop(&mut self) {
+    println("drop:" + self.name);
+  }
+}
+
+fn consume(r: Resource) {
+  println("consumed:" + r.name);
+}
+
+fn main() {
+  let a = Resource { name: "alpha" };
+  consume(a);
+  println("after-consume");
+}
+|}
+  in
+  compile_and_check
+    ~expected_output:"consumed:alpha\ndrop:alpha\nafter-consume\n" src
+  |> ignore
+
+(* Mixed consuming and non-consuming calls: cleanup fires exactly once *)
+let test_own_mixed_consuming_non_consuming () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+struct Resource {
+  pub name: str,
+}
+
+impl Drop for Resource {
+  fn drop(&mut self) {
+    println("drop:" + self.name);
+  }
+}
+
+fn consume(r: Resource) {
+  println("consumed:" + r.name);
+}
+
+fn main() {
+  let a = Resource { name: "kept" };
+  let b = Resource { name: "given" };
+  println(a.name);
+  consume(b);
+  println(a.name);
+  println("end");
+}
+|}
+  in
+  compile_and_check
+    ~expected_output:"kept\nconsumed:given\ndrop:given\nkept\nend\ndrop:kept\n"
+    src
+  |> ignore
+
 (* ======== Generic ownership path tests (VAL-OWN-010, VAL-OWN-011) ======== *)
 
 (* VAL-OWN-010: Partial move from field via let binding — negative *)
@@ -3422,6 +3560,17 @@ let () =
             test_own_cleanup_byval_return;
           Alcotest.test_case "callee-exit cleanup for by-value params" `Quick
             test_own_cleanup_callee_param;
+        ] );
+      ( "non-consuming-call-guards",
+        [
+          Alcotest.test_case "println does not suppress Drop cleanup" `Quick
+            test_own_non_consuming_println_cleanup;
+          Alcotest.test_case "println with method call keeps cleanup" `Quick
+            test_own_non_consuming_println_binding;
+          Alcotest.test_case "consuming call still suppresses guard" `Quick
+            test_own_consuming_call_still_suppresses;
+          Alcotest.test_case "mixed consuming and non-consuming" `Quick
+            test_own_mixed_consuming_non_consuming;
         ] );
       ( "generic-ownership",
         [

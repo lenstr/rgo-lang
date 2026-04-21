@@ -151,6 +151,9 @@ let lookup_value name env =
   in
   go env.values
 
+let lookup_value_ty name env =
+  match lookup_value name env with Some (ty, _) -> ty | None -> None
+
 (* ---------- AST type -> Go type string ---------- *)
 
 (* Determine if an rgo type is nullable in Go (i.e., has a nil zero value) *)
@@ -2468,25 +2471,64 @@ and gen_repeat env buf indent elem count =
       gen_expr env buf indent CtxExpr count;
       Buffer.add_char buf ')'
 
-(* Ownership: collect identifier names that are consumed as by-value call arguments *)
-and collect_consumed_idents (e : Ast.expr) : string list =
+(* Non-consuming builtins: these calls never take ownership of their arguments *)
+and is_non_consuming_builtin name =
+  match name with
+  | "println" | "print" | "panic" | "sqrt" | "abs" | "to_string" | "len"
+  | "Some" | "Ok" | "Err" | "None" ->
+      true
+  | _ -> false
+
+(* Ownership: collect identifier names that are consumed as by-value call arguments.
+   Only user-defined rgo function/method calls consume ownership;
+   builtins and imported stdlib calls do not. *)
+and collect_consumed_idents env (e : Ast.expr) : string list =
   match e with
-  | ExprCall (_, args) ->
+  | ExprCall (ExprIdent { node = callee; _ }, args)
+    when (not (is_non_consuming_builtin callee)) && SMap.mem callee env.fns ->
       List.filter_map
         (fun arg ->
           match arg with ExprIdent { node = n; _ } -> Some n | _ -> None)
         args
-  | ExprMethodCall (_, _, args) ->
+  | ExprCall (ExprPath _, args) ->
+      (* Associated function calls (Type::method) are user-defined *)
       List.filter_map
         (fun arg ->
           match arg with ExprIdent { node = n; _ } -> Some n | _ -> None)
         args
+  | ExprCall _ -> []
+  | ExprMethodCall (receiver, method_name, args) ->
+      (* Only user-defined methods consume; check impls registry *)
+      let recv_type_name =
+        match receiver with
+        | ExprIdent { node = n; _ } -> (
+            match lookup_value_ty n env with
+            | Some (Ast.TyName { node = tn; _ })
+            | Some (Ast.TyGeneric ({ node = tn; _ }, _)) ->
+                Some tn
+            | _ -> None)
+        | _ -> None
+      in
+      let is_user_method =
+        match recv_type_name with
+        | Some tn -> (
+            match SMap.find_opt tn env.impls with
+            | Some ii -> SMap.mem method_name.Ast.node ii.ii_methods
+            | None -> false)
+        | None -> false
+      in
+      if is_user_method then
+        List.filter_map
+          (fun arg ->
+            match arg with ExprIdent { node = n; _ } -> Some n | _ -> None)
+          args
+      else []
   | _ -> []
 
 (* Ownership: after emitting a statement expression, suppress guards for any
    Drop-type identifiers that were consumed by by-value calls. *)
 and suppress_consumed_guards env buf indent (e : Ast.expr) : unit =
-  let consumed = collect_consumed_idents e in
+  let consumed = collect_consumed_idents env e in
   List.iter
     (fun name ->
       match SMap.find_opt name env.drop_guards with
