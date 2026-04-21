@@ -1,0 +1,226 @@
+{
+  "milestone": "stdlib-surface",
+  "groupId": "stdlib-surface-cli",
+  "surface": "rgoc CLI + generated Go artifacts + local HTTP probe",
+  "testedAt": "2026-04-21T01:32:18.977501+00:00",
+  "isolation": {
+    "mode": "serial-only validation",
+    "repoRoot": "/home/lenstr/workspace/personal/hack/rgo-lang",
+    "missionDir": "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7",
+    "evidenceDir": "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/stdlib-surface/stdlib-surface-cli",
+    "reportPath": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/stdlib-surface/user-testing/flows/stdlib-surface-cli.json",
+    "sharedMutableStateAvoided": [
+      "repo worktree",
+      "_build/",
+      ".factory/runtime/",
+      "localhost:3111"
+    ],
+    "temporaryArtifactsRestrictedTo": "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/stdlib-surface/stdlib-surface-cli",
+    "notes": "All repo commands ran through nix develop -c ... with DUNE_BUILD_DIR isolated under the evidence directory; the generated server bound only to 127.0.0.1:3111."
+  },
+  "toolsUsed": [
+    "nix develop -c env DUNE_BUILD_DIR=... dune exec rgoc -- ... -o ...",
+    "nix develop -c gofmt -d ...",
+    "nix develop -c go build -o ... ...",
+    "nix develop -c go vet ...",
+    "curl"
+  ],
+  "assertions": [
+    {
+      "id": "VAL-STDLIB-001",
+      "title": "Stdlib call sites use snake_case while stdlib type names stay PascalCase",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile a representative fixture that imports net::http, registers mux.handle_func, calls http::new_serve_mux/http::listen_and_serve, and names http::Request/http::ResponseWriter/http::ServeMux in source.",
+          "expected": "rgoc exits 0 and writes Go output.",
+          "observed": "Compilation exited 0 and wrote outputs/stdlib_runtime_positive.go."
+        },
+        {
+          "action": "Inspect the generated Go and run downstream Go checks.",
+          "expected": "Generated Go lowers to http.ListenAndServe, http.NewServeMux, mux.HandleFunc, *http.Request, and http.ResponseWriter; gofmt -d, go build, and go vet all succeed.",
+          "observed": "Generated Go imports \"net/http\" and contains http.ListenAndServe, http.NewServeMux, mux.HandleFunc, *http.Request, http.ResponseWriter, r.Method, r.FormValue, w.WriteHeader, and w.Write; gofmt -d, go build, and go vet all exited 0."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "stdlib-surface/stdlib-surface-cli/terminal/positive_compile_and_go_checks.txt"
+        ],
+        "codeRefs": [
+          "stdlib-surface/stdlib-surface-cli/fixtures/stdlib_runtime_positive.rg",
+          "stdlib-surface/stdlib-surface-cli/outputs/stdlib_runtime_positive.go"
+        ],
+        "commands": [
+          "nix develop -c env DUNE_BUILD_DIR=<evidence>/dune-build dune exec rgoc -- <evidence>/fixtures/stdlib_runtime_positive.rg -o <evidence>/outputs/stdlib_runtime_positive.go",
+          "nix develop -c gofmt -d <evidence>/outputs/stdlib_runtime_positive.go",
+          "nix develop -c go build -o <evidence>/outputs/http-validation-server <evidence>/outputs/stdlib_runtime_positive.go",
+          "nix develop -c go vet <evidence>/outputs/stdlib_runtime_positive.go"
+        ],
+        "commandLogs": [
+          "stdlib-surface/stdlib-surface-cli/logs/stdlib_runtime_positive_compile.log",
+          "stdlib-surface/stdlib-surface-cli/logs/stdlib_runtime_positive_gofmt.log",
+          "stdlib-surface/stdlib-surface-cli/logs/stdlib_runtime_positive_gobuild.log",
+          "stdlib-surface/stdlib-surface-cli/logs/stdlib_runtime_positive_govet.log"
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-STDLIB-003",
+      "title": "Stdlib receiver/member naming works in real handler code",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Build the generated Go server, start it on 127.0.0.1:3111, and probe GET /items.",
+          "expected": "A live request reaches the handler and proves req.method + w.write_header/w.write execute successfully.",
+          "observed": "GET /items returned HTTP 200 with body `items method=GET`."
+        },
+        {
+          "action": "Probe POST /items with form data and then negative method/data paths.",
+          "expected": "POST exercises req.form_value and returns a response derived from the submitted form data; malformed POST and DELETE should still hit the same handler and produce stable 400/405 responses.",
+          "observed": "POST /items with `name=alice` returned HTTP 201 with `created alice via POST`; POST without name returned HTTP 400 with `missing name via POST`; DELETE /items returned HTTP 405 with `unsupported DELETE`."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "stdlib-surface/stdlib-surface-cli/terminal/runtime_requests.txt"
+        ],
+        "codeRefs": [
+          "stdlib-surface/stdlib-surface-cli/fixtures/stdlib_runtime_positive.rg",
+          "stdlib-surface/stdlib-surface-cli/outputs/stdlib_runtime_positive.go",
+          "stdlib-surface/stdlib-surface-cli/outputs/http-validation-server"
+        ],
+        "commands": [
+          "<evidence>/outputs/http-validation-server",
+          "curl -i http://127.0.0.1:3111/items",
+          "curl -i -X POST -d 'name=alice' http://127.0.0.1:3111/items",
+          "curl -i -X POST http://127.0.0.1:3111/items",
+          "curl -i -X DELETE http://127.0.0.1:3111/items"
+        ],
+        "responses": [
+          "stdlib-surface/stdlib-surface-cli/responses/get_items.txt",
+          "stdlib-surface/stdlib-surface-cli/responses/post_items_alice.txt",
+          "stdlib-surface/stdlib-surface-cli/responses/post_items_missing_name.txt",
+          "stdlib-surface/stdlib-surface-cli/responses/delete_items.txt"
+        ],
+        "network": "GET /items -> 200; POST /items name=alice -> 201; POST /items missing name -> 400; DELETE /items -> 405"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-STDLIB-004",
+      "title": "Go-cased receiver members are rejected",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile representative fixtures that use mux.HandleFunc, r.FormValue, r.Method, w.WriteHeader, and w.Write.",
+          "expected": "Each compile fails with a clear wrong-case diagnostic and no generated Go file is written.",
+          "observed": "All five fixtures exited 1 with direct `wrong case` diagnostics naming the required snake_case spelling; no requested output files were created."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "stdlib-surface/stdlib-surface-cli/terminal/wrong_case_receiver_members.txt"
+        ],
+        "codeRefs": [
+          "stdlib-surface/stdlib-surface-cli/fixtures/wrong_case_handle_func.rg",
+          "stdlib-surface/stdlib-surface-cli/fixtures/wrong_case_form_value.rg",
+          "stdlib-surface/stdlib-surface-cli/fixtures/wrong_case_method.rg",
+          "stdlib-surface/stdlib-surface-cli/fixtures/wrong_case_write_header.rg",
+          "stdlib-surface/stdlib-surface-cli/fixtures/wrong_case_write.rg"
+        ],
+        "commands": [
+          "nix develop -c env DUNE_BUILD_DIR=<evidence>/dune-build dune exec rgoc -- <evidence>/fixtures/wrong_case_handle_func.rg -o <evidence>/outputs/wrong_case_handle_func.go",
+          "nix develop -c env DUNE_BUILD_DIR=<evidence>/dune-build dune exec rgoc -- <evidence>/fixtures/wrong_case_form_value.rg -o <evidence>/outputs/wrong_case_form_value.go",
+          "nix develop -c env DUNE_BUILD_DIR=<evidence>/dune-build dune exec rgoc -- <evidence>/fixtures/wrong_case_method.rg -o <evidence>/outputs/wrong_case_method.go",
+          "nix develop -c env DUNE_BUILD_DIR=<evidence>/dune-build dune exec rgoc -- <evidence>/fixtures/wrong_case_write_header.rg -o <evidence>/outputs/wrong_case_write_header.go",
+          "nix develop -c env DUNE_BUILD_DIR=<evidence>/dune-build dune exec rgoc -- <evidence>/fixtures/wrong_case_write.rg -o <evidence>/outputs/wrong_case_write.go"
+        ],
+        "commandLogs": [
+          "stdlib-surface/stdlib-surface-cli/logs/wrong_case_handle_func.log",
+          "stdlib-surface/stdlib-surface-cli/logs/wrong_case_form_value.log",
+          "stdlib-surface/stdlib-surface-cli/logs/wrong_case_method.log",
+          "stdlib-surface/stdlib-surface-cli/logs/wrong_case_write_header.log",
+          "stdlib-surface/stdlib-surface-cli/logs/wrong_case_write.log",
+          "stdlib-surface/stdlib-surface-cli/logs/wrong_case_summary.txt"
+        ],
+        "outputChecks": [
+          {
+            "path": "stdlib-surface/stdlib-surface-cli/outputs/wrong_case_handle_func.go",
+            "exists": false
+          },
+          {
+            "path": "stdlib-surface/stdlib-surface-cli/outputs/wrong_case_form_value.go",
+            "exists": false
+          },
+          {
+            "path": "stdlib-surface/stdlib-surface-cli/outputs/wrong_case_method.go",
+            "exists": false
+          },
+          {
+            "path": "stdlib-surface/stdlib-surface-cli/outputs/wrong_case_write_header.go",
+            "exists": false
+          },
+          {
+            "path": "stdlib-surface/stdlib-surface-cli/outputs/wrong_case_write.go",
+            "exists": false
+          }
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-001",
+      "title": "Import, naming, and stdlib type usage compose coherently in one program",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile a single program that imports use net::http and combines http::listen_and_serve, http::new_serve_mux, mux.handle_func, and source-level http::Request/http::ResponseWriter/http::ServeMux usage.",
+          "expected": "Compilation succeeds and generated Go shows the expected lowered stdlib spellings while preserving the source-level PascalCase type names contract.",
+          "observed": "The combined fixture compiled successfully, built cleanly, and generated Go contains import \"net/http\" together with http.ListenAndServe, http.NewServeMux, mux.HandleFunc, *http.Request, and http.ResponseWriter."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "stdlib-surface/stdlib-surface-cli/terminal/positive_compile_and_go_checks.txt"
+        ],
+        "codeRefs": [
+          "stdlib-surface/stdlib-surface-cli/fixtures/stdlib_runtime_positive.rg",
+          "stdlib-surface/stdlib-surface-cli/outputs/stdlib_runtime_positive.go"
+        ],
+        "commands": [
+          "nix develop -c env DUNE_BUILD_DIR=<evidence>/dune-build dune exec rgoc -- <evidence>/fixtures/stdlib_runtime_positive.rg -o <evidence>/outputs/stdlib_runtime_positive.go",
+          "nix develop -c go build -o <evidence>/outputs/http-validation-server <evidence>/outputs/stdlib_runtime_positive.go",
+          "nix develop -c go vet <evidence>/outputs/stdlib_runtime_positive.go"
+        ],
+        "commandLogs": [
+          "stdlib-surface/stdlib-surface-cli/logs/stdlib_runtime_positive_compile.log",
+          "stdlib-surface/stdlib-surface-cli/logs/stdlib_runtime_positive_gobuild.log",
+          "stdlib-surface/stdlib-surface-cli/logs/stdlib_runtime_positive_govet.log"
+        ]
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [
+    {
+      "description": "Each nix develop invocation prints the flake shell banner, so success logs are non-empty even when gofmt -d and go vet are clean.",
+      "resolved": true,
+      "resolution": "Used saved logs plus generated-Go inspection; the gofmt/vet logs contain only the shell banner and no diff or diagnostic output.",
+      "affectedAssertions": [
+        "VAL-STDLIB-001",
+        "VAL-CROSS-001"
+      ]
+    },
+    {
+      "description": "curl -i includes progress-meter lines in the captured response files, which adds noise ahead of the HTTP status/body evidence.",
+      "resolved": true,
+      "resolution": "Kept the full response captures and evaluated the trailing HTTP status lines and bodies for each request.",
+      "affectedAssertions": [
+        "VAL-STDLIB-003"
+      ]
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 4 assigned assertions on the rgoc CLI/generated-Go/local-HTTP surface: VAL-STDLIB-001 passed, VAL-STDLIB-003 passed, VAL-STDLIB-004 passed, and VAL-CROSS-001 passed. The representative fixture lowered net/http names correctly, downstream gofmt/go build/go vet all succeeded, live requests exercised the handler code paths, and all Go-cased receiver-member negatives failed with direct wrong-case diagnostics and no output files."
+}
