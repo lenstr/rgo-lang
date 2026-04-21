@@ -1,0 +1,25 @@
+{
+  "milestone": "external-package-foundation",
+  "round": 1,
+  "status": "pass",
+  "assertionsSummary": {
+    "total": 0,
+    "passed": 0,
+    "failed": 0,
+    "blocked": 0
+  },
+  "passedAssertions": [],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "appliedUpdates": [],
+  "previousRound": null,
+  "notes": [
+    "No validation-contract assertion IDs are mapped directly to the external-package-foundation milestone because the only completed implementation feature in this milestone, `external-package-foundation-hooks`, has an empty `fulfills` list.",
+    "`validation-state.json` therefore required no status changes, and there were no pending user-surface assertions to dispatch to flow-validator subagents.",
+    "No service startup or teardown was required for this bookkeeping-only milestone because `.factory/services.yaml` only defines the shared HTTP validation server used by other milestones' runtime flows."
+  ],
+  "orchestratorOverride": {
+    "timestamp": "2026-04-21T05:40:00Z",
+    "reason": "External-package-foundation had no fulfills-mapped user-testing assertions, so this validator completed as a bookkeeping-only no-op."
+  }
+}
