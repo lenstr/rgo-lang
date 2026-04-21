@@ -1654,6 +1654,47 @@ let void_binding_tests =
       fail ~expect:"cannot bind result of void expression" void_bind_println );
   ]
 
+(* ======== Void return rejection ======== *)
+
+let void_return_write =
+  {|
+use net::http;
+fn handler(w: http::ResponseWriter, r: http::Request) {
+    return w.write("hello");
+}
+fn main() {
+}
+|}
+
+let void_return_write_header =
+  {|
+use net::http;
+fn handler(w: http::ResponseWriter, r: http::Request) {
+    return w.write_header(200);
+}
+fn main() {
+}
+|}
+
+let void_return_println = {|
+fn main() {
+    return println("hi");
+}
+|}
+
+let void_return_tests =
+  [
+    ( "return w.write(...) rejected",
+      `Quick,
+      fail ~expect:"cannot return void expression" void_return_write );
+    ( "return w.write_header(...) rejected",
+      `Quick,
+      fail ~expect:"cannot return void expression" void_return_write_header );
+    ( "return println(...) rejected",
+      `Quick,
+      fail ~expect:"cannot return void expression" void_return_println );
+  ]
+
 let () =
   Alcotest.run "typecheck"
     [
@@ -1664,4 +1705,5 @@ let () =
       ("receiver-member-positive", receiver_member_positive_tests);
       ("receiver-member-negative", receiver_member_negative_tests);
       ("void-binding", void_binding_tests);
+      ("void-return", void_return_tests);
     ]

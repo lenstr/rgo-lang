@@ -1352,7 +1352,10 @@ and check_return env e_opt =
   (match (env.ret_ty, e_opt) with
   | Some expected, Some e ->
       let actual = check_expr env e in
-      expect_type ~env ~span:(expr_span e) ~expected ~actual
+      (* Reject returning void expressions — they have no value to return *)
+      if actual = TVoid then
+        error_at (expr_span e) "cannot return void expression"
+      else expect_type ~env ~span:(expr_span e) ~expected ~actual
   | Some expected, None ->
       if expected <> TVoid then
         error_at dummy_span "return without value in function returning %s"

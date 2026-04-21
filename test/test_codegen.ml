@@ -2289,6 +2289,32 @@ fn main() {
 |}
     ()
 
+(* Negative: return w.write(...) rejected (void expression in return position) *)
+let test_stdlib_receiver_write_return_position () =
+  compile_expect_error ~expect:"cannot return void expression"
+    {|
+use net::http;
+fn handler(w: http::ResponseWriter, r: http::Request) {
+    return w.write("hello");
+}
+fn main() {
+}
+|}
+    ()
+
+(* Negative: return w.write_header(...) rejected *)
+let test_stdlib_receiver_write_header_return_position () =
+  compile_expect_error ~expect:"cannot return void expression"
+    {|
+use net::http;
+fn handler(w: http::ResponseWriter, r: http::Request) {
+    return w.write_header(200);
+}
+fn main() {
+}
+|}
+    ()
+
 let () =
   Alcotest.run "codegen"
     [
@@ -2522,5 +2548,9 @@ let () =
             test_stdlib_receiver_wrong_case_write;
           Alcotest.test_case "w.write in value position rejected" `Quick
             test_stdlib_receiver_write_value_position;
+          Alcotest.test_case "return w.write(...) rejected" `Quick
+            test_stdlib_receiver_write_return_position;
+          Alcotest.test_case "return w.write_header(...) rejected" `Quick
+            test_stdlib_receiver_write_header_return_position;
         ] );
     ]
