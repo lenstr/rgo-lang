@@ -1,0 +1,58 @@
+{
+  "milestone": "external-package-foundation",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "nix develop -c dune runtest -j 16",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "nix develop -c dune build -j 16",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "nix develop -c dune build @fmt",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "failedFeatures": [
+      "external-package-foundation-hooks"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "external-package-foundation-hooks",
+      "severity": "blocking",
+      "description": "`lib/codegen.ml` still special-cases imported `http::new_serve_mux` in `infer_expr_type`, so codegen retains direct `net/http` knowledge instead of consulting shared interop metadata."
+    },
+    {
+      "featureId": "external-package-foundation-hooks",
+      "severity": "blocking",
+      "description": "`lib/codegen.ml` still hardcodes imported field inference for `Request.method`, so receiver-field typing for foreign symbols is not fully registry-driven."
+    },
+    {
+      "featureId": "external-package-foundation-hooks",
+      "severity": "blocking",
+      "description": "`lib/codegen.ml` still hardcodes imported receiver-method inference for `form_value`, leaving another ad hoc `net/http` branch in codegen."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "skill:compiler-worker",
+      "suggestion": "Clarify whether \"Write tests first\" is mandatory and when `skillFeedback.followedProcedure` may remain true after workers refactor production code before adding tests, so scrutiny can rely on that flag consistently.",
+      "evidence": "The review for `external-package-foundation-hooks` found the session transcript added production refactors before later creating `test/test_interop.ml`, while the worker handoff still reported `followedProcedure: true`; the same mismatch was already observed in earlier import-surface scrutiny.",
+      "isSystemic": true
+    }
+  ],
+  "rejectedObservations": [],
+  "previousRound": null
+}
