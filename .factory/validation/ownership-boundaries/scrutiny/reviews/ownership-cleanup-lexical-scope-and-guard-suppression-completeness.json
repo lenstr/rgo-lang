@@ -1,0 +1,34 @@
+{
+  "featureId": "ownership-cleanup-lexical-scope-and-guard-suppression-completeness",
+  "reviewedAt": "2026-04-22T00:31:13+03:00",
+  "commitId": "06195d5",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The fix correctly addresses the previously reviewed direct nested-block/loop fallthrough cleanup path and imported stdlib non-consuming `ExprPath` call classification, but it still leaves blocking ownership-cleanup holes on important return and loop-exit paths. Because those paths can still skip cleanup or leave moved-value guards armed, the feature does not yet fully resolve the original scrutiny failures.",
+    "issues": [
+      {
+        "file": "lib/codegen.ml",
+        "line": 1054,
+        "severity": "blocking",
+        "description": "The specialized return fast paths for `Ok(...)`, `Err(...)`, `Some(...)`, and `None` bypass the new generic `ExprReturn` logic that emits `emit_all_nested_cleanup` and `suppress_consumed_guards_inline`; the mirrored `gen_final_expr_as_return` fast paths at lines 2037-2077 do the same. As a result, paths such as `return Ok(take(r))`, `return Some(r)`, block-final `Ok(take(r))`, or `return None` from a nested scope can still skip nested-scope cleanup or leave the source guard armed, so the value-producing return-path fix is incomplete for VAL-OWN-006."
+      },
+      {
+        "file": "lib/codegen.ml",
+        "line": 1156,
+        "severity": "blocking",
+        "description": "Loop cleanup depth is recorded as `List.length env.values + 1` before `gen_block_stmts` pushes the loop-body scope, so `emit_loop_cleanup` computes zero scopes to clean for a top-level `break`/`continue` inside the loop body (and only cleans deeper nested scopes when further nested). Because the enclosing block then skips normal scope cleanup on early exit, `Drop` bindings declared in the loop body are not cleaned on `break`/`continue`, so lexical-scope cleanup for loop bodies remains incomplete."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "This handoff again reports `skillFeedback.followedProcedure: true` even though it explicitly documents a tests-first deviation. The skill instruction is clear, but the reporting convention is still being applied inconsistently across ownership fixes.",
+      "evidence": ".factory/skills/compiler-worker/SKILL.md:28 says tests-first deviations must set `followedProcedure` to `false`; /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/handoffs/2026-04-21T21-25-12-483Z__ownership-cleanup-lexical-scope-and-guard-suppression-completeness__6b6fa316-06f6-4f91-9062-7b3d4daff090.json:85-90 records `followedProcedure: true` while listing a `Test-first sequencing` deviation."
+    }
+  ],
+  "addressesFailureFrom": ".factory/validation/ownership-boundaries/scrutiny/reviews/ownership-cleanup-control-flow-and-returns.json; .factory/validation/ownership-boundaries/scrutiny/reviews/ownership-non-consuming-call-guard-suppression.json",
+  "summary": "Reviewed the prior failure reports and synthesis, the fix feature metadata/handoff/transcript skeleton, the compiler-worker skill, shared-state docs, and the relevant diffs in commits `f9226b8` and `06195d5`. The fix does resolve the earlier imported-stdlib guard-suppression problem and the direct nested-block/loop fallthrough cleanup gap, but it still fails review because specialized `Ok`/`Err`/`Some`/`None` return paths and loop `break`/`continue` exits can bypass the new cleanup logic."
+}

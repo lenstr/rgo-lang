@@ -1,0 +1,28 @@
+{
+  "featureId": "ownership-typecheck-receiver-and-pattern-boundaries",
+  "reviewedAt": "2026-04-21T21:31:43+00:00",
+  "commitId": "ccb6ea2863e3d89ded5aa571d69bfe3821a2d929",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "I reviewed the two prior failed reviews, the round-1 synthesis, the fix feature metadata, the worker handoff/transcript skeleton, and commit `ccb6ea2` against the current repository state. The commit does close the narrow concrete-type gap from `ownership-assignment-call-copy-clone-eligibility`: concrete impl methods now carry `mi_consumes_self` and the concrete receiver path consumes non-`Copy` bindings at `lib/typecheck.ml:1075-1080`. It also adds a new enum-pattern guard for non-self user-defined enum matches. However, the fix does not fully resolve the scoped blocking findings because two ownership escape hatches remain in the updated typechecker.",
+    "issues": [
+      {
+        "file": "lib/typecheck.ml",
+        "line": 999,
+        "severity": "blocking",
+        "description": "Consuming `self` receivers are still not enforced for trait-bound generic dispatch. In the `TParam` method-resolution branch (`lib/typecheck.ml:999-1021`), the code checks argument types and returns the substituted result type, but it never consults `tms_self` to call `check_mutability` or `consume_receiver`, unlike the concrete impl branch at `lib/typecheck.ml:1075-1080`. A generic helper such as `fn twice<T: Consume>(x: T) { x.consume(); x.consume(); }` with `trait Consume { fn consume(self); }` would therefore still typecheck, so the original blocking receiver-consumption bug is only fixed for concrete receiver types."
+      },
+      {
+        "file": "lib/typecheck.ml",
+        "line": 1342,
+        "severity": "blocking",
+        "description": "Enum-payload partial-move rejection is still incomplete. `check_pattern_partial_move` leaves the built-in `Result`/`Option` branch as a no-op (`lib/typecheck.ml:1342-1344`), and `check_match` disables the new guard for every `ExprSelf` scrutinee (`lib/typecheck.ml:1376-1379`) even though impl bodies bind `self` as the concrete `self_ty` at `lib/typecheck.ml:2072` and `lib/typecheck.ml:2100`, not as a reference type. As a result, non-`Copy` payloads can still be bound out of `Option`/`Result` matches, and `match self { ... }` inside `&self`/`&mut self` methods can still bind enum payload values without any ownership diagnostic. That means the prior enum-pattern partial-move blocker is not fully closed."
+      }
+    ]
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": ".factory/validation/ownership-boundaries/scrutiny/reviews/ownership-assignment-call-copy-clone-eligibility.json, .factory/validation/ownership-boundaries/scrutiny/reviews/ownership-whole-binding-and-generic-interop-paths.json",
+  "summary": "Fail. Commit `ccb6ea2` fixes consuming `self` for concrete impl methods and adds user-enum pattern checks, but it still leaves trait-bound consuming receivers and some enum-pattern paths (`Option`/`Result` and borrowed `self` matches) outside the new ownership enforcement, so it does not fully resolve the prior blocking scrutiny findings."
+}

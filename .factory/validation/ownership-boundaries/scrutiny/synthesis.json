@@ -1,6 +1,6 @@
 {
   "milestone": "ownership-boundaries",
-  "round": 1,
+  "round": 2,
   "status": "fail",
   "validatorsRun": {
     "test": {
@@ -20,87 +20,45 @@
     }
   },
   "reviewsSummary": {
-    "total": 6,
+    "total": 3,
     "passed": 1,
-    "failed": 5,
+    "failed": 2,
     "failedFeatures": [
-      "ownership-assignment-call-copy-clone-eligibility",
-      "ownership-cleanup-control-flow-and-returns",
-      "ownership-whole-binding-and-generic-interop-paths",
-      "ownership-generic-enum-constructor-substitution",
-      "ownership-non-consuming-call-guard-suppression"
+      "ownership-typecheck-receiver-and-pattern-boundaries",
+      "ownership-cleanup-lexical-scope-and-guard-suppression-completeness"
     ]
   },
   "blockingIssues": [
     {
-      "featureId": "ownership-assignment-call-copy-clone-eligibility",
+      "featureId": "ownership-typecheck-receiver-and-pattern-boundaries",
       "severity": "blocking",
-      "description": "By-value method receivers are not modeled as consuming boundaries, so non-`Copy` bindings can still be reused after `self` method calls."
+      "description": "Consuming `self` receivers are still not enforced for trait-bound generic dispatch, so non-`Copy` bindings can still be reused after by-value trait-method calls."
     },
     {
-      "featureId": "ownership-cleanup-control-flow-and-returns",
+      "featureId": "ownership-typecheck-receiver-and-pattern-boundaries",
       "severity": "blocking",
-      "description": "Drop cleanup is emitted as plain Go `defer`, so bindings declared in nested blocks or loop bodies drop at function exit instead of lexical scope exit."
+      "description": "Enum-payload partial-move rejection is still incomplete because built-in `Option`/`Result` payload bindings and borrowed-`self` match scrutinees bypass the new ownership guard."
     },
     {
-      "featureId": "ownership-cleanup-control-flow-and-returns",
+      "featureId": "ownership-cleanup-lexical-scope-and-guard-suppression-completeness",
       "severity": "blocking",
-      "description": "Guard suppression only handles a subset of consuming expression contexts, so `let x = take(r)`, `return take(r)`, and similar value-producing paths can leave caller cleanup armed after ownership moves."
+      "description": "Specialized `Ok(...)`, `Err(...)`, `Some(...)`, and `None` return fast paths still bypass the new nested cleanup and guard-suppression logic, leaving value-producing return cleanup incomplete."
     },
     {
-      "featureId": "ownership-whole-binding-and-generic-interop-paths",
+      "featureId": "ownership-cleanup-lexical-scope-and-guard-suppression-completeness",
       "severity": "blocking",
-      "description": "The feature's generic enum constructor path still erased concrete type arguments instead of preserving instantiated enum types end-to-end."
-    },
-    {
-      "featureId": "ownership-whole-binding-and-generic-interop-paths",
-      "severity": "blocking",
-      "description": "Whole-binding ownership checks only covered field access; enum payload destructuring in patterns remained unguarded."
-    },
-    {
-      "featureId": "ownership-generic-enum-constructor-substitution",
-      "severity": "blocking",
-      "description": "Generic enum constructor inference accepts conflicting payloads when the same type parameter appears multiple times, inferring from the first occurrence instead of rejecting mismatches."
-    },
-    {
-      "featureId": "ownership-generic-enum-constructor-substitution",
-      "severity": "blocking",
-      "description": "Codegen preserves direct `T` payloads only, so nested generic payload instantiations can fall back to `any` instead of retaining concrete types."
-    },
-    {
-      "featureId": "ownership-non-consuming-call-guard-suppression",
-      "severity": "blocking",
-      "description": "Imported stdlib package calls are still treated as consuming `ExprPath` calls in guard suppression, so non-consuming `http::...` calls can still suppress Drop cleanup incorrectly."
+      "description": "Loop `break`/`continue` cleanup depth is still off, so `Drop` bindings declared in loop bodies can skip cleanup on those early exits."
     }
   ],
   "appliedUpdates": [],
   "suggestedGuidanceUpdates": [
     {
       "target": "skill:compiler-worker",
-      "suggestion": "Clarify when implementation-first work is acceptable and how `skillFeedback.followedProcedure` should be reported, especially around the current tests-first rule.",
-      "evidence": "Five ownership-boundaries reviews observed mismatches between `.factory/skills/compiler-worker/SKILL.md`'s `Write tests first` guidance and reported procedure status: sessions `c992798b-ac65-415b-be61-4f97e37a6c4c`, `a86d1a79-5d6e-4014-bc8a-5c5d872a9c32`, `990b4c0f-767f-4981-a7c1-bea3f069729d`, and `5e0a2f04-e4ab-417d-8df9-d514e79e8557` edited production code before tests while still reporting `followedProcedure: true`, whereas session `419a7d9e-aca8-4610-8d18-a09488dc7593` reported `followedProcedure: false` for a similarly implementation-first ownership/codegen fix.",
+      "suggestion": "Clarify and enforce `skillFeedback.followedProcedure` reporting when a handoff explicitly records a tests-first or other documented skill deviation.",
+      "evidence": "The review for `ownership-cleanup-lexical-scope-and-guard-suppression-completeness` again found a handoff that set `followedProcedure: true` while also recording a `Test-first sequencing` deviation, repeating the same reporting ambiguity already seen in round 1.",
       "isSystemic": true
-    },
-    {
-      "target": "skill:compiler-worker",
-      "suggestion": "Make the ownership-feature validation requirement explicit that compile-time ownership changes should exercise both a negative compile path and a positive runtime path, and require `followedProcedure` to be false when one half is intentionally skipped.",
-      "evidence": "The review for `ownership-cleanup-control-flow-and-returns` found only positive runtime cleanup coverage even though `.factory/skills/compiler-worker/SKILL.md` expects ownership-sensitive work to include both a negative compile path and a positive runtime path, while the handoff still reported `followedProcedure: true`.",
-      "isSystemic": false
     }
   ],
-  "rejectedObservations": [
-    {
-      "observation": "Feature metadata for `ownership-whole-binding-and-generic-interop-paths` mixes generic-enum scope with `fulfills: [VAL-OWN-010]` only.",
-      "reason": "Mission-planning ambiguity rather than an AGENTS.md, skill, library, or services update; better handled when the orchestrator creates follow-up fixes."
-    },
-    {
-      "observation": "Document the pre-existing generic-enum constructor gap in the compiler-worker skill.",
-      "reason": "Stale and feature-specific: later ownership work already changed this area, so preserving a temporary gap in shared guidance would now be misleading."
-    },
-    {
-      "observation": "Change shared guidance because `.factory/runtime/non-consuming-call.go` was left behind.",
-      "reason": "The existing compiler-worker skill already requires cleanup of disposable runtime artifacts, so this was a worker-specific deviation rather than a missing shared-state rule."
-    }
-  ],
-  "previousRound": null
+  "rejectedObservations": [],
+  "previousRound": ".factory/validation/ownership-boundaries/scrutiny/synthesis.round1.json"
 }
