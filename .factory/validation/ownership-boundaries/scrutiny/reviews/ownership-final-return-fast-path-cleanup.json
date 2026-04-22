@@ -1,0 +1,21 @@
+{
+  "featureId": "ownership-final-return-fast-path-cleanup",
+  "reviewedAt": "2026-04-22T12:46:53+03:00",
+  "commitId": "0290407",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The rerun fix fully addresses the prior blocking gap. Compared with the failed `0129357` implementation, the final-expression `Ok(...)`, `Err(...)`, and `Some(...)` branches in `gen_final_expr_as_return` now route through the same `emit_return_cleanup` flow used by explicit returns (`lib/codegen.ml:2158`, `2178`, `2207`), the final-expression `None` and bare-identifier paths still emit nested cleanup (`lib/codegen.ml:2218-2237`), and the generic final-expression fallback now also uses `emit_return_cleanup` (`lib/codegen.ml:2268`). The added ownership codegen tests cover the previously missing final-expression guard-suppression and nested-cleanup cases (`test/test_codegen_ownership.ml:1940-1954`). I did not find any remaining high-confidence correctness bug in the combined original-plus-fix behavior for the reviewed return/loop cleanup paths.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The compiler-worker skill still says ownership-sensitive work must record one negative compile path plus one positive runtime path, but this handoff reports `followedProcedure: true` while documenting only positive compile/runtime validation for the feature.",
+      "evidence": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/skills/compiler-worker/SKILL.md:25 requires a negative compile path and a positive runtime path for ownership work; /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/handoffs/2026-04-22T09-39-37-341Z__ownership-final-return-fast-path-cleanup__1c800d1e-aa59-403d-9b1d-ef941ce48ab1.json:31-46 lists only positive fixture compile/run commands, and :98 records `\"followedProcedure\": true`."
+    }
+  ],
+  "addressesFailureFrom": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/ownership-boundaries/scrutiny/reviews/ownership-return-fast-path-and-loop-exit-cleanup.json",
+  "summary": "Reviewed the prior failed review, the original failed feature diff (`0129357`), the fix feature code diff (`a4ff08f`), the follow-up handoff commit (`0290407`), the fix transcript skeleton, the compiler-worker skill, and the shared-state docs. Result: pass. The final-expression specialized return lowering now matches the explicit-return cleanup/guard-suppression behavior, the earlier loop-exit cleanup fix remains intact, and I found no remaining blocking ownership-cleanup issue in the combined behavior."
+}

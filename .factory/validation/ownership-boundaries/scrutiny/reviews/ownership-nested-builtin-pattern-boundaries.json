@@ -1,0 +1,28 @@
+{
+  "featureId": "ownership-nested-builtin-pattern-boundaries",
+  "reviewedAt": "2026-04-22T12:45:31+03:00",
+  "commitId": "2b33da7",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "I reviewed the prior failed review, both feature diffs (`769f2b0` and `2b33da7`), the fix handoff, the fix worker transcript skeleton, and the current typecheck/codegen paths. The fix does close the original blocking ownership gap: nested built-in `Option`/`Result` payload bindings that would partially move non-`Copy` owned values are now rejected by the recursive `is_destructure_move_type` check. However, the combined implementation still has a remaining correctness bug: nested built-in patterns with Copy payloads are accepted by typecheck, but codegen still only binds flat `Option`/`Result` payload patterns, so accepted nested bindings can lower to Go with undefined identifiers.",
+    "issues": [
+      {
+        "file": "lib/codegen.ml",
+        "line": 2329,
+        "severity": "blocking",
+        "description": "Nested built-in `Option`/`Result` patterns that remain legal after the ownership fix still do not lower correctly. `bind_pattern` in `lib/typecheck.ml:1461-1479` recursively introduces nested built-in bindings, and `check_pattern_partial_move` in `lib/typecheck.ml:1377-1384` now rejects only the non-`Copy` nested cases, so patterns such as `Option::Some(Option::Some(n))` or `Result::Ok(Option::Some(n))` with Copy payloads remain accepted. But `gen_result_pattern_binding` (`lib/codegen.ml:2327-2336`), `gen_option_pattern_binding` (`lib/codegen.ml:2338-2350`), and `env_with_option_binding` (`lib/codegen.ml:2354-2360`) only handle `PatBind` or a single flat tuple payload, emitting no binding for nested `PatTuple` payloads. The worker transcript explicitly notes that a nested Copy case compiled and produced Go where `inner` was referenced without ever being defined, and the fix added only negative typecheck tests, not a positive nested codegen check. This leaves accepted nested built-in match arms able to emit broken Go, so the combined original+fix behavior is still not fully correct."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The fix worker again reported `skillFeedback.followedProcedure: true` even though the transcript skeleton shows the compiler-worker skill's tests-first step was not followed literally; the worker ran baseline tests, explored the code, and reasoned through the implementation before adding tracked tests.",
+      "evidence": "`compiler-worker/SKILL.md` step 3 says to write tests first. In the fix transcript skeleton for session `2154a5d5-331a-4ac9-9c12-93647b7db9f6`, the worker says \"Now let me run the baseline tests and explore the current ownership checking code\" and later only after substantial investigation says \"Now let me implement the fix\" / plans test additions. The handoff file `.../handoffs/2026-04-22T06-15-40-456Z__ownership-nested-builtin-pattern-boundaries__2154a5d5-331a-4ac9-9c12-93647b7db9f6.json` still records `skillFeedback.followedProcedure = true` with no deviations."
+    }
+  ],
+  "addressesFailureFrom": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/ownership-boundaries/scrutiny/reviews/ownership-trait-dispatch-and-builtin-pattern-boundaries.json",
+  "summary": "Fail. The fix does address the prior blocking ownership issue for nested non-`Copy` built-in `Option`/`Result` payload moves, but accepted nested built-in patterns with Copy payloads still lower through flat-only codegen helpers and can emit invalid Go with missing bindings. Shared-state note: the worker again marked the compiler-worker procedure as followed despite the transcript showing a tests-later workflow."
+}
