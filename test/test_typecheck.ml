@@ -2606,6 +2606,82 @@ impl Wrapper {
 }
 |}
 
+(* VAL-OWN-008: Post-return reuse of a non-Copy binding is rejected *)
+let own_return_move_negative =
+  {|
+struct Resource {
+  pub name: str,
+}
+
+fn make() -> Resource {
+  let r = Resource { name: "moved" };
+  return r;
+  println(r.name);
+}
+
+fn main() {
+  let owned = make();
+  println(owned.name);
+}
+|}
+
+(* VAL-OWN-008: Post-return assignment reuse of a non-Copy binding is rejected *)
+let own_return_move_assign_negative =
+  {|
+struct Resource {
+  pub name: str,
+}
+
+fn make() -> Resource {
+  let r = Resource { name: "moved" };
+  return r;
+  let b = r;
+  println(b.name);
+}
+
+fn main() {
+  let owned = make();
+  println(owned.name);
+}
+|}
+
+(* VAL-OWN-008: Post-return call reuse of a non-Copy binding is rejected *)
+let own_return_move_call_negative =
+  {|
+struct Resource {
+  pub name: str,
+}
+
+fn consume(r: Resource) {
+  println(r.name);
+}
+
+fn make() -> Resource {
+  let r = Resource { name: "moved" };
+  return r;
+  consume(r);
+}
+
+fn main() {
+  let owned = make();
+  println(owned.name);
+}
+|}
+
+(* VAL-OWN-008: Returning a Copy binding does not block later use *)
+let own_return_copy_positive =
+  {|
+fn identity(x: i64) -> i64 {
+  return x;
+  x
+}
+
+fn main() {
+  let y = identity(42);
+  println(y);
+}
+|}
+
 let ownership_positive_tests =
   [
     ("copy i64 survives assignment", `Quick, pass own_copy_assign_positive);
@@ -2656,6 +2732,9 @@ let ownership_positive_tests =
     ( "Option with non-Copy payload wildcard is fine",
       `Quick,
       pass own_option_wildcard_pattern_positive );
+    ( "returning Copy binding does not block later use",
+      `Quick,
+      pass own_return_copy_positive );
   ]
 
 let ownership_negative_tests =
@@ -2748,6 +2827,15 @@ let ownership_negative_tests =
       `Quick,
       fail ~expect:"partial moves are not supported"
         own_self_match_enum_payload_negative );
+    ( "post-return reuse of moved binding rejected",
+      `Quick,
+      fail ~expect:"use of moved value" own_return_move_negative );
+    ( "post-return assign reuse of moved binding rejected",
+      `Quick,
+      fail ~expect:"use of moved value" own_return_move_assign_negative );
+    ( "post-return call reuse of moved binding rejected",
+      `Quick,
+      fail ~expect:"use of moved value" own_return_move_call_negative );
   ]
 
 let () =

@@ -1577,12 +1577,17 @@ and bind_let_pattern env ty is_mut (p : pat) : env =
 
 and check_return env e_opt =
   (match (env.ret_ty, e_opt) with
-  | Some expected, Some e ->
+  | Some expected, Some e -> (
       let actual = check_expr env e in
       (* Reject returning void expressions — they have no value to return *)
       if actual = TVoid then
         error_at (expr_span e) "cannot return void expression"
-      else expect_type ~env ~span:(expr_span e) ~expected ~actual
+      else expect_type ~env ~span:(expr_span e) ~expected ~actual;
+      (* Ownership: returning a non-Copy binding by value marks it moved so
+         any later use in the same scope is diagnosed as use-after-move. *)
+      match e with
+      | ExprIdent name -> consume_if_non_copy env name.span name.node actual
+      | _ -> ())
   | Some expected, None ->
       if expected <> TVoid then
         error_at dummy_span "return without value in function returning %s"
