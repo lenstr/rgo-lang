@@ -1,0 +1,22 @@
+{
+  "featureId": "ownership-recursive-builtin-pattern-codegen-fallbacks",
+  "reviewedAt": "2026-04-22T15:55:51+03:00",
+  "commitId": "764f697",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "I reviewed the prior failed review, both feature handoffs, the fix transcript skeleton, both feature diffs (`d8704f6` and `764f697`), the current codegen/typecheck paths, and a targeted three-level nested `Option` compile. `764f697` does fix the one-level wildcard/default-fallback gaps called out in the earlier review, but the implementation is still not fully recursive: typecheck still accepts deeper built-in nesting, while codegen still only unwraps one inner built-in layer and falls back to generated panic paths for legal deeper matches.",
+    "issues": [
+      {
+        "file": "lib/codegen.ml",
+        "line": 2383,
+        "severity": "blocking",
+        "description": "`extract_inner_builtin_pat` still peels only a single inner built-in layer, and all nested bind/wildcard branches only accept the exact one-level shapes at `lib/codegen.ml:2434-2449`, `2497-2514`, `2596-2612`, `2656-2667`, `2680-2687`, `2729-2747`, `2801-2814`, and `2832-2841`. Meanwhile `bind_pattern` in `lib/typecheck.ml:1467-1476` remains recursively permissive for built-in `Option`/`Result` patterns, so deeper legal Copy-payload matches are still accepted. A concrete repro compiled successfully today: `Option::Some(Option::Some(Option::Some(v))) => println(v), _ => println(\"fallback\")` lowered to Go containing `panic(\"unsupported nested pattern\")` inside the generated inner branch instead of recursively binding `v` or reaching the fallback arm. That means the fix still does not satisfy the feature's requirement that every accepted nested built-in Copy-payload pattern lower without generated panic paths."
+      }
+    ]
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/ownership-boundaries/scrutiny/reviews/ownership-nested-builtin-pattern-codegen-bindings.json",
+  "summary": "Fail. The fix commit addresses the prior one-level wildcard/default-fallback bug, but built-in pattern codegen is still not fully recursive: deeper accepted nested `Option`/`Result` patterns still lower to generated `panic(\"unsupported nested pattern\")` paths, so the original failure is only partially resolved."
+}
