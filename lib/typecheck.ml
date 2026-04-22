@@ -701,6 +701,15 @@ and check_fn_args ~env:_ ~span ~name expected actual =
   let sig_tparams = List.fold_left collect_tparams [] expected in
   List.iter2
     (fun exp act ->
+      (* Reject void-valued expressions passed where a callable is expected.
+         Without this pre-check, TVoid would wildcard-match TFn through
+         non-strict types_compatible and silently accept void arguments. *)
+      (match (exp, act) with
+      | TFn _, TVoid ->
+          error_at span
+            "not callable: expected %s, but got non-callable type %s"
+            (show_ty exp) (show_ty act)
+      | _ -> ());
       if not (types_compatible ~type_params:sig_tparams exp act) then
         (* When a callback parameter expects a function type but the
            actual argument is not callable, give a direct "not callable"

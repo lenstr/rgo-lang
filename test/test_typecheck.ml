@@ -3037,6 +3037,18 @@ fn main() {
 }
 |}
 
+(* VAL-CALLBACK-005: Non-callable void-valued expression.  Passing a void
+   expression like println("oops") where a handler callback is expected must
+   be rejected rather than silently accepted through TVoid compatibility. *)
+let callback_non_callable_void_negative =
+  {|
+use net::http;
+fn main() {
+    let mux = http::new_serve_mux();
+    mux.handle_func("/items", println("oops"));
+}
+|}
+
 (* VAL-CALLBACK-007: Multiple registrations of zero-capture anonymous handler *)
 let callback_anonymous_handler_reuse =
   {|
@@ -3098,6 +3110,9 @@ let callback_negative_tests =
     ( "non-callable struct (VAL-CALLBACK-005)",
       `Quick,
       fail ~expect:"not callable" callback_non_callable_struct_negative );
+    ( "non-callable void expression (VAL-CALLBACK-005)",
+      `Quick,
+      fail ~expect:"not callable" callback_non_callable_void_negative );
     ( "capturing anonymous handler rejected (VAL-CALLBACK-003)",
       `Quick,
       fail ~expect:"undefined" callback_capturing_lambda_negative );
