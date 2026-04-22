@@ -2981,6 +2981,43 @@ fn main() {
     "has second HandleFunc" true
     (contains go "mux.HandleFunc(\"/other\",")
 
+(* Typed non-void lambda lowers final expression with return *)
+let test_typed_nonvoid_lambda_positive () =
+  let src =
+    {|
+fn main() {
+    let add = |a: i32, b: i32| -> i32 {
+        a + b
+    };
+    println(add(1, 2));
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"3\n" src in
+  Alcotest.(check bool)
+    "has func literal with return" true
+    (contains go "return a + b")
+
+(* Typed non-void lambda with if expression final arm returns correctly *)
+let test_typed_nonvoid_lambda_if_final () =
+  let src =
+    {|
+fn main() {
+    let max = |a: i32, b: i32| -> i32 {
+        if a > b {
+            a
+        } else {
+            b
+        }
+    };
+    println(max(5, 3));
+    println(max(2, 7));
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"5\n7\n" src in
+  Alcotest.(check bool) "has return in if arm" true (contains go "return a")
+
 let test_module_level_let () =
   let src = {|
 let counter: i64 = 0;
@@ -3607,6 +3644,10 @@ let () =
             test_callback_capturing_lambda_rejected;
           Alcotest.test_case "anonymous handler reuse" `Quick
             test_callback_anonymous_handler_reuse;
+          Alcotest.test_case "typed non-void lambda lowers with return" `Quick
+            test_typed_nonvoid_lambda_positive;
+          Alcotest.test_case "typed non-void lambda if final arm returns" `Quick
+            test_typed_nonvoid_lambda_if_final;
         ] );
       ( "module-level-let",
         [

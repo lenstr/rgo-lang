@@ -1424,7 +1424,15 @@ let rec gen_expr env buf indent (ctx : expr_ctx) (e : Ast.expr) : unit =
           ret_ty = (match ret_ty with Some _ -> ret_ty | None -> env.ret_ty);
         }
       in
-      gen_block_stmts inner buf (indent ^ "\t") body;
+      let is_nonvoid =
+        match ret_ty with
+        | Some (TyName { node = "void"; _ }) -> false
+        | Some _ -> true
+        | None -> false
+      in
+      if is_nonvoid then
+        gen_function_body inner buf (indent ^ "\t") body inner.ret_ty
+      else gen_block_stmts inner buf (indent ^ "\t") body;
       Buffer.add_string buf indent;
       Buffer.add_char buf '}'
 
@@ -4170,6 +4178,49 @@ and gen_question_stmt env buf indent e =
       Printf.bprintf buf "%s_ = %s" indent tmp_val
   | _ -> gen_expr env buf indent CtxStmt (ExprQuestion e)
 
+and gen_function_body env buf indent body _ret_ty =
+  let inner = push_scope ~is_function:true env in
+  let has_return_type =
+    match env.ret_ty with
+    | None -> false
+    | Some (TyName { node = "void"; _ }) -> false
+    | _ -> true
+  in
+  let fold_stmts env stmts =
+    List.fold_left
+      (fun env s ->
+        let needs_stmt_indent =
+          match s with
+          | StmtExpr (ExprReturn _ | ExprBreak | ExprContinue) -> false
+          | _ -> true
+        in
+        if needs_stmt_indent then Buffer.add_string buf indent;
+        let env = gen_stmt env buf indent s in
+        Buffer.add_char buf '\n';
+        env)
+      env stmts
+  in
+  match body.final_expr with
+  | Some e ->
+      let inner = fold_stmts inner body.stmts in
+      gen_final_expr_as_return inner buf indent e
+  | None ->
+      (* Check if last stmt is an expr that should be returned *)
+      let stmts = body.stmts in
+      let n = List.length stmts in
+      if has_return_type && n > 0 then begin
+        let front = List.filteri (fun i _ -> i < n - 1) stmts in
+        let last = List.nth stmts (n - 1) in
+        let inner = fold_stmts inner front in
+        match last with
+        | StmtExpr e -> gen_final_expr_as_return inner buf indent e
+        | s ->
+            Buffer.add_string buf indent;
+            ignore (gen_stmt inner buf indent s);
+            Buffer.add_char buf '\n'
+      end
+      else ignore (fold_stmts inner stmts)
+
 (* ---------- top-level items ---------- *)
 
 let rec gen_fn_decl env buf (fd : fn_decl) =
@@ -4221,49 +4272,7 @@ let rec gen_fn_decl env buf (fd : fn_decl) =
   gen_fn_body fn_env buf fd.fn_body fd.fn_ret;
   Buffer.add_string buf "}\n"
 
-and gen_fn_body env buf body _ret_ty =
-  let indent = "\t" in
-  let inner = push_scope ~is_function:true env in
-  let has_return_type =
-    match env.ret_ty with
-    | None -> false
-    | Some (TyName { node = "void"; _ }) -> false
-    | _ -> true
-  in
-  let fold_stmts env stmts =
-    List.fold_left
-      (fun env s ->
-        let needs_stmt_indent =
-          match s with
-          | StmtExpr (ExprReturn _ | ExprBreak | ExprContinue) -> false
-          | _ -> true
-        in
-        if needs_stmt_indent then Buffer.add_string buf indent;
-        let env = gen_stmt env buf indent s in
-        Buffer.add_char buf '\n';
-        env)
-      env stmts
-  in
-  match body.final_expr with
-  | Some e ->
-      let inner = fold_stmts inner body.stmts in
-      gen_final_expr_as_return inner buf indent e
-  | None ->
-      (* Check if last stmt is an expr that should be returned *)
-      let stmts = body.stmts in
-      let n = List.length stmts in
-      if has_return_type && n > 0 then begin
-        let front = List.filteri (fun i _ -> i < n - 1) stmts in
-        let last = List.nth stmts (n - 1) in
-        let inner = fold_stmts inner front in
-        match last with
-        | StmtExpr e -> gen_final_expr_as_return inner buf indent e
-        | s ->
-            Buffer.add_string buf indent;
-            ignore (gen_stmt inner buf indent s);
-            Buffer.add_char buf '\n'
-      end
-      else ignore (fold_stmts inner stmts)
+and gen_fn_body env buf body ret_ty = gen_function_body env buf "\t" body ret_ty
 
 and gen_struct_decl env buf s_name s_generics s_fields =
   let generics = go_generics_decl s_generics in
