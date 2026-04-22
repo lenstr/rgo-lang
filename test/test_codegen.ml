@@ -985,6 +985,36 @@ fn main() {
 
 (* ---------- Array literal tests ---------- *)
 
+let test_result_variable_match_shadowing_stmt () =
+  let src =
+    {|
+fn get_result(x: i64) -> Result<i64, str> {
+    if x > 0 {
+        Ok(x)
+    } else {
+        Err("negative")
+    }
+}
+
+fn main() {
+    let r = get_result(42);
+    {
+        let r = get_result(-1);
+        match r {
+            Result::Ok(v) => println(v),
+            Result::Err(e) => println(e),
+        }
+    }
+    match r {
+        Result::Ok(v) => println(v),
+        Result::Err(e) => println(e),
+    }
+}
+|}
+  in
+  let _go = compile_and_check ~expected_output:"negative\n42\n" src in
+  ()
+
 let test_array_literal () =
   let src = {|
 fn main() {
@@ -3199,6 +3229,8 @@ let () =
             test_result_variable_match_err_stmt;
           Alcotest.test_case "result variable match expr" `Quick
             test_result_variable_match_expr;
+          Alcotest.test_case "result variable match shadowing stmt" `Quick
+            test_result_variable_match_shadowing_stmt;
         ] );
       ( "question-mark",
         [

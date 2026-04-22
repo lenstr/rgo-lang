@@ -3841,7 +3841,10 @@ and gen_stmt env buf indent (s : Ast.stmt) : cg_env =
       Buffer.truncate buf (Buffer.length buf - String.length indent);
       let outer_scope_drops = env.scope_drops in
       let outer_values = env.values in
+      let outer_result_decomps = env.result_decomps in
       let inner = push_scope ~is_function:false env in
+      let block_indent = indent ^ "\t" in
+      Printf.bprintf buf "%s{\n" indent;
       let inner =
         List.fold_left
           (fun env s ->
@@ -3850,8 +3853,8 @@ and gen_stmt env buf indent (s : Ast.stmt) : cg_env =
               | StmtExpr (ExprReturn _ | ExprBreak | ExprContinue) -> false
               | _ -> true
             in
-            if needs_stmt_indent then Buffer.add_string buf indent;
-            let env = gen_stmt env buf indent s in
+            if needs_stmt_indent then Buffer.add_string buf block_indent;
+            let env = gen_stmt env buf block_indent s in
             Buffer.add_char buf '\n';
             env)
           inner blk.stmts
@@ -3872,24 +3875,32 @@ and gen_stmt env buf indent (s : Ast.stmt) : cg_env =
             | _ -> true
           in
           if contains_question e then begin
-            let e' = hoist_question_exprs inner buf indent e in
-            if needs_indent then Buffer.add_string buf indent;
-            gen_expr inner buf indent CtxStmt e';
+            let e' = hoist_question_exprs inner buf block_indent e in
+            if needs_indent then Buffer.add_string buf block_indent;
+            gen_expr inner buf block_indent CtxStmt e';
             Buffer.add_char buf '\n'
           end
           else begin
-            if needs_indent then Buffer.add_string buf indent;
-            gen_expr inner buf indent CtxStmt e;
+            if needs_indent then Buffer.add_string buf block_indent;
+            gen_expr inner buf block_indent CtxStmt e;
             Buffer.add_char buf '\n'
           end;
-          if not ends_with_early_exit then emit_scope_cleanup inner buf indent
+          if not ends_with_early_exit then
+            emit_scope_cleanup inner buf block_indent
       | None ->
-          if not ends_with_early_exit then emit_scope_cleanup inner buf indent);
+          if not ends_with_early_exit then
+            emit_scope_cleanup inner buf block_indent);
+      Printf.bprintf buf "%s}\n" indent;
       suppress_consumed_guards env buf indent e;
       (* Restore outer scope, but keep inner scope's updates to
          drop_guards (which may have been suppressed by inner moves)
          and shared mutable state. *)
-      { inner with scope_drops = outer_scope_drops; values = outer_values }
+      {
+        inner with
+        scope_drops = outer_scope_drops;
+        values = outer_values;
+        result_decomps = outer_result_decomps;
+      }
   | StmtExpr e ->
       if contains_question e then begin
         let e' = hoist_question_exprs env buf indent e in
