@@ -1,0 +1,300 @@
+{
+  "surface": "rgoc CLI + generated Go ownership flows",
+  "group": "ownership-cleanup",
+  "status": "fail",
+  "toolsUsed": [
+    "rgoc CLI",
+    "gofmt",
+    "go build",
+    "go vet",
+    "go run"
+  ],
+  "assertionResults": [
+    {
+      "id": "VAL-OWN-005",
+      "status": "pass",
+      "summary": "normal_exit: exact stdout verified as 'alive:first\\nalive:second\\nalive:third\\ndrop:third\\ndrop:second\\ndrop:first\\n'",
+      "evidence": [
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-005/normal_exit.rg",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-005/normal_exit-rgoc.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-005/normal_exit-rgoc.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-005/normal_exit.go",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-005/normal_exit-gofmt.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-005/normal_exit-gofmt.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-005/normal_exit-go_build.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-005/normal_exit-go_build.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-005/normal_exit.bin",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-005/normal_exit-go_vet.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-005/normal_exit-go_vet.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-005/normal_exit-go_run.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-005/normal_exit-go_run.stderr.log"
+      ],
+      "commands": [
+        {
+          "command": "nix develop -c dune exec rgoc -- /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-005/normal_exit.rg -o /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-005/normal_exit.go",
+          "exitCode": 0,
+          "observation": "compile succeeded and generated normal_exit.go"
+        },
+        {
+          "command": "nix develop -c gofmt -d /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-005/normal_exit.go",
+          "exitCode": 0,
+          "observation": "gofmt -d was clean"
+        },
+        {
+          "command": "nix develop -c go build -o /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-005/normal_exit.bin /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-005/normal_exit.go",
+          "exitCode": 0,
+          "observation": "go build succeeded and wrote normal_exit.bin"
+        },
+        {
+          "command": "nix develop -c go vet /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-005/normal_exit.go",
+          "exitCode": 0,
+          "observation": "go vet succeeded"
+        },
+        {
+          "command": "nix develop -c go run /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-005/normal_exit.go",
+          "exitCode": 0,
+          "observation": "go run matched expected stdout exactly"
+        }
+      ]
+    },
+    {
+      "id": "VAL-OWN-006",
+      "status": "pass",
+      "summary": "early_return: exact stdout verified as 'before-return\\ndrop:second\\ndrop:first\\n42\\n' ; nested_question: exact stdout verified as 'drop:mid\\ndrop:outer\\ndone\\n'",
+      "evidence": [
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/early_return.rg",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/early_return-rgoc.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/early_return-rgoc.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/early_return.go",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/early_return-gofmt.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/early_return-gofmt.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/early_return-go_build.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/early_return-go_build.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/early_return.bin",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/early_return-go_vet.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/early_return-go_vet.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/early_return-go_run.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/early_return-go_run.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/nested_question.rg",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/nested_question-rgoc.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/nested_question-rgoc.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/nested_question.go",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/nested_question-gofmt.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/nested_question-gofmt.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/nested_question-go_build.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/nested_question-go_build.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/nested_question.bin",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/nested_question-go_vet.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/nested_question-go_vet.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/nested_question-go_run.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/nested_question-go_run.stderr.log"
+      ],
+      "commands": [
+        {
+          "command": "nix develop -c dune exec rgoc -- /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/early_return.rg -o /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/early_return.go",
+          "exitCode": 0,
+          "observation": "compile succeeded and generated early_return.go"
+        },
+        {
+          "command": "nix develop -c gofmt -d /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/early_return.go",
+          "exitCode": 0,
+          "observation": "gofmt -d was clean"
+        },
+        {
+          "command": "nix develop -c go build -o /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/early_return.bin /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/early_return.go",
+          "exitCode": 0,
+          "observation": "go build succeeded and wrote early_return.bin"
+        },
+        {
+          "command": "nix develop -c go vet /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/early_return.go",
+          "exitCode": 0,
+          "observation": "go vet succeeded"
+        },
+        {
+          "command": "nix develop -c go run /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/early_return.go",
+          "exitCode": 0,
+          "observation": "go run matched expected stdout exactly"
+        },
+        {
+          "command": "nix develop -c dune exec rgoc -- /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/nested_question.rg -o /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/nested_question.go",
+          "exitCode": 0,
+          "observation": "compile succeeded and generated nested_question.go"
+        },
+        {
+          "command": "nix develop -c gofmt -d /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/nested_question.go",
+          "exitCode": 0,
+          "observation": "gofmt -d was clean"
+        },
+        {
+          "command": "nix develop -c go build -o /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/nested_question.bin /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/nested_question.go",
+          "exitCode": 0,
+          "observation": "go build succeeded and wrote nested_question.bin"
+        },
+        {
+          "command": "nix develop -c go vet /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/nested_question.go",
+          "exitCode": 0,
+          "observation": "go vet succeeded"
+        },
+        {
+          "command": "nix develop -c go run /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-006/nested_question.go",
+          "exitCode": 0,
+          "observation": "go run matched expected stdout exactly"
+        }
+      ]
+    },
+    {
+      "id": "VAL-OWN-007",
+      "status": "pass",
+      "summary": "overwrite_cleanup: exact stdout verified as 'before-overwrite\\ndrop:old\\nafter-overwrite\\ndrop:new\\n'",
+      "evidence": [
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-007/overwrite_cleanup.rg",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-007/overwrite_cleanup-rgoc.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-007/overwrite_cleanup-rgoc.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-007/overwrite_cleanup.go",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-007/overwrite_cleanup-gofmt.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-007/overwrite_cleanup-gofmt.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-007/overwrite_cleanup-go_build.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-007/overwrite_cleanup-go_build.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-007/overwrite_cleanup.bin",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-007/overwrite_cleanup-go_vet.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-007/overwrite_cleanup-go_vet.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-007/overwrite_cleanup-go_run.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-007/overwrite_cleanup-go_run.stderr.log"
+      ],
+      "commands": [
+        {
+          "command": "nix develop -c dune exec rgoc -- /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-007/overwrite_cleanup.rg -o /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-007/overwrite_cleanup.go",
+          "exitCode": 0,
+          "observation": "compile succeeded and generated overwrite_cleanup.go"
+        },
+        {
+          "command": "nix develop -c gofmt -d /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-007/overwrite_cleanup.go",
+          "exitCode": 0,
+          "observation": "gofmt -d was clean"
+        },
+        {
+          "command": "nix develop -c go build -o /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-007/overwrite_cleanup.bin /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-007/overwrite_cleanup.go",
+          "exitCode": 0,
+          "observation": "go build succeeded and wrote overwrite_cleanup.bin"
+        },
+        {
+          "command": "nix develop -c go vet /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-007/overwrite_cleanup.go",
+          "exitCode": 0,
+          "observation": "go vet succeeded"
+        },
+        {
+          "command": "nix develop -c go run /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-007/overwrite_cleanup.go",
+          "exitCode": 0,
+          "observation": "go run matched expected stdout exactly"
+        }
+      ]
+    },
+    {
+      "id": "VAL-OWN-008",
+      "status": "fail",
+      "summary": "by_value_return_positive: exact stdout verified as 'caller:transferred\\ndrop:transferred\\n' ; post_return_reuse_negative: compile unexpectedly succeeded; expected diagnostic 'use of moved value' not found; output file was created unexpectedly",
+      "evidence": [
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-008/by_value_return_positive.rg",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-008/by_value_return_positive-rgoc.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-008/by_value_return_positive-rgoc.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-008/by_value_return_positive.go",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-008/by_value_return_positive-gofmt.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-008/by_value_return_positive-gofmt.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-008/by_value_return_positive-go_build.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-008/by_value_return_positive-go_build.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-008/by_value_return_positive.bin",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-008/by_value_return_positive-go_vet.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-008/by_value_return_positive-go_vet.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-008/by_value_return_positive-go_run.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-008/by_value_return_positive-go_run.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-008/post_return_reuse_negative.rg",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-008/post_return_reuse_negative-rgoc.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-008/post_return_reuse_negative-rgoc.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-008/post_return_reuse_negative.go"
+      ],
+      "commands": [
+        {
+          "command": "nix develop -c dune exec rgoc -- /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-008/by_value_return_positive.rg -o /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-008/by_value_return_positive.go",
+          "exitCode": 0,
+          "observation": "compile succeeded and generated by_value_return_positive.go"
+        },
+        {
+          "command": "nix develop -c gofmt -d /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-008/by_value_return_positive.go",
+          "exitCode": 0,
+          "observation": "gofmt -d was clean"
+        },
+        {
+          "command": "nix develop -c go build -o /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-008/by_value_return_positive.bin /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-008/by_value_return_positive.go",
+          "exitCode": 0,
+          "observation": "go build succeeded and wrote by_value_return_positive.bin"
+        },
+        {
+          "command": "nix develop -c go vet /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-008/by_value_return_positive.go",
+          "exitCode": 0,
+          "observation": "go vet succeeded"
+        },
+        {
+          "command": "nix develop -c go run /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-008/by_value_return_positive.go",
+          "exitCode": 0,
+          "observation": "go run matched expected stdout exactly"
+        },
+        {
+          "command": "nix develop -c dune exec rgoc -- /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-008/post_return_reuse_negative.rg -o /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-008/post_return_reuse_negative.go",
+          "exitCode": 0,
+          "observation": "compile unexpectedly succeeded; expected diagnostic 'use of moved value' not found; output file was created unexpectedly"
+        }
+      ]
+    },
+    {
+      "id": "VAL-OWN-009",
+      "status": "pass",
+      "summary": "callee_param_cleanup: exact stdout verified as 'inside:param\\ndrop:param\\nafter-call\\n'",
+      "evidence": [
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-009/callee_param_cleanup.rg",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-009/callee_param_cleanup-rgoc.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-009/callee_param_cleanup-rgoc.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-009/callee_param_cleanup.go",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-009/callee_param_cleanup-gofmt.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-009/callee_param_cleanup-gofmt.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-009/callee_param_cleanup-go_build.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-009/callee_param_cleanup-go_build.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-009/callee_param_cleanup.bin",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-009/callee_param_cleanup-go_vet.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-009/callee_param_cleanup-go_vet.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-009/callee_param_cleanup-go_run.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-009/callee_param_cleanup-go_run.stderr.log"
+      ],
+      "commands": [
+        {
+          "command": "nix develop -c dune exec rgoc -- /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-009/callee_param_cleanup.rg -o /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-009/callee_param_cleanup.go",
+          "exitCode": 0,
+          "observation": "compile succeeded and generated callee_param_cleanup.go"
+        },
+        {
+          "command": "nix develop -c gofmt -d /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-009/callee_param_cleanup.go",
+          "exitCode": 0,
+          "observation": "gofmt -d was clean"
+        },
+        {
+          "command": "nix develop -c go build -o /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-009/callee_param_cleanup.bin /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-009/callee_param_cleanup.go",
+          "exitCode": 0,
+          "observation": "go build succeeded and wrote callee_param_cleanup.bin"
+        },
+        {
+          "command": "nix develop -c go vet /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-009/callee_param_cleanup.go",
+          "exitCode": 0,
+          "observation": "go vet succeeded"
+        },
+        {
+          "command": "nix develop -c go run /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-cleanup/VAL-OWN-009/callee_param_cleanup.go",
+          "exitCode": 0,
+          "observation": "go run matched expected stdout exactly"
+        }
+      ]
+    }
+  ],
+  "frictions": [
+    "Each `nix develop -c ...` invocation prepended the flake shellHook banner to stdout; evaluation stripped that harness noise before checking exact `gofmt -d` and `go run` output."
+  ],
+  "blockers": []
+}

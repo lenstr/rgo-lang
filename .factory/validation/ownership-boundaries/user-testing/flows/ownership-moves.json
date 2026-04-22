@@ -1,0 +1,177 @@
+{
+  "surface": "rgoc CLI + generated Go ownership flows",
+  "group": "ownership-moves",
+  "status": "pass",
+  "toolsUsed": [
+    "rgoc CLI",
+    "gofmt",
+    "go build",
+    "go vet",
+    "go run"
+  ],
+  "assertionResults": [
+    {
+      "id": "VAL-OWN-001",
+      "status": "pass",
+      "summary": "Local by-value call and stdlib listen_and_serve reuse both produced move diagnostics and left no generated Go output.",
+      "evidence": [
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-001-local-call-move.rg",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-001-stdlib-call-move.rg",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-001-local.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-001-local.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-001-stdlib.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-001-stdlib.stderr.log"
+      ],
+      "commands": [
+        {
+          "command": "nix develop -c dune exec rgoc -- /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-001-local-call-move.rg -o /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-001-local.go",
+          "exitCode": 1,
+          "observation": "local consuming call rejected with move diagnostic and no output Go file"
+        },
+        {
+          "command": "nix develop -c dune exec rgoc -- /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-001-stdlib-call-move.rg -o /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-001-stdlib.go",
+          "exitCode": 1,
+          "observation": "stdlib consuming call rejected with move diagnostic and no output Go file"
+        }
+      ]
+    },
+    {
+      "id": "VAL-OWN-002",
+      "status": "pass",
+      "summary": "Assignment moved the non-Copy source binding and later source reuse was rejected without emitting Go.",
+      "evidence": [
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-002-assignment-move.rg",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-002.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-002.stderr.log"
+      ],
+      "commands": [
+        {
+          "command": "nix develop -c dune exec rgoc -- /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-002-assignment-move.rg -o /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-002.go",
+          "exitCode": 1,
+          "observation": "assignment-move fixture rejected with use-of-moved-value and no output Go file"
+        }
+      ]
+    },
+    {
+      "id": "VAL-OWN-003",
+      "status": "pass",
+      "summary": "Copy-eligible i64 stayed usable after assignment, a local by-value call, and builtin println; generated Go reused both bindings, passed gofmt/go build/go vet, and ran without cleanup markers.",
+      "evidence": [
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-003-copy-eligible-positive.rg",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-003-compile.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-003-compile.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-003.go",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-003-gofmt.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-003-gofmt.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-003-build.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-003-build.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-003-vet.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-003-vet.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-003-run.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-003-run.stderr.log"
+      ],
+      "commands": [
+        {
+          "command": "nix develop -c dune exec rgoc -- /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-003-copy-eligible-positive.rg -o /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-003.go",
+          "exitCode": 0,
+          "observation": "compiled successfully and generated Go keeps both original and copied values live across assignment and calls"
+        },
+        {
+          "command": "nix develop -c gofmt -d /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-003.go",
+          "exitCode": 0,
+          "observation": "gofmt -d produced no diff after ignoring the nix shell banner"
+        },
+        {
+          "command": "nix develop -c go build -o /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-003.bin /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-003.go",
+          "exitCode": 0,
+          "observation": "go build succeeded and produced the expected validation binary"
+        },
+        {
+          "command": "nix develop -c go vet /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-003.go",
+          "exitCode": 0,
+          "observation": "go vet succeeded"
+        },
+        {
+          "command": "nix develop -c go run /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-003.go",
+          "exitCode": 0,
+          "observation": "go run printed 42 three times after removing the nix shell banner, proving copy-preserving assignment and by-value calls"
+        }
+      ]
+    },
+    {
+      "id": "VAL-OWN-004",
+      "status": "pass",
+      "summary": "Explicit clone at the call boundary preserved original usability, and runtime output showed distinct exactly-once cleanup for clone then original; the paired no-clone fixture failed with a move diagnostic and no Go output.",
+      "evidence": [
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-004-clone-positive.rg",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-004-clone-negative.rg",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-004-positive-compile.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-004-positive-compile.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-004-positive.go",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-004-positive-gofmt.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-004-positive-gofmt.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-004-positive-build.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-004-positive-build.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-004-positive-vet.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-004-positive-vet.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-004-positive-run.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-004-positive-run.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-004-negative-compile.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-004-negative-compile.stderr.log"
+      ],
+      "commands": [
+        {
+          "command": "nix develop -c dune exec rgoc -- /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-004-clone-positive.rg -o /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-004-positive.go",
+          "exitCode": 0,
+          "observation": "clone-positive fixture compiled successfully"
+        },
+        {
+          "command": "nix develop -c gofmt -d /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-004-positive.go",
+          "exitCode": 0,
+          "observation": "gofmt -d produced no diff for clone-positive output after ignoring the nix shell banner"
+        },
+        {
+          "command": "nix develop -c go build -o /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-004-positive.bin /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-004-positive.go",
+          "exitCode": 0,
+          "observation": "go build succeeded for clone-positive output"
+        },
+        {
+          "command": "nix develop -c go vet /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-004-positive.go",
+          "exitCode": 0,
+          "observation": "go vet succeeded for clone-positive output"
+        },
+        {
+          "command": "nix develop -c go run /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-004-positive.go",
+          "exitCode": 0,
+          "observation": "go run showed clone cleanup before original cleanup after removing the nix shell banner"
+        },
+        {
+          "command": "nix develop -c dune exec rgoc -- /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-004-clone-negative.rg -o /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-004-negative.go",
+          "exitCode": 1,
+          "observation": "paired no-clone fixture was rejected with a move diagnostic and no output Go file"
+        }
+      ]
+    },
+    {
+      "id": "VAL-OWN-012",
+      "status": "pass",
+      "summary": "Drop-managed type with Copy overlap was rejected before Go generation with a direct eligibility diagnostic.",
+      "evidence": [
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-012-drop-copy-overlap.rg",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-012.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-012.stderr.log"
+      ],
+      "commands": [
+        {
+          "command": "nix develop -c dune exec rgoc -- /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-012-drop-copy-overlap.rg -o /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-moves/VAL-OWN-012.go",
+          "exitCode": 1,
+          "observation": "Drop+Copy overlap rejected before Go generation with no output file"
+        }
+      ]
+    }
+  ],
+  "frictions": [
+    "`nix develop -c ...` emits a dev-shell banner on stdout and a dirty-tree warning on stderr for every command in this repo, so output-based checks had to ignore those wrapper lines before evaluating gofmt/go run results."
+  ],
+  "blockers": []
+}

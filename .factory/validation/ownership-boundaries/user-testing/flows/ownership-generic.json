@@ -1,0 +1,172 @@
+{
+  "surface": "rgoc CLI + generated Go ownership flows",
+  "group": "ownership-generic",
+  "status": "pass",
+  "toolsUsed": [
+    "rgoc CLI",
+    "gofmt",
+    "go build",
+    "go vet",
+    "go run"
+  ],
+  "assertionResults": [
+    {
+      "id": "VAL-OWN-010",
+      "status": "pass",
+      "summary": "field let binding rejected with partial-move diagnostic and no output Go file / enum payload match destructuring rejected with partial-move diagnostic and no output Go file / nested Option payload destructuring rejected with partial-move diagnostic and no output Go file",
+      "evidence": [
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-010/partial_move_field_let.rg",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-010/partial_move_field_let-rgoc.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-010/partial_move_field_let-rgoc.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-010/enum_payload_match_partial_move.rg",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-010/enum_payload_match_partial_move-rgoc.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-010/enum_payload_match_partial_move-rgoc.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-010/nested_option_payload_partial_move.rg",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-010/nested_option_payload_partial_move-rgoc.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-010/nested_option_payload_partial_move-rgoc.stderr.log"
+      ],
+      "commands": [
+        {
+          "command": "nix develop -c dune exec rgoc -- /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-010/partial_move_field_let.rg -o /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-010/partial_move_field_let.go",
+          "exitCode": 1,
+          "observation": "struct field partial move via let binding is rejected; diagnostic included 'partial moves are not supported' and no output Go file was created"
+        },
+        {
+          "command": "nix develop -c dune exec rgoc -- /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-010/enum_payload_match_partial_move.rg -o /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-010/enum_payload_match_partial_move.go",
+          "exitCode": 1,
+          "observation": "custom enum payload destructuring partial move is rejected; diagnostic included 'partial moves are not supported' and no output Go file was created"
+        },
+        {
+          "command": "nix develop -c dune exec rgoc -- /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-010/nested_option_payload_partial_move.rg -o /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-010/nested_option_payload_partial_move.go",
+          "exitCode": 1,
+          "observation": "nested built-in Option payload partial move is rejected; diagnostic included 'partial moves are not supported' and no output Go file was created"
+        }
+      ]
+    },
+    {
+      "id": "VAL-OWN-011",
+      "status": "pass",
+      "summary": "generic_struct_ownership: runtime matched expected move/copy/clone/drop output and generated Go retained generic struct markers type Container[T any] struct, func (self *Container[T]) Drop(), func (self Container[T]) Clone() Container[T], and type CopyBox[T any] struct ; generic_enum_clone: runtime matched expected stdout and generated Go retained concrete generic enum instantiation markers type WrapperSome[T any] struct, var w Wrapper[int64] = WrapperSome[int64]{Field0: 42}, and consume(w.Clone()) ; generic_enum_nested: runtime matched expected stdout and generated Go retained concrete nested-instantiation markers type OuterWrapped[T any] struct, type PairBoth[T any] struct, var a Outer[int64] = OuterWrapped[int64]{Field0: new(int64(42))}, and var g Pair[int64] = PairBoth[int64]{Field0: 10, Field1: 20}",
+      "evidence": [
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_struct_ownership.rg",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_struct_ownership-rgoc.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_struct_ownership-rgoc.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_struct_ownership.go",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_struct_ownership-gofmt.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_struct_ownership-gofmt.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_struct_ownership-go_build.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_struct_ownership-go_build.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_struct_ownership.bin",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_struct_ownership-go_vet.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_struct_ownership-go_vet.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_struct_ownership-go_run.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_struct_ownership-go_run.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_clone.rg",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_clone-rgoc.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_clone-rgoc.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_clone.go",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_clone-gofmt.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_clone-gofmt.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_clone-go_build.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_clone-go_build.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_clone.bin",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_clone-go_vet.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_clone-go_vet.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_clone-go_run.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_clone-go_run.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_nested.rg",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_nested-rgoc.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_nested-rgoc.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_nested.go",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_nested-gofmt.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_nested-gofmt.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_nested-go_build.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_nested-go_build.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_nested.bin",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_nested-go_vet.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_nested-go_vet.stderr.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_nested-go_run.stdout.log",
+        "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_nested-go_run.stderr.log"
+      ],
+      "commands": [
+        {
+          "command": "nix develop -c dune exec rgoc -- /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_struct_ownership.rg -o /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_struct_ownership.go",
+          "exitCode": 0,
+          "observation": "compile succeeded and generated generic_struct_ownership.go"
+        },
+        {
+          "command": "nix develop -c gofmt -d /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_struct_ownership.go",
+          "exitCode": 0,
+          "observation": "gofmt -d was clean"
+        },
+        {
+          "command": "nix develop -c go build -o /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_struct_ownership.bin /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_struct_ownership.go",
+          "exitCode": 0,
+          "observation": "go build succeeded and wrote generic_struct_ownership.bin"
+        },
+        {
+          "command": "nix develop -c go vet /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_struct_ownership.go",
+          "exitCode": 0,
+          "observation": "go vet succeeded"
+        },
+        {
+          "command": "nix develop -c go run /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_struct_ownership.go",
+          "exitCode": 0,
+          "observation": "go run matched expected stdout exactly"
+        },
+        {
+          "command": "nix develop -c dune exec rgoc -- /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_clone.rg -o /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_clone.go",
+          "exitCode": 0,
+          "observation": "compile succeeded and generated generic_enum_clone.go"
+        },
+        {
+          "command": "nix develop -c gofmt -d /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_clone.go",
+          "exitCode": 0,
+          "observation": "gofmt -d was clean"
+        },
+        {
+          "command": "nix develop -c go build -o /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_clone.bin /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_clone.go",
+          "exitCode": 0,
+          "observation": "go build succeeded and wrote generic_enum_clone.bin"
+        },
+        {
+          "command": "nix develop -c go vet /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_clone.go",
+          "exitCode": 0,
+          "observation": "go vet succeeded"
+        },
+        {
+          "command": "nix develop -c go run /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_clone.go",
+          "exitCode": 0,
+          "observation": "go run matched expected stdout exactly"
+        },
+        {
+          "command": "nix develop -c dune exec rgoc -- /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_nested.rg -o /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_nested.go",
+          "exitCode": 0,
+          "observation": "compile succeeded and generated generic_enum_nested.go"
+        },
+        {
+          "command": "nix develop -c gofmt -d /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_nested.go",
+          "exitCode": 0,
+          "observation": "gofmt -d was clean"
+        },
+        {
+          "command": "nix develop -c go build -o /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_nested.bin /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_nested.go",
+          "exitCode": 0,
+          "observation": "go build succeeded and wrote generic_enum_nested.bin"
+        },
+        {
+          "command": "nix develop -c go vet /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_nested.go",
+          "exitCode": 0,
+          "observation": "go vet succeeded"
+        },
+        {
+          "command": "nix develop -c go run /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-generic/VAL-OWN-011/generic_enum_nested.go",
+          "exitCode": 0,
+          "observation": "go run matched expected stdout exactly"
+        }
+      ]
+    }
+  ],
+  "frictions": [],
+  "blockers": []
+}

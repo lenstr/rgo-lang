@@ -49,3 +49,13 @@ Representative validation flows:
 - For positive import-surface assertions, prove behavior through the real CLI plus downstream Go checks (`gofmt -d`, `go build`, and `go vet` when the contract requires them).
 - For negative import-surface assertions, verify both the user-facing diagnostic text and the absence of a misleading output file at the requested `-o` path.
 - Use representative fixtures that exercise both package-qualified callable names (`http::listen_and_serve`, `http::new_serve_mux`) and PascalCase type names (`http::Request`, `http::ResponseWriter`) in the same flow where required.
+
+## Flow Validator Guidance: rgoc CLI + generated Go ownership flows
+
+- Keep validation serial: ownership validation shares one repo worktree, one `_build/`, and one generated-artifact area.
+- Use the real CLI (`nix develop -c dune exec rgoc -- ...`) plus downstream Go tooling (`gofmt -d`, `go build`, `go vet`, `go run`) for positive fixtures, and verify negative fixtures produce no output file at the requested `-o` path.
+- Write per-assertion fixtures, generated Go, stdout captures, and stderr captures under the mission evidence directory for `ownership-boundaries`; avoid tracked source paths.
+- Prefer the already-curated ownership fixtures in `test/test_codegen_ownership.ml`, `test/test_typecheck.ml`, and `examples/generic_ownership.rg`, `examples/generic_enum_ownership.rg`, `examples/generic_enum_clone.rg`, `examples/generic_enum_nested.rg`, and `examples/non_consuming_call.rg`.
+- For move diagnostics, explicitly check later field access, method calls, double by-value passes, or second consuming receiver calls fail with `use of moved value`.
+- For cleanup assertions, rely on exact stdout ordering/counts to prove reverse-order and exactly-once Drop behavior on normal exit, early `return`, nested `?`, overwrite, by-value return, and callee-exit cleanup.
+- For generic-instantiation assertions, inspect generated Go for preserved concrete type arguments (for example `Container[T any]`, `OuterWrapped[int64]`, or `PairBoth[int64]`) in addition to runtime behavior.
