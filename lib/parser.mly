@@ -44,10 +44,17 @@ use_decl:
 
 item:
   | f = fn_decl_item       { ItemFn f }
+  | l = item_let           { l }
   | s = struct_item         { s }
   | e = enum_item           { e }
   | i = impl_item           { i }
   | t = trait_item_decl     { t }
+  ;
+
+item_let:
+  | LET; m = boption(MUT); name = located_ident;
+    t = option(preceded(COLON, ty)); EQ; e = expr; SEMI
+    { ItemLet { is_mut = m; pat = PatBind name; ty = t; init = e } }
   ;
 
 (* ===================== FUNCTIONS ===================== *)

@@ -145,6 +145,12 @@ type trait_item = TraitFnSig of fn_sig | TraitFnDecl of fn_decl
 
 type item =
   | ItemFn of fn_decl
+  | ItemLet of {
+      is_mut : bool;
+      pat : pat;
+      ty : ty option;
+      init : expr;
+    }
   | ItemStruct of {
       s_pub : bool;
       s_name : ident located;

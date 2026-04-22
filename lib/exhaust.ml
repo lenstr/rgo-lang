@@ -267,7 +267,7 @@ let walk_item enums fn_ret_types (item : item) : unit =
           | TraitFnDecl fd -> walk_fn_decl enums fn_ret_types fd
           | _ -> ())
         t_items
-  | ItemStruct _ | ItemEnum _ -> ()
+  | ItemStruct _ | ItemEnum _ | ItemLet _ -> ()
 
 let check_exn (prog : program) : program =
   let enums = collect_enums prog in

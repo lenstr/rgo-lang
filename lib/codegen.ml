@@ -855,7 +855,17 @@ let collect_env (prog : Ast.program) : cg_env =
           if trait_uses_self t_items then
             env.shared.self_ref_traits <-
               t_name.node :: env.shared.self_ref_traits;
-          { env with traits = SMap.add t_name.node tic env.traits })
+          { env with traits = SMap.add t_name.node tic env.traits }
+      | ItemLet { pat; ty; init; is_mut } -> (
+          match pat with
+          | PatBind name ->
+              let binding_ty =
+                match ty with
+                | Some t -> Some t
+                | None -> infer_expr_type env init
+              in
+              add_value name.node binding_ty ~is_mut env
+          | _ -> env))
     env prog.items
 
 (* ---------- expression context: statement vs expression position ---------- *)
@@ -1452,9 +1462,16 @@ and gen_stdlib_call env buf indent type_name fn_name args =
     | Some name -> name
     | None -> snake_to_pascal fn_name.node
   in
-  Printf.bprintf buf "%s.%s(" go_pkg go_name;
-  gen_args env buf indent args;
-  Buffer.add_char buf ')'
+  (* Special-case listen_and_serve so port-in-use failures surface via panic
+     rather than silently exiting with code 0. *)
+  if type_name.node = "http" && fn_name.node = "listen_and_serve" then (
+    Printf.bprintf buf "if err := %s.%s(" go_pkg go_name;
+    gen_args env buf indent args;
+    Printf.bprintf buf "); err != nil {\n%s\tpanic(err)\n%s}" indent indent)
+  else (
+    Printf.bprintf buf "%s.%s(" go_pkg go_name;
+    gen_args env buf indent args;
+    Buffer.add_char buf ')')
 
 and gen_path_call env buf indent type_name fn_name args =
   (* Check if it's an imported stdlib package call *)
@@ -4528,70 +4545,119 @@ let generate (prog : Ast.program) : string =
       | _ -> ())
     prog.items;
   (* Now generate body *)
-  List.iter
-    (fun (item : Ast.item) ->
-      match item with
-      | ItemFn fd ->
-          Buffer.add_char body_buf '\n';
-          gen_fn_decl env body_buf fd
-      | ItemStruct { s_name; s_generics; s_fields; _ } ->
-          Buffer.add_char body_buf '\n';
-          gen_struct_decl env body_buf s_name s_generics s_fields
-      | ItemEnum { e_name; e_generics; e_variants; _ } ->
-          Buffer.add_char body_buf '\n';
-          let impl_methods =
-            match SMap.find_opt e_name.node !impl_items_for_type with
-            | Some l -> l
-            | None -> []
-          in
-          gen_enum_decl env body_buf e_name e_generics e_variants impl_methods
-      | ItemImpl { i_generics; i_ty; i_items } ->
-          let type_name_str =
-            match i_ty with
-            | TyName n -> n.node
-            | TyGeneric (n, _) -> n.node
-            | _ -> "unknown"
-          in
-          let is_enum = SMap.mem type_name_str env.enums in
-          let gd = go_generics_decl i_generics in
-          let gu = go_generics_use i_generics in
-          gen_impl_methods env body_buf i_ty gd gu i_items is_enum i_generics
-      | ItemTraitImpl { ti_generics; ti_trait; ti_ty; ti_items } ->
-          let type_name_str =
-            match ti_ty with
-            | TyName n -> n.node
-            | TyGeneric (n, _) -> n.node
-            | _ -> "unknown"
-          in
-          let is_enum = SMap.mem type_name_str env.enums in
-          let gd = go_generics_decl ti_generics in
-          let gu = go_generics_use ti_generics in
-          (* Synthesize default methods that are not explicitly provided *)
-          let all_items =
-            match SMap.find_opt ti_trait.node env.traits with
-            | Some tic ->
-                let provided_names =
-                  List.map (fun (fd : fn_decl) -> fd.fn_name.node) ti_items
-                in
-                let defaults =
-                  List.filter_map
-                    (fun (ti_item : Ast.trait_item) ->
-                      match ti_item with
-                      | TraitFnDecl fd
-                        when not (List.mem fd.fn_name.node provided_names) ->
-                          Some fd
-                      | _ -> None)
-                    tic.tic_items
-                in
-                ti_items @ defaults
-            | None -> ti_items
-          in
-          gen_impl_methods ~is_trait_impl:true env body_buf ti_ty gd gu
-            all_items is_enum ti_generics
-      | ItemTrait { t_name; t_generics; t_items; _ } ->
-          Buffer.add_char body_buf '\n';
-          gen_trait_decl env body_buf t_name t_generics t_items)
-    prog.items;
+  ignore
+    (List.fold_left
+       (fun env (item : Ast.item) ->
+         match item with
+         | ItemFn fd ->
+             Buffer.add_char body_buf '\n';
+             gen_fn_decl env body_buf fd;
+             env
+         | ItemLet { is_mut; pat; ty; init } -> (
+             match pat with
+             | PatBind name ->
+                 let esc_name = escape_ident name.node in
+                 (match (ty, init) with
+                 | ( Some (TyGeneric ({ node = "Vec"; _ }, _) as t),
+                     ExprCall
+                       (ExprPath ({ node = "Vec"; _ }, { node = "new"; _ }), [])
+                   ) ->
+                     Printf.bprintf body_buf "\nvar %s = make(%s, 0)\n"
+                       esc_name (go_type env t)
+                 | ( Some (TyGeneric ({ node = "HashMap"; _ }, _) as t),
+                     ExprCall
+                       ( ExprPath ({ node = "HashMap"; _ }, { node = "new"; _ }),
+                         [] ) ) ->
+                     Printf.bprintf body_buf "\nvar %s = make(%s)\n" esc_name
+                       (go_type env t)
+                 | Some t, ExprArray [] ->
+                     Printf.bprintf body_buf "\nvar %s %s\n" esc_name
+                       (go_type env t)
+                 | Some t, _ ->
+                     Buffer.add_string body_buf "\nvar ";
+                     Buffer.add_string body_buf esc_name;
+                     Buffer.add_char body_buf ' ';
+                     Buffer.add_string body_buf (go_type env t);
+                     Buffer.add_string body_buf " = ";
+                     gen_expr env body_buf "" CtxExpr init;
+                     Buffer.add_char body_buf '\n'
+                 | None, _ ->
+                     Buffer.add_string body_buf "\nvar ";
+                     Buffer.add_string body_buf esc_name;
+                     Buffer.add_string body_buf " = ";
+                     gen_expr env body_buf "" CtxExpr init;
+                     Buffer.add_char body_buf '\n');
+                 let binding_ty =
+                   match ty with Some t -> Some t | None -> infer_expr_type env init
+                 in
+                 add_value name.node binding_ty ~is_mut env
+             | _ -> env)
+         | ItemStruct { s_name; s_generics; s_fields; _ } ->
+             Buffer.add_char body_buf '\n';
+             gen_struct_decl env body_buf s_name s_generics s_fields;
+             env
+         | ItemEnum { e_name; e_generics; e_variants; _ } ->
+             Buffer.add_char body_buf '\n';
+             let impl_methods =
+               match SMap.find_opt e_name.node !impl_items_for_type with
+               | Some l -> l
+               | None -> []
+             in
+             gen_enum_decl env body_buf e_name e_generics e_variants
+               impl_methods;
+             env
+         | ItemImpl { i_generics; i_ty; i_items } ->
+             let type_name_str =
+               match i_ty with
+               | TyName n -> n.node
+               | TyGeneric (n, _) -> n.node
+               | _ -> "unknown"
+             in
+             let is_enum = SMap.mem type_name_str env.enums in
+             let gd = go_generics_decl i_generics in
+             let gu = go_generics_use i_generics in
+             gen_impl_methods env body_buf i_ty gd gu i_items is_enum
+               i_generics;
+             env
+         | ItemTraitImpl { ti_generics; ti_trait; ti_ty; ti_items } ->
+             let type_name_str =
+               match ti_ty with
+               | TyName n -> n.node
+               | TyGeneric (n, _) -> n.node
+               | _ -> "unknown"
+             in
+             let is_enum = SMap.mem type_name_str env.enums in
+             let gd = go_generics_decl ti_generics in
+             let gu = go_generics_use ti_generics in
+             (* Synthesize default methods that are not explicitly provided *)
+             let all_items =
+               match SMap.find_opt ti_trait.node env.traits with
+               | Some tic ->
+                   let provided_names =
+                     List.map (fun (fd : fn_decl) -> fd.fn_name.node) ti_items
+                   in
+                   let defaults =
+                     List.filter_map
+                       (fun (ti_item : Ast.trait_item) ->
+                         match ti_item with
+                         | TraitFnDecl fd
+                           when not (List.mem fd.fn_name.node provided_names)
+                           ->
+                             Some fd
+                         | _ -> None)
+                       tic.tic_items
+                   in
+                   ti_items @ defaults
+               | None -> ti_items
+             in
+             gen_impl_methods ~is_trait_impl:true env body_buf ti_ty gd gu
+               all_items is_enum ti_generics;
+             env
+         | ItemTrait { t_name; t_generics; t_items; _ } ->
+             Buffer.add_char body_buf '\n';
+             gen_trait_decl env body_buf t_name t_generics t_items;
+             env)
+       env prog.items);
   (* Assemble final output *)
   let out = Buffer.create 4096 in
   Buffer.add_string out "package main\n";

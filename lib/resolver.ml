@@ -389,6 +389,12 @@ let collect_globals env (items : item list) =
             import_error_at fd.fn_name.span
               (Import_alias_collision (fd.fn_name.node, fd.fn_name.span));
           add_fn fd.fn_name e
+      | ItemLet { pat = PatBind name; _ } ->
+          if SMap.mem name.node e.imported_packages then
+            import_error_at name.span
+              (Import_alias_collision (name.node, name.span));
+          add_value name e
+      | ItemLet _ -> e
       | ItemStruct { s_name; s_fields; _ } ->
           if SMap.mem s_name.node e.imported_packages then
             import_error_at s_name.span
@@ -414,6 +420,9 @@ let collect_globals env (items : item list) =
 let resolve_item env (item : item) =
   match item with
   | ItemFn fd -> resolve_fn_decl env fd
+  | ItemLet { ty; init; _ } ->
+      (match ty with Some t -> resolve_ty env t | None -> ());
+      resolve_expr env init
   | ItemStruct { s_fields; s_generics; _ } ->
       (* Resolve field types *)
       let inner =

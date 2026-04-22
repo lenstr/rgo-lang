@@ -2736,6 +2736,89 @@ fn main() {
     "has second HandleFunc" true
     (contains go "mux.HandleFunc(\"/other\",")
 
+let test_module_level_let () =
+  let src =
+    {|
+let counter: i64 = 0;
+
+fn main() {
+    println(counter);
+}
+|}
+  in
+  let go = compile_and_check src in
+  Alcotest.(check bool) "has var counter" true (contains go "var counter int64 = 0");
+  Alcotest.(check bool) "has fmt.Println" true (contains go "fmt.Println(counter)")
+
+let test_module_level_let_mut () =
+  let src =
+    {|
+let mut items: Vec<String> = Vec::new();
+
+fn main() {
+    items.push("hello");
+    println(items.len());
+}
+|}
+  in
+  let go = compile_and_check src in
+  Alcotest.(check bool) "has var items" true (contains go "var items = make([]string, 0)");
+  Alcotest.(check bool) "has append" true (contains go "items = append(items, \"hello\")");
+  Alcotest.(check bool) "has len" true (contains go "len(items)")
+
+let test_http_crud_fixture () =
+  let src =
+    {|
+use net::http;
+
+let mut items: Vec<String> = Vec::new();
+
+fn handle_items(w: http::ResponseWriter, r: http::Request) {
+    let m = r.method;
+    if m == "GET" {
+        let mut response = "[";
+        let mut first = true;
+        for item in items {
+            if !first {
+                response = response + ", ";
+            }
+            response = response + "\"" + item + "\"";
+            first = false;
+        }
+        response = response + "]";
+        w.write_header(200);
+        w.write(response);
+    } else if m == "POST" {
+        let name = r.form_value("name");
+        if name == "" {
+            w.write_header(400);
+            w.write("missing name");
+        } else {
+            items.push(name);
+            w.write_header(201);
+            w.write("created: " + name);
+        }
+    } else {
+        w.write_header(405);
+        w.write("method not allowed");
+    }
+}
+
+fn main() {
+    let mux = http::new_serve_mux();
+    mux.handle_func("/items", handle_items);
+    http::listen_and_serve("127.0.0.1:3111", mux);
+}
+|}
+  in
+  let go = compile_and_check src in
+  Alcotest.(check bool) "has var items" true (contains go "var items = make([]string, 0)");
+  Alcotest.(check bool) "has GET handler" true (contains go "r.Method");
+  Alcotest.(check bool) "has POST handler" true (contains go "r.FormValue(\"name\")");
+  Alcotest.(check bool) "has ListenAndServe panic" true
+    (contains go "if err := http.ListenAndServe(");
+  Alcotest.(check bool) "has panic err" true (contains go "panic(err)")
+
 let () =
   Alcotest.run "codegen"
     [
@@ -3020,5 +3103,14 @@ let () =
             test_callback_capturing_lambda_rejected;
           Alcotest.test_case "anonymous handler reuse" `Quick
             test_callback_anonymous_handler_reuse;
+        ] );
+      ( "module-level-let",
+        [
+          Alcotest.test_case "module-level let compiles and generates var"
+            `Quick test_module_level_let;
+          Alcotest.test_case "module-level let mut supports mutation" `Quick
+            test_module_level_let_mut;
+          Alcotest.test_case "http crud fixture compiles and is gofmt clean"
+            `Quick test_http_crud_fixture;
         ] );
     ]

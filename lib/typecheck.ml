@@ -2043,7 +2043,8 @@ let rec collect_type_info env (items : item list) : env =
               SMap.empty t_items
           in
           let ti = { tr_generics = generics; tr_methods = methods } in
-          { env with traits = SMap.add t_name.node ti env.traits })
+          { env with traits = SMap.add t_name.node ti env.traits }
+      | ItemLet _ -> env)
     env items
 
 and collect_impl env impl_generics i_ty impl_items =
@@ -2180,9 +2181,29 @@ let check_fn_decl env (fd : fn_decl) =
 
 let check_item env (item : item) =
   match item with
-  | ItemFn fd -> check_fn_decl env fd
-  | ItemStruct _ -> () (* type info collected in first pass *)
-  | ItemEnum _ -> ()
+  | ItemFn fd -> check_fn_decl env fd; env
+  | ItemLet { is_mut; pat; ty; init } -> (
+      match pat with
+      | PatBind name ->
+          let init_ty = check_expr env init in
+          let binding_ty =
+            match ty with
+            | Some t ->
+                let resolved = resolve_ast_ty env t in
+                expect_type ~env ~span:name.span ~expected:resolved
+                  ~actual:init_ty;
+                resolved
+            | None -> init_ty
+          in
+          (* Module-level bindings are added to the outermost scope *)
+          add_value name.node binding_ty ~is_mut env
+      | PatWild -> env
+      | _ ->
+          error_at
+            { start = { line = 0; col = 0 }; stop = { line = 0; col = 0 } }
+            "unsupported module-level let pattern")
+  | ItemStruct _ -> env (* type info collected in first pass *)
+  | ItemEnum _ -> env
   | ItemImpl { i_ty; i_items; i_generics } ->
       let generics =
         List.map (fun (tp : type_param) -> tp.tp_name.node) i_generics
@@ -2213,8 +2234,9 @@ let check_item env (item : item) =
             | None -> impl_env
           in
           check_fn_decl method_env fd)
-        i_items
-  | ItemTraitImpl { ti_trait; ti_ty; ti_items; ti_generics } -> (
+        i_items;
+      env
+  | ItemTraitImpl { ti_trait; ti_ty; ti_items; ti_generics } ->
       let generics =
         List.map (fun (tp : type_param) -> tp.tp_name.node) ti_generics
       in
@@ -2247,7 +2269,7 @@ let check_item env (item : item) =
           check_fn_decl method_env fd)
         ti_items;
       (* Validate impl against trait contract *)
-      match SMap.find_opt ti_trait.node env.traits with
+      (match SMap.find_opt ti_trait.node env.traits with
       | None -> () (* trait not found: resolver handles this *)
       | Some tr_info ->
           (* Check for missing required methods *)
@@ -2327,7 +2349,8 @@ let check_item env (item : item) =
                          type mismatch, expected %s, got %s"
                         fd.fn_name.node ti_trait.node (show_ty tms.tms_ret)
                         (show_ty impl_ret)))
-            ti_items)
+            ti_items);
+      env
   | ItemTrait { t_name; t_generics; t_items; _ } ->
       let generics =
         List.map (fun (tp : type_param) -> tp.tp_name.node) t_generics
@@ -2363,7 +2386,8 @@ let check_item env (item : item) =
               in
               check_fn_decl method_env fd
           | TraitFnSig _ -> ())
-        t_items
+        t_items;
+      env
 
 (* ---------- main entry points ---------- *)
 
@@ -2390,7 +2414,7 @@ let typecheck_exn (prog : program) : program =
       env prog.imports
   in
   let env = collect_type_info env prog.items in
-  List.iter (check_item env) prog.items;
+  ignore (List.fold_left check_item env prog.items);
   prog
 
 let typecheck (prog : program) : (program, string) result =
