@@ -59,3 +59,13 @@ Representative validation flows:
 - For move diagnostics, explicitly check later field access, method calls, double by-value passes, or second consuming receiver calls fail with `use of moved value`.
 - For cleanup assertions, rely on exact stdout ordering/counts to prove reverse-order and exactly-once Drop behavior on normal exit, early `return`, nested `?`, overwrite, by-value return, and callee-exit cleanup.
 - For generic-instantiation assertions, inspect generated Go for preserved concrete type arguments (for example `Container[T any]`, `OuterWrapped[int64]`, or `PairBoth[int64]`) in addition to runtime behavior.
+
+## Flow Validator Guidance: rgoc CLI + generated Go artifacts + local HTTP probe
+
+- Keep validation serial: callback validation shares one repo worktree, one `_build/`, the generated runtime binary path, and the reserved localhost port `3111`.
+- Use the real CLI (`nix develop -c dune exec rgoc -- ...`) for both positive and negative fixtures, and keep `DUNE_BUILD_DIR` isolated under the assertion group's evidence directory.
+- For positive callback assertions, compile representative fixtures under the evidence directory, then run `gofmt -d`, `go build`, and `go vet` on the generated Go before starting any server.
+- For live callback checks, build the generated server as an evidence-local binary, start it with `--listen 127.0.0.1:3111`, and probe it with `curl` against the exact named-handler and anonymous-handler routes covered by the fixture.
+- Repeated-request assertions must hit the same running process more than once per route so the evidence shows callbacks are long-lived and not consumed after first registration or first invocation.
+- For negative callback assertions, verify both the user-facing diagnostic text and that no requested output file exists after the failed compile.
+- Prefer the existing callback-focused coverage in `test/test_codegen.ml` and `test/test_typecheck.ml` as the source of representative fixture shapes for named handlers, zero-capture anonymous handlers, captured-lambda rejection, signature mismatches, and non-callable registration failures.

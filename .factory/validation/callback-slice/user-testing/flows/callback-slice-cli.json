@@ -1,0 +1,339 @@
+{
+  "groupId": "callback-slice-cli",
+  "testedAt": "2026-04-22T17:16:46.712383+00:00",
+  "isolation": {
+    "surface": "rgoc CLI + generated Go artifacts + local HTTP probe",
+    "missionDir": "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7",
+    "repoRoot": "/home/lenstr/workspace/personal/hack/rgo-lang",
+    "port": 3111,
+    "bind": "127.0.0.1",
+    "evidenceDir": "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/callback-slice/callback-slice-cli",
+    "duneBuildDir": "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/callback-slice/callback-slice-cli/dune-build"
+  },
+  "toolsUsed": [
+    "nix develop -c dune exec rgoc",
+    "nix develop -c gofmt",
+    "nix develop -c go build",
+    "nix develop -c go vet",
+    "curl"
+  ],
+  "assertions": [
+    {
+      "id": "VAL-CALLBACK-001",
+      "title": "Named rgo functions can be passed directly as handlers",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile the named-handler reuse fixture through rgoc",
+          "expected": "rgoc emits Go successfully",
+          "observed": "rgoc exited 0 and wrote /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/callback-slice/callback-slice-cli/generated/named-handler-reuse-server.go"
+        },
+        {
+          "action": "Validate generated Go with gofmt -d, go build, and go vet",
+          "expected": "All downstream Go checks succeed",
+          "observed": "gofmt=0, go build=0, go vet=0"
+        },
+        {
+          "action": "Start the evidence-local binary and request GET /items",
+          "expected": "Named handler returns 200 with its response body",
+          "observed": "HTTP/1.1 200 OK\nDate: Wed, 22 Apr 2026 17:16:43 GMT\nContent-Length: 22\nContent-Type: text/plain; charset=utf-8\n\nnamed handler response"
+        }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "n/a (CLI/HTTP flow)",
+        "network": "GET /items -> 200 named handler response",
+        "files": [
+          "callback-slice/callback-slice-cli/fixtures/named-handler-reuse-server.rg",
+          "callback-slice/callback-slice-cli/generated/named-handler-reuse-server.go",
+          "callback-slice/callback-slice-cli/bin/named-handler-reuse-server",
+          "callback-slice/callback-slice-cli/logs/named-handler-reuse-server.server.log",
+          "callback-slice/callback-slice-cli/logs/named-handler-reuse-server.compile.stdout.log",
+          "callback-slice/callback-slice-cli/logs/named-handler-reuse-server.compile.stderr.log",
+          "callback-slice/callback-slice-cli/logs/named-handler-reuse-server.gofmt.stdout.log",
+          "callback-slice/callback-slice-cli/logs/named-handler-reuse-server.gofmt.stderr.log",
+          "callback-slice/callback-slice-cli/logs/named-handler-reuse-server.go-build.stdout.log",
+          "callback-slice/callback-slice-cli/logs/named-handler-reuse-server.go-build.stderr.log",
+          "callback-slice/callback-slice-cli/logs/named-handler-reuse-server.go-vet.stdout.log",
+          "callback-slice/callback-slice-cli/logs/named-handler-reuse-server.go-vet.stderr.log",
+          "callback-slice/callback-slice-cli/responses/named-handler-reuse-server.items-1.http.txt"
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CALLBACK-002",
+      "title": "Zero-capture anonymous handlers lower to Go func literals",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile the mixed-handler fixture with an inline zero-capture lambda",
+          "expected": "rgoc emits Go containing a func literal at HandleFunc",
+          "observed": "Generated Go contains mux.HandleFunc(\"/anon\", func(...))"
+        },
+        {
+          "action": "Validate generated Go with gofmt -d, go build, and go vet",
+          "expected": "All downstream Go checks succeed",
+          "observed": "gofmt=0, go build=0, go vet=0"
+        },
+        {
+          "action": "Start the server and request GET /anon",
+          "expected": "Inline anonymous handler returns 200 with its body",
+          "observed": "HTTP/1.1 200 OK\nDate: Wed, 22 Apr 2026 17:16:44 GMT\nContent-Length: 26\nContent-Type: text/plain; charset=utf-8\n\nanonymous handler response"
+        }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "n/a (CLI/HTTP flow)",
+        "network": "GET /anon -> 200 anonymous handler response",
+        "files": [
+          "callback-slice/callback-slice-cli/fixtures/mixed-handlers-server.rg",
+          "callback-slice/callback-slice-cli/generated/mixed-handlers-server.go",
+          "callback-slice/callback-slice-cli/bin/mixed-handlers-server",
+          "callback-slice/callback-slice-cli/logs/mixed-handlers-server.server.log",
+          "callback-slice/callback-slice-cli/logs/mixed-handlers-server.compile.stdout.log",
+          "callback-slice/callback-slice-cli/logs/mixed-handlers-server.compile.stderr.log",
+          "callback-slice/callback-slice-cli/logs/mixed-handlers-server.gofmt.stdout.log",
+          "callback-slice/callback-slice-cli/logs/mixed-handlers-server.gofmt.stderr.log",
+          "callback-slice/callback-slice-cli/logs/mixed-handlers-server.go-build.stdout.log",
+          "callback-slice/callback-slice-cli/logs/mixed-handlers-server.go-build.stderr.log",
+          "callback-slice/callback-slice-cli/logs/mixed-handlers-server.go-vet.stdout.log",
+          "callback-slice/callback-slice-cli/logs/mixed-handlers-server.go-vet.stderr.log",
+          "callback-slice/callback-slice-cli/responses/mixed-handlers-server.anon.http.txt"
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CALLBACK-003",
+      "title": "Capturing anonymous handlers are rejected in this mission",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile a fixture whose anonymous handler captures greeting",
+          "expected": "rgoc rejects the capture before Go generation",
+          "observed": "warning: Git tree '/home/lenstr/workspace/personal/hack/rgo-lang' is dirty\nerror: /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/callback-slice/callback-slice-cli/fixtures/capturing-anonymous-handler.rg:7:17: undefined name 'greeting'"
+        },
+        {
+          "action": "Check requested output path",
+          "expected": "No Go output file exists",
+          "observed": "output exists=False"
+        }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "n/a (CLI flow)",
+        "network": "n/a",
+        "files": [
+          "callback-slice/callback-slice-cli/fixtures/capturing-anonymous-handler.rg",
+          "callback-slice/callback-slice-cli/logs/capturing-anonymous-handler.compile.stdout.log",
+          "callback-slice/callback-slice-cli/logs/capturing-anonymous-handler.compile.stderr.log"
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CALLBACK-004",
+      "title": "Callback signature mismatches fail in rgoc",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile wrong-arity handler fixture",
+          "expected": "rgoc rejects the callback signature",
+          "observed": "warning: Git tree '/home/lenstr/workspace/personal/hack/rgo-lang' is dirty\nerror: /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/callback-slice/callback-slice-cli/fixtures/wrong-arity-handler.rg:7:9: type mismatch: expected fn(http::ResponseWriter, http::Request) -> (), got fn(http::ResponseWriter) -> ()"
+        },
+        {
+          "action": "Compile wrong-parameter-type handler fixture",
+          "expected": "rgoc rejects the callback signature",
+          "observed": "warning: Git tree '/home/lenstr/workspace/personal/hack/rgo-lang' is dirty\nerror: /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/callback-slice/callback-slice-cli/fixtures/wrong-param-type-handler.rg:7:9: type mismatch: expected fn(http::ResponseWriter, http::Request) -> (), got fn(i64, i64) -> ()"
+        },
+        {
+          "action": "Compile wrong-return-type handler fixture",
+          "expected": "rgoc rejects the callback signature",
+          "observed": "warning: Git tree '/home/lenstr/workspace/personal/hack/rgo-lang' is dirty\nerror: /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/callback-slice/callback-slice-cli/fixtures/wrong-return-type-handler.rg:7:9: type mismatch: expected fn(http::ResponseWriter, http::Request) -> (), got fn(http::ResponseWriter, http::Request) -> i64"
+        },
+        {
+          "action": "Check requested output paths",
+          "expected": "No Go output files exist for any rejected fixture",
+          "observed": "wrong_arity=False, wrong_param=False, wrong_return=False"
+        }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "n/a (CLI flow)",
+        "network": "n/a",
+        "files": [
+          "callback-slice/callback-slice-cli/fixtures/wrong-arity-handler.rg",
+          "callback-slice/callback-slice-cli/logs/wrong-arity-handler.compile.stdout.log",
+          "callback-slice/callback-slice-cli/logs/wrong-arity-handler.compile.stderr.log",
+          "callback-slice/callback-slice-cli/fixtures/wrong-param-type-handler.rg",
+          "callback-slice/callback-slice-cli/logs/wrong-param-type-handler.compile.stdout.log",
+          "callback-slice/callback-slice-cli/logs/wrong-param-type-handler.compile.stderr.log",
+          "callback-slice/callback-slice-cli/fixtures/wrong-return-type-handler.rg",
+          "callback-slice/callback-slice-cli/logs/wrong-return-type-handler.compile.stdout.log",
+          "callback-slice/callback-slice-cli/logs/wrong-return-type-handler.compile.stderr.log"
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CALLBACK-005",
+      "title": "Non-callable values are rejected at handler registration",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile fixture passing a literal integer to handle_func",
+          "expected": "rgoc rejects the non-callable expression",
+          "observed": "warning: Git tree '/home/lenstr/workspace/personal/hack/rgo-lang' is dirty\nerror: /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/callback-slice/callback-slice-cli/fixtures/non-callable-literal-handler.rg:4:9: not callable: expected fn(http::ResponseWriter, http::Request) -> (), but got non-callable type i64"
+        },
+        {
+          "action": "Compile fixture passing a bound integer variable to handle_func",
+          "expected": "rgoc rejects the non-callable bound value",
+          "observed": "warning: Git tree '/home/lenstr/workspace/personal/hack/rgo-lang' is dirty\nerror: /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/callback-slice/callback-slice-cli/fixtures/non-callable-bound-handler.rg:5:9: not callable: expected fn(http::ResponseWriter, http::Request) -> (), but got non-callable type i64"
+        },
+        {
+          "action": "Check requested output paths",
+          "expected": "No Go output files exist for either rejected fixture",
+          "observed": "literal=False, bound=False"
+        }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "n/a (CLI flow)",
+        "network": "n/a",
+        "files": [
+          "callback-slice/callback-slice-cli/fixtures/non-callable-literal-handler.rg",
+          "callback-slice/callback-slice-cli/logs/non-callable-literal-handler.compile.stdout.log",
+          "callback-slice/callback-slice-cli/logs/non-callable-literal-handler.compile.stderr.log",
+          "callback-slice/callback-slice-cli/fixtures/non-callable-bound-handler.rg",
+          "callback-slice/callback-slice-cli/logs/non-callable-bound-handler.compile.stdout.log",
+          "callback-slice/callback-slice-cli/logs/non-callable-bound-handler.compile.stderr.log"
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CALLBACK-006",
+      "title": "Handler registration does not consume named functions or zero-capture anonymous handlers",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile a fixture that registers the same named handler on /items and /other",
+          "expected": "Both registrations compile without consuming the handler",
+          "observed": "Generated Go contains both HandleFunc calls using the same handler symbol"
+        },
+        {
+          "action": "Validate generated Go with gofmt -d, go build, and go vet",
+          "expected": "All downstream Go checks succeed",
+          "observed": "gofmt=0, go build=0, go vet=0"
+        },
+        {
+          "action": "Run the server and request both registered routes",
+          "expected": "Both routes remain callable and return the handler response",
+          "observed": "/items => HTTP/1.1 200 OK\nDate: Wed, 22 Apr 2026 17:16:43 GMT\nContent-Length: 22\nContent-Type: text/plain; charset=utf-8\n\nnamed handler response ; /other => HTTP/1.1 200 OK\nDate: Wed, 22 Apr 2026 17:16:43 GMT\nContent-Length: 22\nContent-Type: text/plain; charset=utf-8\n\nnamed handler response"
+        }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "n/a (CLI/HTTP flow)",
+        "network": "GET /items -> 200; GET /other -> 200 using the same named handler binding",
+        "files": [
+          "callback-slice/callback-slice-cli/fixtures/named-handler-reuse-server.rg",
+          "callback-slice/callback-slice-cli/generated/named-handler-reuse-server.go",
+          "callback-slice/callback-slice-cli/bin/named-handler-reuse-server",
+          "callback-slice/callback-slice-cli/logs/named-handler-reuse-server.server.log",
+          "callback-slice/callback-slice-cli/responses/named-handler-reuse-server.items-1.http.txt",
+          "callback-slice/callback-slice-cli/responses/named-handler-reuse-server.other-1.http.txt"
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CALLBACK-007",
+      "title": "Registered handlers remain callable across multiple requests without ownership regressions",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Start the named-handler reuse server once",
+          "expected": "One process remains available for repeated probes",
+          "observed": "Server binary started and served repeated requests on 127.0.0.1:3111"
+        },
+        {
+          "action": "Request GET /items twice against the same process",
+          "expected": "Both requests return 200 with the same body",
+          "observed": "first=HTTP/1.1 200 OK\nDate: Wed, 22 Apr 2026 17:16:43 GMT\nContent-Length: 22\nContent-Type: text/plain; charset=utf-8\n\nnamed handler response ; second=HTTP/1.1 200 OK\nDate: Wed, 22 Apr 2026 17:16:43 GMT\nContent-Length: 22\nContent-Type: text/plain; charset=utf-8\n\nnamed handler response"
+        },
+        {
+          "action": "Request GET /other on the same process after the repeated /items calls",
+          "expected": "Other route still succeeds",
+          "observed": "HTTP/1.1 200 OK\nDate: Wed, 22 Apr 2026 17:16:43 GMT\nContent-Length: 22\nContent-Type: text/plain; charset=utf-8\n\nnamed handler response"
+        }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "n/a (CLI/HTTP flow)",
+        "network": "GET /items -> 200 twice; GET /other -> 200 on the same running process",
+        "files": [
+          "callback-slice/callback-slice-cli/bin/named-handler-reuse-server",
+          "callback-slice/callback-slice-cli/logs/named-handler-reuse-server.server.log",
+          "callback-slice/callback-slice-cli/responses/named-handler-reuse-server.items-1.http.txt",
+          "callback-slice/callback-slice-cli/responses/named-handler-reuse-server.items-2.http.txt",
+          "callback-slice/callback-slice-cli/responses/named-handler-reuse-server.other-1.http.txt"
+        ]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-002",
+      "title": "A mixed named-handler and zero-capture-lambda server works end-to-end",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile the mixed named-handler + anonymous-handler fixture",
+          "expected": "rgoc emits valid Go for both callback forms",
+          "observed": "Generated Go contains both mux.HandleFunc(\"/named\", named_handler) and mux.HandleFunc(\"/anon\", func(...))"
+        },
+        {
+          "action": "Validate generated Go with gofmt -d, go build, and go vet",
+          "expected": "All downstream Go checks succeed",
+          "observed": "gofmt=0, go build=0, go vet=0"
+        },
+        {
+          "action": "Run the server and request GET /named and GET /anon",
+          "expected": "Both routes return their distinct success bodies",
+          "observed": "/named => HTTP/1.1 200 OK\nDate: Wed, 22 Apr 2026 17:16:44 GMT\nContent-Length: 22\nContent-Type: text/plain; charset=utf-8\n\nnamed handler response ; /anon => HTTP/1.1 200 OK\nDate: Wed, 22 Apr 2026 17:16:44 GMT\nContent-Length: 26\nContent-Type: text/plain; charset=utf-8\n\nanonymous handler response"
+        }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "n/a (CLI/HTTP flow)",
+        "network": "GET /named -> 200 named handler response; GET /anon -> 200 anonymous handler response",
+        "files": [
+          "callback-slice/callback-slice-cli/fixtures/mixed-handlers-server.rg",
+          "callback-slice/callback-slice-cli/generated/mixed-handlers-server.go",
+          "callback-slice/callback-slice-cli/bin/mixed-handlers-server",
+          "callback-slice/callback-slice-cli/logs/mixed-handlers-server.server.log",
+          "callback-slice/callback-slice-cli/responses/mixed-handlers-server.named.http.txt",
+          "callback-slice/callback-slice-cli/responses/mixed-handlers-server.anon.http.txt"
+        ]
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [
+    {
+      "description": "Each `nix develop -c ...` invocation prints the flake dev-shell banner to stdout, so clean `gofmt -d` evidence logs are not empty even when no diff is emitted.",
+      "resolved": true,
+      "resolution": "Validated formatter stability by checking the `gofmt -d` exit code and confirming the stdout logs contained only the banner text, not a diff.",
+      "affectedAssertions": [
+        "VAL-CALLBACK-001",
+        "VAL-CALLBACK-002",
+        "VAL-CALLBACK-006",
+        "VAL-CALLBACK-007",
+        "VAL-CROSS-002"
+      ]
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 8 assertions: 8 passed, 0 failed, 0 blocked, 0 skipped."
+}
