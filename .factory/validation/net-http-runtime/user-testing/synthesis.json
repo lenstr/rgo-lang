@@ -1,0 +1,25 @@
+{
+  "milestone": "net-http-runtime",
+  "round": 1,
+  "status": "pass",
+  "assertionsSummary": {
+    "total": 8,
+    "passed": 8,
+    "failed": 0,
+    "blocked": 0
+  },
+  "passedAssertions": [
+    "VAL-HTTP-001",
+    "VAL-HTTP-002",
+    "VAL-HTTP-003",
+    "VAL-HTTP-004",
+    "VAL-HTTP-005",
+    "VAL-HTTP-006",
+    "VAL-HTTP-007",
+    "VAL-CROSS-004"
+  ],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "appliedUpdates": [],
+  "previousRound": null
+}

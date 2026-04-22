@@ -1,0 +1,282 @@
+{
+  "milestone": "net-http-runtime",
+  "groupId": "net-http-runtime-http-cli",
+  "surface": "rgoc CLI + generated Go artifacts + local HTTP probe",
+  "testedAt": "2026-04-22T18:44:37.226378+00:00",
+  "isolation": {
+    "repoRoot": "/home/lenstr/workspace/personal/hack/rgo-lang",
+    "missionDir": "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7",
+    "fixturePath": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/runtime/http-server.rg",
+    "evidenceDir": "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/net-http-runtime/net-http-runtime-http-cli",
+    "reportPath": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/net-http-runtime/user-testing/flows/net-http-runtime-http-cli.json",
+    "host": "127.0.0.1",
+    "port": 3111,
+    "duneBuildDir": "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/net-http-runtime/net-http-runtime-http-cli/dune-build"
+  },
+  "toolsUsed": [
+    "nix develop -c dune exec rgoc -- ...",
+    "nix develop -c gofmt -d",
+    "nix develop -c go build",
+    "nix develop -c go vet",
+    "curl",
+    "python3"
+  ],
+  "assertions": [
+    {
+      "id": "VAL-HTTP-001",
+      "title": "A representative CRUD fixture starts a localhost net/http server",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile the CRUD fixture to an evidence-local Go file and binary.",
+          "expected": "rgoc emits buildable Go using net/http and the generated binary can listen on 127.0.0.1:3111.",
+          "observed": "`http-server.go` imports `net/http`; `gofmt -d`, `go build`, and `go vet` all exited 0; the generated binary served `GET /items` on 127.0.0.1:3111 on the first readiness probe."
+        }
+      ],
+      "observedResults": [
+        "Generated Go imported `net/http` and lowered to `http.NewServeMux`, `mux.HandleFunc`, and `http.ListenAndServe`.",
+        "The built binary accepted a live connection on 127.0.0.1:3111 and returned `HTTP/1.1 200 OK` with body `[]`."
+      ],
+      "evidence": {
+        "artifacts": [
+          "net-http-runtime/net-http-runtime-http-cli/http-server.go",
+          "net-http-runtime/net-http-runtime-http-cli/http-validation-server"
+        ],
+        "logs": [
+          "net-http-runtime/net-http-runtime-http-cli/logs/compile.stdout.log",
+          "net-http-runtime/net-http-runtime-http-cli/logs/compile.stderr.log",
+          "net-http-runtime/net-http-runtime-http-cli/logs/gofmt.log",
+          "net-http-runtime/net-http-runtime-http-cli/logs/go-build.log",
+          "net-http-runtime/net-http-runtime-http-cli/logs/go-vet.log",
+          "net-http-runtime/net-http-runtime-http-cli/logs/http-flow.log",
+          "net-http-runtime/net-http-runtime-http-cli/logs/runtime.pid",
+          "net-http-runtime/net-http-runtime-http-cli/logs/runtime-process-status.log",
+          "net-http-runtime/net-http-runtime-http-cli/logs/runtime.stdout.log",
+          "net-http-runtime/net-http-runtime-http-cli/logs/runtime.stderr.log"
+        ],
+        "responses": [
+          "net-http-runtime/net-http-runtime-http-cli/responses/initial-get.http"
+        ]
+      },
+      "commands": [
+        "DUNE_BUILD_DIR=<evidence>/dune-build nix develop -c dune exec rgoc -- /home/lenstr/workspace/personal/hack/rgo-lang/.factory/runtime/http-server.rg -o <evidence>/http-server.go",
+        "nix develop -c gofmt -d <evidence>/http-server.go",
+        "nix develop -c go build -o <evidence>/http-validation-server <evidence>/http-server.go",
+        "nix develop -c go vet <evidence>/http-server.go",
+        "<evidence>/http-validation-server",
+        "curl -sS -i http://127.0.0.1:3111/items"
+      ],
+      "issues": null
+    },
+    {
+      "id": "VAL-HTTP-002",
+      "title": "Port-in-use startup failure surfaces cleanly",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Occupy 127.0.0.1:3111 with a dummy listener, then start the generated server.",
+          "expected": "The generated server should fail immediately with a clear bind/listen error.",
+          "observed": "A Python dummy listener held 127.0.0.1:3111, then the generated server exited with status 2 and stderr `panic: listen tcp 127.0.0.1:3111: bind: address already in use`."
+        }
+      ],
+      "observedResults": [
+        "The generated server did not hang or report success while the port was occupied.",
+        "The bind failure was explicit and user-visible in stderr."
+      ],
+      "evidence": {
+        "logs": [
+          "net-http-runtime/net-http-runtime-http-cli/logs/port-occupied-dummy.stdout.log",
+          "net-http-runtime/net-http-runtime-http-cli/logs/port-occupied-dummy.stderr.log",
+          "net-http-runtime/net-http-runtime-http-cli/logs/port-occupied-server.stdout.log",
+          "net-http-runtime/net-http-runtime-http-cli/logs/port-occupied-server.stderr.log",
+          "net-http-runtime/net-http-runtime-http-cli/logs/port-occupied-summary.log"
+        ]
+      },
+      "commands": [
+        "python3 -c 'bind 127.0.0.1:3111 and sleep'",
+        "<evidence>/http-validation-server"
+      ],
+      "issues": null
+    },
+    {
+      "id": "VAL-HTTP-003",
+      "title": "GET /items returns the initial collection state",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Request `GET /items` against the started server before any create traffic.",
+          "expected": "The route should return the fixture's initial collection state.",
+          "observed": "`GET /items` returned `HTTP/1.1 200 OK` with body `[]`."
+        }
+      ],
+      "observedResults": [
+        "Initial collection state was empty as contracted by the fixture."
+      ],
+      "evidence": {
+        "responses": [
+          "net-http-runtime/net-http-runtime-http-cli/responses/initial-get.http"
+        ],
+        "logs": [
+          "net-http-runtime/net-http-runtime-http-cli/logs/http-flow.log"
+        ]
+      },
+      "commands": [
+        "curl -sS -i http://127.0.0.1:3111/items"
+      ],
+      "issues": null
+    },
+    {
+      "id": "VAL-HTTP-004",
+      "title": "POST /items reads form data and returns an explicit create response",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Submit `POST /items` with form field `name=alice`.",
+          "expected": "The server should read the form value, mutate state, and return a success response that reflects the submitted name.",
+          "observed": "`POST /items` returned `HTTP/1.1 201 Created` with body `created: alice`."
+        }
+      ],
+      "observedResults": [
+        "The response body echoed the submitted name instead of returning a fixed stub."
+      ],
+      "evidence": {
+        "responses": [
+          "net-http-runtime/net-http-runtime-http-cli/responses/post-alice.http"
+        ],
+        "logs": [
+          "net-http-runtime/net-http-runtime-http-cli/logs/http-flow.log"
+        ]
+      },
+      "commands": [
+        "curl -sS -i -X POST -d 'name=alice' http://127.0.0.1:3111/items"
+      ],
+      "issues": null
+    },
+    {
+      "id": "VAL-HTTP-005",
+      "title": "Read-after-create is observable over real HTTP",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Request `GET /items` after the successful create.",
+          "expected": "The created record should appear in the collection response.",
+          "observed": "The second `GET /items` returned `HTTP/1.1 200 OK` with body `[\"alice\"]`."
+        }
+      ],
+      "observedResults": [
+        "The state mutation from the create request was visible on a later read."
+      ],
+      "evidence": {
+        "responses": [
+          "net-http-runtime/net-http-runtime-http-cli/responses/get-after-create.http"
+        ],
+        "logs": [
+          "net-http-runtime/net-http-runtime-http-cli/logs/http-flow.log"
+        ]
+      },
+      "commands": [
+        "curl -sS -i http://127.0.0.1:3111/items"
+      ],
+      "issues": null
+    },
+    {
+      "id": "VAL-HTTP-006",
+      "title": "Unsupported methods are rejected with a stable non-2xx response",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Submit `DELETE /items` while the same server process is running.",
+          "expected": "The server should return a controlled non-2xx response without terminating.",
+          "observed": "`DELETE /items` returned `HTTP/1.1 405 Method Not Allowed` with body `method not allowed`, and later valid requests still succeeded against the same PID."
+        }
+      ],
+      "observedResults": [
+        "Unsupported-method handling was stable and did not crash the process."
+      ],
+      "evidence": {
+        "responses": [
+          "net-http-runtime/net-http-runtime-http-cli/responses/delete-items.http",
+          "net-http-runtime/net-http-runtime-http-cli/responses/post-bob-after-errors.http",
+          "net-http-runtime/net-http-runtime-http-cli/responses/get-after-recovery.http"
+        ],
+        "logs": [
+          "net-http-runtime/net-http-runtime-http-cli/logs/http-flow.log",
+          "net-http-runtime/net-http-runtime-http-cli/logs/runtime-process-status.log"
+        ]
+      },
+      "commands": [
+        "curl -sS -i -X DELETE http://127.0.0.1:3111/items",
+        "curl -sS -i -X POST -d 'name=bob' http://127.0.0.1:3111/items",
+        "curl -sS -i http://127.0.0.1:3111/items"
+      ],
+      "issues": null
+    },
+    {
+      "id": "VAL-HTTP-007",
+      "title": "Malformed create requests return 400 and preserve state",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Submit `POST /items` without a `name` field, then read the collection again.",
+          "expected": "The server should return a client error and preserve the pre-error state.",
+          "observed": "`POST /items` with an empty body returned `HTTP/1.1 400 Bad Request` and body `missing name`; the following `GET /items` still returned `[\"alice\"]`."
+        }
+      ],
+      "observedResults": [
+        "Malformed create traffic did not mutate stored items."
+      ],
+      "evidence": {
+        "responses": [
+          "net-http-runtime/net-http-runtime-http-cli/responses/post-missing-name.http",
+          "net-http-runtime/net-http-runtime-http-cli/responses/get-after-malformed.http"
+        ],
+        "logs": [
+          "net-http-runtime/net-http-runtime-http-cli/logs/http-flow.log"
+        ]
+      },
+      "commands": [
+        "curl -sS -i -X POST -d '' http://127.0.0.1:3111/items",
+        "curl -sS -i http://127.0.0.1:3111/items"
+      ],
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-004",
+      "title": "The full CRUD fixture survives error-path traffic and keeps serving valid requests",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Drive error-path traffic (`DELETE /items`, malformed `POST /items`) against the running CRUD server, then send later valid write and read requests to the same process.",
+          "expected": "The process should survive the error-path traffic and keep serving later valid requests.",
+          "observed": "After `DELETE /items` returned 405 and malformed `POST /items` returned 400, the same process later accepted `POST /items name=bob` with `201 Created` and a final `GET /items` returned `[\"alice\", \"bob\"]`."
+        }
+      ],
+      "observedResults": [
+        "The CRUD server remained healthy across both error paths and continued to serve valid traffic without restart.",
+        "The final collection state proved the same process remained mutable and responsive after the failures."
+      ],
+      "evidence": {
+        "responses": [
+          "net-http-runtime/net-http-runtime-http-cli/responses/delete-items.http",
+          "net-http-runtime/net-http-runtime-http-cli/responses/post-missing-name.http",
+          "net-http-runtime/net-http-runtime-http-cli/responses/post-bob-after-errors.http",
+          "net-http-runtime/net-http-runtime-http-cli/responses/get-after-recovery.http"
+        ],
+        "logs": [
+          "net-http-runtime/net-http-runtime-http-cli/logs/http-flow.log",
+          "net-http-runtime/net-http-runtime-http-cli/logs/runtime-process-status.log"
+        ]
+      },
+      "commands": [
+        "curl -sS -i -X DELETE http://127.0.0.1:3111/items",
+        "curl -sS -i -X POST -d '' http://127.0.0.1:3111/items",
+        "curl -sS -i -X POST -d 'name=bob' http://127.0.0.1:3111/items",
+        "curl -sS -i http://127.0.0.1:3111/items"
+      ],
+      "issues": null
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 8 assertions on the rgoc CLI / generated Go / local HTTP surface: 8 passed, 0 failed, 0 blocked. The generated CRUD server compiled, passed gofmt/build/vet, handled required GET/POST/error flows, survived error-path traffic, and failed cleanly when port 3111 was already occupied."
+}
