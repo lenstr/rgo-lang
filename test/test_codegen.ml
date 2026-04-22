@@ -3674,8 +3674,9 @@ let () =
             test_typed_nonvoid_lambda_if_final;
           Alcotest.test_case "typed non-void lambda empty body rejected" `Quick
             test_typed_nonvoid_lambda_empty_body_rejected;
-          Alcotest.test_case "typed non-void lambda statement-only body rejected"
-            `Quick test_typed_nonvoid_lambda_statement_only_rejected;
+          Alcotest.test_case
+            "typed non-void lambda statement-only body rejected" `Quick
+            test_typed_nonvoid_lambda_statement_only_rejected;
         ] );
       ( "module-level-let",
         [

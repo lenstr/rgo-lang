@@ -3196,10 +3196,12 @@ let callback_negative_tests =
       fail ~expect:"undefined" callback_capturing_lambda_negative );
     ( "typed non-void lambda empty body rejected",
       `Quick,
-      fail ~expect:"must produce a value" typed_nonvoid_lambda_empty_body_negative );
+      fail ~expect:"must produce a value"
+        typed_nonvoid_lambda_empty_body_negative );
     ( "typed non-void lambda statement-only body rejected",
       `Quick,
-      fail ~expect:"must produce a value" typed_nonvoid_lambda_statement_only_negative );
+      fail ~expect:"must produce a value"
+        typed_nonvoid_lambda_statement_only_negative );
   ]
 
 let () =

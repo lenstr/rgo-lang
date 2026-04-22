@@ -1,6 +1,6 @@
 {
   "milestone": "misc-callback-followups",
-  "round": 1,
+  "round": 2,
   "status": "fail",
   "validatorsRun": {
     "test": {
@@ -24,30 +24,30 @@
     "passed": 0,
     "failed": 1,
     "failedFeatures": [
-      "misc-typed-nonvoid-lambda-return-lowering"
+      "misc-typed-nonvoid-lambda-void-body-rejection"
     ]
   },
   "blockingIssues": [
     {
-      "featureId": "misc-typed-nonvoid-lambda-return-lowering",
+      "featureId": "misc-typed-nonvoid-lambda-void-body-rejection",
       "severity": "blocking",
-      "description": "Typed non-void lambdas whose bodies do not produce a value are still accepted by typecheck and can still lower to invalid Go with a declared return type but no guaranteed return, so typecheck and codegen remain misaligned for unsupported forms."
+      "description": "The fix still accepts typed non-void lambdas whose last statement is syntactically block-like but not value-guaranteeing, such as `if` without `else` or a trailing void block expression. `rgoc` still emits Go for those forms, and the generated Go then fails to build with `missing return`, so the original typecheck/codegen mismatch remains."
     }
   ],
   "nonBlockingIssues": [
     {
-      "featureId": "misc-typed-nonvoid-lambda-return-lowering",
+      "featureId": "misc-typed-nonvoid-lambda-void-body-rejection",
       "severity": "non_blocking",
-      "description": "Regression coverage only added positive typed non-void lambda cases and still lacks a negative compile test for unsupported empty or statement-only non-void lambda bodies."
+      "description": "Negative regression coverage now covers empty-body and statement-only typed non-void lambdas, but it still does not lock down other unsupported no-value trailing forms such as `if` without `else` or a trailing void block expression."
     }
   ],
   "appliedUpdates": [],
   "suggestedGuidanceUpdates": [],
   "rejectedObservations": [
     {
-      "observation": "The worker edited implementation files before tests while the compiler-worker skill still reported `followedProcedure: true`.",
-      "reason": "ambiguous: this is a single-worker skill-compliance issue, and the existing compiler-worker skill already documents both the tests-first expectation and accurate `skillFeedback` reporting."
+      "observation": "The fix worker edited implementation files before adding tests while the handoff still reported `skillFeedback.followedProcedure: true`.",
+      "reason": "already-documented: the existing compiler-worker skill already requires tests-first behavior and accurate deviation reporting, so no skill update is needed from this single-instance compliance mismatch."
     }
   ],
-  "previousRound": null
+  "previousRound": ".factory/validation/misc-callback-followups/scrutiny/synthesis.round1.json"
 }

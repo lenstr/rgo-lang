@@ -576,13 +576,14 @@ let rec check_expr env (e : expr) : ty =
           | Some _ -> body_ty <> TVoid
           | None -> (
               match List.rev body.stmts with
-              | (StmtExpr (ExprReturn _ | ExprIf _ | ExprMatch _ | ExprBlock _)
-                :: _) ->
+              | StmtExpr (ExprReturn _ | ExprIf _ | ExprMatch _ | ExprBlock _)
+                :: _ ->
                   true
               | _ -> body_ty <> TVoid)
         in
         if not has_guaranteed_value then
-          error_at (expr_span (ExprLambda (params, ret_ty, body)))
+          error_at
+            (expr_span (ExprLambda (params, ret_ty, body)))
             "typed non-void lambda body must produce a value";
         if body_ty <> TVoid then
           expect_type ~env:lambda_env
