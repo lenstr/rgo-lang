@@ -1,0 +1,15 @@
+{
+  "featureId": "callback-registration-void-wildcard-rejection",
+  "reviewedAt": "2026-04-22T16:59:25.215931+00:00",
+  "commitId": "eb2fca2b47cf57c641fcbfaa793df3dc733bf698",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "I reviewed the fix feature entry, prior failed review, fix handoff, fix transcript skeleton, the compiler-worker skill, and both commit diffs (`bb4db0d` and `eb2fca2b47cf57c641fcbfaa793df3dc733bf698`). The original failure was that `check_fn_args` still performed a non-strict top-level compatibility check, so `TVoid` could wildcard-match a handler `TFn` parameter and let void-valued non-callable expressions through. The fix adds a targeted pre-check in `lib/typecheck.ml:704-712` that rejects `TFn`-expected / `TVoid`-actual pairs with the intended not-callable diagnostic before the wildcard path can succeed, and it adds a focused regression test in `test/test_typecheck.ml:3040-3115` for `mux.handle_func(\"/items\", println(\"oops\"))`. That directly closes the prior review's blocking hole while leaving the earlier named-handler/signature machinery intact.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/callback-slice/scrutiny/reviews/named-handler-registration-and-signature-checking.json",
+  "summary": "Pass. The fix adequately addresses the prior failure from `named-handler-registration-and-signature-checking`: void-valued non-callable expressions are now rejected at `handle_func` registration sites before `TVoid` compatibility can mask them, and the new regression test covers the exact scenario called out in the failed review. I did not find new blocking or non-blocking issues in the reviewed change set."
+}

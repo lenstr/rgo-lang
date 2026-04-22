@@ -1,7 +1,7 @@
 {
   "milestone": "callback-slice",
-  "round": 1,
-  "status": "fail",
+  "round": 2,
+  "status": "pass",
   "validatorsRun": {
     "test": {
       "passed": true,
@@ -20,31 +20,14 @@
     }
   },
   "reviewsSummary": {
-    "total": 2,
+    "total": 1,
     "passed": 1,
-    "failed": 1,
-    "failedFeatures": [
-      "named-handler-registration-and-signature-checking"
-    ]
+    "failed": 0,
+    "failedFeatures": []
   },
-  "blockingIssues": [
-    {
-      "featureId": "named-handler-registration-and-signature-checking",
-      "severity": "blocking",
-      "description": "Callback argument checking still accepts some void-valued non-callable expressions at handle_func registration sites because check_fn_args uses non-strict types_compatible and TVoid is treated as a wildcard, so rgoc can accept invalid handler registrations such as mux.handle_func(\"/items\", println(\"oops\"))."
-    }
-  ],
+  "blockingIssues": [],
   "appliedUpdates": [],
   "suggestedGuidanceUpdates": [],
-  "rejectedObservations": [
-    {
-      "observation": "The worker transcript showed implementation edits before tests despite a tests-first skill requirement.",
-      "reason": "ambiguous: this appears to be a one-off skill-following discrepancy from a single review, not a validated systemic guidance gap requiring AGENTS or skill updates."
-    },
-    {
-      "observation": "Generated-Go verification commands were recorded without nix develop -c wrappers.",
-      "reason": "already-documented: repository AGENTS.md already requires project commands to run through nix develop -c, so no new guidance update is needed."
-    }
-  ],
-  "previousRound": null
+  "rejectedObservations": [],
+  "previousRound": ".factory/validation/callback-slice/scrutiny/synthesis.round1.json"
 }
