@@ -1,0 +1,28 @@
+{
+  "featureId": "misc-deep-nested-result-constructor-inference",
+  "reviewedAt": "2026-04-22T20:53:59Z",
+  "commitId": "aa97260",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "Reviewed the feature metadata, handoff, transcript skeleton for session `18f096c5-5dba-4fe7-aaf7-51cea07daf8c`, commit `aa97260`, the `compiler-worker` skill, mission shared-state docs, and the `lib/codegen.ml` / `lib/typecheck.ml` / test changes. The new fixture proves the narrow function-return case, but the commit's new value-position `Result` lowering is not carried through the existing top-level `Result` codegen paths: direct ascribed `Result` expressions and `let`/wildcard `Result` value positions still lower as if every `Result` were a Go `(value, error)` pair. That leaves legal direct deeply nested constructor expressions miscompiled, and the added tests do not cover that path.",
+    "issues": [
+      {
+        "file": "lib/codegen.ml",
+        "line": 3126,
+        "severity": "blocking",
+        "description": "`ExprCast` now lowers `Ok(...) as Result<...>` / `Err(...) as Result<...>` to `Result[T, E]{...}` struct literals (`lib/codegen.ml:1267-1282`), but the surrounding top-level `Result` codegen still assumes every non-decomposed `Result` is a two-value Go return. `gen_result_match` / `gen_result_match_as_return` emit `if val, err := <scrutinee>; err == nil` for any non-identifier scrutinee (`lib/codegen.ml:3126-3139`, `3224-3237`), and `StmtLet` / wildcard lets still route any `Result`-typed initializer through `gen_result_let_binding` / `_, _ =` (`lib/codegen.ml:3732-3738`, `3806-3812`, `3924-3928`). A legal direct program such as `match (Ok(Some(Ok(42) as Result<i64, str>)) as Result<Option<Result<i64, str>>, str>) { ... }` or `let res: Result<Option<Result<i64, str>>, str> = Ok(Some(Ok(42) as Result<i64, str>)) as Result<Option<Result<i64, str>>, str>;` would therefore typecheck but lower to invalid Go like `if v, err := Result[...] { ... };` or `res, err := Result[...] { ... }`. That means the new value-position `Result` support only works in the specific nested-helper/function-return path exercised by the fixture, not for direct deeply nested constructor expressions the feature description calls out."
+      },
+      {
+        "file": "test/test_codegen_ownership.ml",
+        "line": 1931,
+        "severity": "non_blocking",
+        "description": "The new runtime regression only exercises the deep nested constructor through `maybe_value()` returning an outer function-level `Result` (`test/test_codegen_ownership.ml:1931-1960` and `.factory/runtime/deep-nested-result.rg:1-30`), so it never covers the new direct value-position `Result` codegen that this commit adds. A direct top-level ascribed `Result` match or `let` binding would have exposed the blocking mismatch above."
+      }
+    ]
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": null,
+  "summary": "Fail. `aa97260` fixes the worker's narrow function-return fixture, but direct value-position deeply nested `Result` constructors are still miscompiled because top-level `Result` lets and matches continue to assume Go multi-return pairs instead of the new `Result[T,E]` struct. The added tests do not cover that path."
+}

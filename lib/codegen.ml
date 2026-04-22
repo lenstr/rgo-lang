@@ -1266,22 +1266,22 @@ let rec gen_expr env buf indent (ctx : expr_ctx) (e : Ast.expr) : unit =
       Buffer.add_char buf ']'
   | ExprCast (e, ty) -> (
       match (e, ty) with
-      | ExprCall (ExprIdent { node = "Ok"; _ }, [ arg ]),
-        TyGeneric ({ node = "Result"; _ }, [ ok_ty; err_ty ]) ->
+      | ( ExprCall (ExprIdent { node = "Ok"; _ }, [ arg ]),
+          TyGeneric ({ node = "Result"; _ }, [ ok_ty; err_ty ]) ) ->
           env.shared.needs_result_struct <- true;
           Printf.bprintf buf "Result[%s, %s]{ok: true, value: "
             (go_type env ok_ty) (go_type env err_ty);
           gen_expr env buf indent CtxExpr arg;
           Buffer.add_string buf "}"
-      | ExprCall (ExprIdent { node = "Err"; _ }, [ arg ]),
-        TyGeneric ({ node = "Result"; _ }, [ ok_ty; err_ty ]) ->
+      | ( ExprCall (ExprIdent { node = "Err"; _ }, [ arg ]),
+          TyGeneric ({ node = "Result"; _ }, [ ok_ty; err_ty ]) ) ->
           env.shared.needs_result_struct <- true;
-          Printf.bprintf buf "Result[%s, %s]{err: "
-            (go_type env ok_ty) (go_type env err_ty);
+          Printf.bprintf buf "Result[%s, %s]{err: " (go_type env ok_ty)
+            (go_type env err_ty);
           gen_expr env buf indent CtxExpr arg;
           Buffer.add_string buf "}"
-      | ExprCall (ExprIdent { node = "Some"; _ }, [ arg ]),
-        TyGeneric ({ node = "Option"; _ }, [ inner_ty ]) ->
+      | ( ExprCall (ExprIdent { node = "Some"; _ }, [ arg ]),
+          TyGeneric ({ node = "Option"; _ }, [ inner_ty ]) ) ->
           if is_nullable_ty env inner_ty then begin
             env.shared.needs_option_struct <- true;
             Printf.bprintf buf "rgo_some[%s](" (go_type env inner_ty);
@@ -1289,8 +1289,8 @@ let rec gen_expr env buf indent (ctx : expr_ctx) (e : Ast.expr) : unit =
             Buffer.add_char buf ')'
           end
           else gen_new_expr env buf indent (Some inner_ty) arg
-      | ExprIdent { node = "None"; _ },
-        TyGeneric ({ node = "Option"; _ }, [ inner_ty ]) ->
+      | ( ExprIdent { node = "None"; _ },
+          TyGeneric ({ node = "Option"; _ }, [ inner_ty ]) ) ->
           if is_nullable_ty env inner_ty then begin
             env.shared.needs_option_struct <- true;
             Printf.bprintf buf "rgo_none[%s]()" (go_type env inner_ty)
@@ -2852,8 +2852,7 @@ and gen_nested_result_inner_match_stmt env buf indent inner_var
               Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t")));
       Printf.bprintf buf "%s} else {\n" indent;
       let nested_err = fresh_tmp env "inner_err" in
-      Printf.bprintf buf "%s%s := %s.err\n" (indent ^ "\t") nested_err
-        inner_var;
+      Printf.bprintf buf "%s%s := %s.err\n" (indent ^ "\t") nested_err inner_var;
       (match inner_err_arm with
       | Some arm -> (
           match arm.arm_pat with
@@ -3040,8 +3039,7 @@ and gen_nested_result_inner_match_expr env buf indent inner_var
               Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t")));
       Printf.bprintf buf "%s} else {\n" indent;
       let nested_err = fresh_tmp env "inner_err" in
-      Printf.bprintf buf "%s%s := %s.err\n" (indent ^ "\t") nested_err
-        inner_var;
+      Printf.bprintf buf "%s%s := %s.err\n" (indent ^ "\t") nested_err inner_var;
       (match inner_err_arm with
       | Some arm -> (
           match arm.arm_pat with

@@ -1,0 +1,28 @@
+{
+  "featureId": "misc-result-variable-match-codegen",
+  "reviewedAt": "2026-04-22T20:53:31Z",
+  "commitId": "263c5a3",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "Reviewed the feature metadata, handoff, transcript skeleton for session `465e94a1-2bce-4d0d-837d-d2e67f00dc4a`, commit `263c5a3`, the `compiler-worker` skill, and the current `lib/codegen.ml` / `test/test_codegen.ml` changes. The new `result_decomps` tracking fixes the simplest `let r = get_result(...); match r { ... }` case, but the stored decomposition mapping is not scoped. A later shadowing `let r = ...` can overwrite the outer mapping and survive block exit, so a subsequent `match r` reuses the wrong error binding. I confirmed this with a focused temporary fixture: compiling `let r = get_result(42); { let r = get_result(-1); match r { ... } } match r { ... }` produced Go with both matches checking `if __err_1 == nil` and ran as `negative\nnegative\n` instead of preserving the outer `42` path. The added regression tests only cover straight-line top-level variable matches, so they do not catch this scoping regression.",
+    "issues": [
+      {
+        "file": "lib/codegen.ml",
+        "line": 3892,
+        "severity": "blocking",
+        "description": "`StmtExpr (ExprBlock blk)` restores `values` and `scope_drops` after leaving the block, but it does not restore `result_decomps`. Combined with `result_decomps = SMap.add esc_name err_name env.result_decomps` at `lib/codegen.ml:3738`, shadowing a `Result` binding inside a block overwrites the outer decomposition permanently. After the block, `infer_expr_type` again sees the outer `Result` variable, but `result_var_decomp` reuses the inner error binding, so later `match` code can test and print the wrong state. A focused repro (`let r = get_result(42); { let r = get_result(-1); match r { ... } } match r { ... }`) currently lowers to two `if __err_1 == nil` branches and runs as `negative\\nnegative\\n` instead of `negative\\n42\\n`."
+      },
+      {
+        "file": "test/test_codegen.ml",
+        "line": 915,
+        "severity": "non_blocking",
+        "description": "The new regression coverage only exercises straight-line `Result` variable matches (`result variable match stmt Ok`, `result variable match stmt Err`, and `result variable match expr`). None of the added tests exercise scope exit, shadowing, or rebinding around a `Result` variable, so the blocking `result_decomps` leak above is not covered. A block-scope/shadowing case would have caught the incorrect `if __err_1 == nil` reuse."
+      }
+    ]
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": null,
+  "summary": "Fail. The feature fixes the simplest `Result`-variable match lowering, but the new decomposition map is not scoped, so shadowed `Result` bindings can corrupt later matches on the outer variable. The added tests are too narrow to catch that regression."
+}
