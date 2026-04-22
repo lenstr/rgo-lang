@@ -2401,7 +2401,7 @@ and extract_inner_builtin_pat (arm : match_arm) :
    some_arms are the outer Some arms whose inner patterns are
    built-in Option patterns.  We find the inner Some/None among them. *)
 and gen_nested_option_match_stmt env buf indent outer_var inner_name
-    (some_arms : match_arm list) inner_ty nested_inner_ty _ctx =
+    (some_arms : match_arm list) inner_ty nested_inner_ty _ctx default_arm =
   (* Emit the outer binding: unwrap the outer Option value *)
   if is_nullable_ty env inner_ty then
     Printf.bprintf buf "%s%s := %s.value\n" indent inner_name outer_var
@@ -2443,19 +2443,30 @@ and gen_nested_option_match_stmt env buf indent outer_var inner_name
             Printf.bprintf buf "%s%s := *%s\n" (indent ^ "\t")
               (escape_ident name.node) inner_name;
           gen_arm_body_stmts some_env buf (indent ^ "\t") arm.arm_expr
+      | PatTuple (_, _, [ PatTuple (_, _, [ PatWild ]) ]) ->
+          (* Wildcard inner: no binding needed, just emit body *)
+          gen_arm_body_stmts env buf (indent ^ "\t") arm.arm_expr
       | _ ->
           Printf.bprintf buf "%spanic(\"unsupported nested pattern\")\n"
             (indent ^ "\t"))
-  | None -> Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t"));
+  | None -> (
+      (* No specific inner Some arm - fall back to default arm *)
+      match default_arm with
+      | Some arm -> gen_arm_body_stmts env buf (indent ^ "\t") arm.arm_expr
+      | None -> Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t")));
   Printf.bprintf buf "%s} else {\n" indent;
   (match inner_none_arm with
   | Some arm -> gen_arm_body_stmts env buf (indent ^ "\t") arm.arm_expr
-  | None -> Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t"));
+  | None -> (
+      (* No specific inner None arm - fall back to default arm *)
+      match default_arm with
+      | Some arm -> gen_arm_body_stmts env buf (indent ^ "\t") arm.arm_expr
+      | None -> Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t")));
   Printf.bprintf buf "%s}" indent
 
 (* Same as above but for expression context (returns a value) *)
 and gen_nested_option_match_expr env buf indent outer_var inner_name
-    (some_arms : match_arm list) inner_ty nested_inner_ty _ctx =
+    (some_arms : match_arm list) inner_ty nested_inner_ty _ctx default_arm =
   if is_nullable_ty env inner_ty then
     Printf.bprintf buf "%s%s := %s.value\n" indent inner_name outer_var
   else Printf.bprintf buf "%s%s := *%s\n" indent inner_name outer_var;
@@ -2497,17 +2508,36 @@ and gen_nested_option_match_expr env buf indent outer_var inner_name
           Printf.bprintf buf "%sreturn " (indent ^ "\t");
           gen_expr some_env buf (indent ^ "\t") CtxExpr arm.arm_expr;
           Buffer.add_char buf '\n'
+      | PatTuple (_, _, [ PatTuple (_, _, [ PatWild ]) ]) ->
+          (* Wildcard inner: no binding needed, just emit return body *)
+          Printf.bprintf buf "%sreturn " (indent ^ "\t");
+          gen_expr env buf (indent ^ "\t") CtxExpr arm.arm_expr;
+          Buffer.add_char buf '\n'
       | _ ->
           Printf.bprintf buf "%spanic(\"unsupported nested pattern\")\n"
             (indent ^ "\t"))
-  | None -> Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t"));
+  | None -> (
+      (* No specific inner Some arm - fall back to default arm *)
+      match default_arm with
+      | Some arm ->
+          Printf.bprintf buf "%sreturn " (indent ^ "\t");
+          gen_expr env buf (indent ^ "\t") CtxExpr arm.arm_expr;
+          Buffer.add_char buf '\n'
+      | None -> Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t")));
   Printf.bprintf buf "%s} else {\n" indent;
   (match inner_none_arm with
   | Some arm ->
       Printf.bprintf buf "%sreturn " (indent ^ "\t");
       gen_expr env buf (indent ^ "\t") CtxExpr arm.arm_expr;
       Buffer.add_char buf '\n'
-  | None -> Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t"));
+  | None -> (
+      (* No specific inner None arm - fall back to default arm *)
+      match default_arm with
+      | Some arm ->
+          Printf.bprintf buf "%sreturn " (indent ^ "\t");
+          gen_expr env buf (indent ^ "\t") CtxExpr arm.arm_expr;
+          Buffer.add_char buf '\n'
+      | None -> Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t")));
   Printf.bprintf buf "%s}" indent
 
 (* Generate a nested Result-then-Option/Result match for arms with nested
@@ -2534,7 +2564,7 @@ and gen_nested_option_match_expr env buf indent outer_var inner_name
        <inner Err arm body>
      } *)
 and gen_nested_result_inner_match_stmt env buf indent inner_var
-    (inner_arms : match_arm list) inner_ty _ctx =
+    (inner_arms : match_arm list) inner_ty _ctx default_arm =
   (* Determine the inner type and generate the appropriate nested matching *)
   match inner_ty with
   | TyGeneric ({ node = "Option"; _ }, [ nested_inner_ty ]) ->
@@ -2576,14 +2606,27 @@ and gen_nested_result_inner_match_stmt env buf indent inner_var
                 Printf.bprintf buf "%s%s := *%s\n" (indent ^ "\t")
                   (escape_ident name.node) inner_var;
               gen_arm_body_stmts some_env buf (indent ^ "\t") arm.arm_expr
+          | PatTuple (_, _, [ PatTuple (_, _, [ PatWild ]) ]) ->
+              (* Wildcard inner: no binding needed, just emit body *)
+              gen_arm_body_stmts env buf (indent ^ "\t") arm.arm_expr
           | _ ->
               Printf.bprintf buf "%spanic(\"unsupported nested pattern\")\n"
                 (indent ^ "\t"))
-      | None -> Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t"));
+      | None -> (
+          (* No specific inner Some arm - fall back to default arm *)
+          match default_arm with
+          | Some arm -> gen_arm_body_stmts env buf (indent ^ "\t") arm.arm_expr
+          | None ->
+              Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t")));
       Printf.bprintf buf "%s} else {\n" indent;
       (match inner_none_arm with
       | Some arm -> gen_arm_body_stmts env buf (indent ^ "\t") arm.arm_expr
-      | None -> Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t"));
+      | None -> (
+          (* No specific inner None arm - fall back to default arm *)
+          match default_arm with
+          | Some arm -> gen_arm_body_stmts env buf (indent ^ "\t") arm.arm_expr
+          | None ->
+              Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t")));
       Printf.bprintf buf "%s}" indent
   | TyGeneric ({ node = "Result"; _ }, [ ok_ty; _err_ty ]) ->
       (* Inner is Result: generate nested if/else on err == nil *)
@@ -2618,10 +2661,18 @@ and gen_nested_result_inner_match_stmt env buf indent inner_var
               Printf.bprintf buf "%s%s := %s\n" (indent ^ "\t")
                 (escape_ident name.node) nested_val;
               gen_arm_body_stmts ok_env buf (indent ^ "\t") arm.arm_expr
+          | PatTuple (_, _, [ PatTuple (_, _, [ PatWild ]) ]) ->
+              (* Wildcard inner: no binding needed, just emit body *)
+              gen_arm_body_stmts env buf (indent ^ "\t") arm.arm_expr
           | _ ->
               Printf.bprintf buf "%spanic(\"unsupported nested pattern\")\n"
                 (indent ^ "\t"))
-      | None -> Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t"));
+      | None -> (
+          (* No specific inner Ok arm - fall back to default arm *)
+          match default_arm with
+          | Some arm -> gen_arm_body_stmts env buf (indent ^ "\t") arm.arm_expr
+          | None ->
+              Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t")));
       Printf.bprintf buf "%s} else {\n" indent;
       (match inner_err_arm with
       | Some arm -> (
@@ -2630,17 +2681,25 @@ and gen_nested_result_inner_match_stmt env buf indent inner_var
               Printf.bprintf buf "%s%s := %s\n" (indent ^ "\t")
                 (escape_ident name.node) nested_err;
               gen_arm_body_stmts env buf (indent ^ "\t") arm.arm_expr
+          | PatTuple (_, _, [ PatTuple (_, _, [ PatWild ]) ]) ->
+              (* Wildcard inner: no binding needed, just emit body *)
+              gen_arm_body_stmts env buf (indent ^ "\t") arm.arm_expr
           | _ ->
               Printf.bprintf buf "%spanic(\"unsupported nested pattern\")\n"
                 (indent ^ "\t"))
-      | None -> Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t"));
+      | None -> (
+          (* No specific inner Err arm - fall back to default arm *)
+          match default_arm with
+          | Some arm -> gen_arm_body_stmts env buf (indent ^ "\t") arm.arm_expr
+          | None ->
+              Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t")));
       Printf.bprintf buf "%s}" indent
   | _ ->
       Printf.bprintf buf "%spanic(\"unsupported nested match type\")\n" indent
 
 (* Expression-context version of nested Result inner match *)
 and gen_nested_result_inner_match_expr env buf indent inner_var
-    (inner_arms : match_arm list) inner_ty _ctx =
+    (inner_arms : match_arm list) inner_ty _ctx default_arm =
   match inner_ty with
   | TyGeneric ({ node = "Option"; _ }, [ nested_inner_ty ]) ->
       let cond =
@@ -2682,17 +2741,38 @@ and gen_nested_result_inner_match_expr env buf indent inner_var
               Printf.bprintf buf "%sreturn " (indent ^ "\t");
               gen_expr some_env buf (indent ^ "\t") CtxExpr arm.arm_expr;
               Buffer.add_char buf '\n'
+          | PatTuple (_, _, [ PatTuple (_, _, [ PatWild ]) ]) ->
+              (* Wildcard inner: no binding needed, just emit return body *)
+              Printf.bprintf buf "%sreturn " (indent ^ "\t");
+              gen_expr env buf (indent ^ "\t") CtxExpr arm.arm_expr;
+              Buffer.add_char buf '\n'
           | _ ->
               Printf.bprintf buf "%spanic(\"unsupported nested pattern\")\n"
                 (indent ^ "\t"))
-      | None -> Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t"));
+      | None -> (
+          (* No specific inner Some arm - fall back to default arm *)
+          match default_arm with
+          | Some arm ->
+              Printf.bprintf buf "%sreturn " (indent ^ "\t");
+              gen_expr env buf (indent ^ "\t") CtxExpr arm.arm_expr;
+              Buffer.add_char buf '\n'
+          | None ->
+              Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t")));
       Printf.bprintf buf "%s} else {\n" indent;
       (match inner_none_arm with
       | Some arm ->
           Printf.bprintf buf "%sreturn " (indent ^ "\t");
           gen_expr env buf (indent ^ "\t") CtxExpr arm.arm_expr;
           Buffer.add_char buf '\n'
-      | None -> Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t"));
+      | None -> (
+          (* No specific inner None arm - fall back to default arm *)
+          match default_arm with
+          | Some arm ->
+              Printf.bprintf buf "%sreturn " (indent ^ "\t");
+              gen_expr env buf (indent ^ "\t") CtxExpr arm.arm_expr;
+              Buffer.add_char buf '\n'
+          | None ->
+              Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t")));
       Printf.bprintf buf "%s}" indent
   | TyGeneric ({ node = "Result"; _ }, [ ok_ty; _err_ty ]) ->
       let nested_val = fresh_tmp env "inner_val" in
@@ -2728,10 +2808,23 @@ and gen_nested_result_inner_match_expr env buf indent inner_var
               Printf.bprintf buf "%sreturn " (indent ^ "\t");
               gen_expr ok_env buf (indent ^ "\t") CtxExpr arm.arm_expr;
               Buffer.add_char buf '\n'
+          | PatTuple (_, _, [ PatTuple (_, _, [ PatWild ]) ]) ->
+              (* Wildcard inner: no binding needed, just emit return body *)
+              Printf.bprintf buf "%sreturn " (indent ^ "\t");
+              gen_expr env buf (indent ^ "\t") CtxExpr arm.arm_expr;
+              Buffer.add_char buf '\n'
           | _ ->
               Printf.bprintf buf "%spanic(\"unsupported nested pattern\")\n"
                 (indent ^ "\t"))
-      | None -> Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t"));
+      | None -> (
+          (* No specific inner Ok arm - fall back to default arm *)
+          match default_arm with
+          | Some arm ->
+              Printf.bprintf buf "%sreturn " (indent ^ "\t");
+              gen_expr env buf (indent ^ "\t") CtxExpr arm.arm_expr;
+              Buffer.add_char buf '\n'
+          | None ->
+              Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t")));
       Printf.bprintf buf "%s} else {\n" indent;
       (match inner_err_arm with
       | Some arm -> (
@@ -2742,10 +2835,23 @@ and gen_nested_result_inner_match_expr env buf indent inner_var
               Printf.bprintf buf "%sreturn " (indent ^ "\t");
               gen_expr env buf (indent ^ "\t") CtxExpr arm.arm_expr;
               Buffer.add_char buf '\n'
+          | PatTuple (_, _, [ PatTuple (_, _, [ PatWild ]) ]) ->
+              (* Wildcard inner: no binding needed, just emit return body *)
+              Printf.bprintf buf "%sreturn " (indent ^ "\t");
+              gen_expr env buf (indent ^ "\t") CtxExpr arm.arm_expr;
+              Buffer.add_char buf '\n'
           | _ ->
               Printf.bprintf buf "%spanic(\"unsupported nested pattern\")\n"
                 (indent ^ "\t"))
-      | None -> Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t"));
+      | None -> (
+          (* No specific inner Err arm - fall back to default arm *)
+          match default_arm with
+          | Some arm ->
+              Printf.bprintf buf "%sreturn " (indent ^ "\t");
+              gen_expr env buf (indent ^ "\t") CtxExpr arm.arm_expr;
+              Buffer.add_char buf '\n'
+          | None ->
+              Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t")));
       Printf.bprintf buf "%s}" indent
   | _ ->
       Printf.bprintf buf "%spanic(\"unsupported nested match type\")\n" indent
@@ -2817,7 +2923,7 @@ and gen_result_match env buf indent ctx scrutinee arms _ok_ty _err_ty =
       if has_nested_ok then
         let ok_arms = find_all_builtin_variant_arms "Ok" arms in
         gen_nested_result_inner_match_stmt env buf (indent ^ "\t") value_name
-          ok_arms _ok_ty CtxStmt
+          ok_arms _ok_ty CtxStmt default_arm
       else
         gen_match_stmt_branch env buf (indent ^ "\t") ok_arm default_arm
           (gen_result_pattern_binding buf (indent ^ "\t") value_name err_name
@@ -2827,7 +2933,7 @@ and gen_result_match env buf indent ctx scrutinee arms _ok_ty _err_ty =
       if has_nested_err then
         let err_arms = find_all_builtin_variant_arms "Err" arms in
         gen_nested_result_inner_match_stmt env buf (indent ^ "\t") err_name
-          err_arms _err_ty CtxStmt
+          err_arms _err_ty CtxStmt default_arm
       else
         gen_match_stmt_branch env buf (indent ^ "\t") err_arm default_arm
           (gen_result_pattern_binding buf (indent ^ "\t") value_name err_name
@@ -2848,7 +2954,7 @@ and gen_result_match env buf indent ctx scrutinee arms _ok_ty _err_ty =
       if has_nested_ok then
         let ok_arms = find_all_builtin_variant_arms "Ok" arms in
         gen_nested_result_inner_match_expr env buf (ni ^ "\t") value_name
-          ok_arms _ok_ty CtxExpr
+          ok_arms _ok_ty CtxExpr default_arm
       else
         gen_match_return_branch env buf (ni ^ "\t") ok_arm default_arm
           (gen_result_pattern_binding buf (ni ^ "\t") value_name err_name true);
@@ -2857,7 +2963,7 @@ and gen_result_match env buf indent ctx scrutinee arms _ok_ty _err_ty =
       if has_nested_err then
         let err_arms = find_all_builtin_variant_arms "Err" arms in
         gen_nested_result_inner_match_expr env buf (ni ^ "\t") err_name err_arms
-          _err_ty CtxExpr
+          _err_ty CtxExpr default_arm
       else
         gen_match_return_branch env buf (ni ^ "\t") err_arm default_arm
           (gen_result_pattern_binding buf (ni ^ "\t") value_name err_name false);
@@ -2886,7 +2992,7 @@ and gen_result_match_as_return env buf indent scrutinee arms _ok_ty _err_ty =
   if has_nested_ok then
     let ok_arms = find_all_builtin_variant_arms "Ok" arms in
     gen_nested_result_inner_match_expr env buf (indent ^ "\t") value_name
-      ok_arms _ok_ty CtxExpr
+      ok_arms _ok_ty CtxExpr default_arm
   else
     gen_match_return_branch env buf (indent ^ "\t") ok_arm default_arm
       (gen_result_pattern_binding buf (indent ^ "\t") value_name err_name true);
@@ -2932,7 +3038,7 @@ and gen_option_match env buf indent ctx scrutinee arms inner_ty =
         in
         gen_nested_option_match_stmt env buf (indent ^ "\t") opt_name
           (fresh_tmp env "inner_opt")
-          some_arms inner_ty nested_inner_ty CtxStmt
+          some_arms inner_ty nested_inner_ty CtxStmt default_arm
       else begin
         let some_env =
           match some_arm with
@@ -2973,7 +3079,7 @@ and gen_option_match env buf indent ctx scrutinee arms inner_ty =
         in
         gen_nested_option_match_expr env buf (ni ^ "\t") opt_name
           (fresh_tmp env "inner_opt")
-          some_arms inner_ty nested_inner_ty CtxExpr
+          some_arms inner_ty nested_inner_ty CtxExpr default_arm
       else begin
         let some_env =
           match some_arm with
@@ -3025,7 +3131,7 @@ and gen_option_match_as_return env buf indent scrutinee arms inner_ty =
     in
     gen_nested_option_match_expr env buf (indent ^ "\t") opt_name
       (fresh_tmp env "inner_opt")
-      some_arms inner_ty nested_inner_ty CtxExpr
+      some_arms inner_ty nested_inner_ty CtxExpr default_arm
   else begin
     let some_env =
       match some_arm with

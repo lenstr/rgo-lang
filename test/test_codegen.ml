@@ -448,6 +448,195 @@ fn main() {
   let go = compile_and_check ~expected_output:"42\n" src in
   Alcotest.(check bool) "inner binding is emitted" true (contains go "v :=")
 
+(* Nested Option with wildcard inner pattern *)
+let test_option_nested_wildcard_inner () =
+  let src =
+    {|
+fn maybe_find(x: i64) -> Option<Option<i64>> {
+    if x > 0 {
+        Some(Some(x))
+    } else {
+        None
+    }
+}
+
+fn main() {
+    match maybe_find(42) {
+        Option::Some(Option::Some(_)) => println("some-some"),
+        Option::Some(Option::None) => println("inner none"),
+        Option::None => println("outer none"),
+    }
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"some-some\n" src in
+  Alcotest.(check bool)
+    "no panic in generated code" true
+    (not (contains go "panic"))
+
+(* Nested Option with default fallback arm *)
+let test_option_nested_default_fallback () =
+  let src =
+    {|
+fn maybe_find(x: i64) -> Option<Option<i64>> {
+    if x > 0 {
+        Some(Some(x))
+    } else {
+        None
+    }
+}
+
+fn main() {
+    match maybe_find(-1) {
+        Option::Some(Option::Some(v)) => println(v),
+        _ => println("fallback"),
+    }
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"fallback\n" src in
+  Alcotest.(check bool)
+    "no panic in generated code" true
+    (not (contains go "panic"))
+
+(* Nested Result(Option) with wildcard inner pattern *)
+let test_result_nested_option_wildcard_inner () =
+  let src =
+    {|
+fn maybe_value(x: i64) -> Result<Option<i64>, str> {
+    if x > 0 {
+        Ok(Some(x))
+    } else if x == 0 {
+        Ok(None)
+    } else {
+        Err("negative")
+    }
+}
+
+fn main() {
+    match maybe_value(42) {
+        Result::Ok(Option::Some(_)) => println("ok-some"),
+        Result::Ok(Option::None) => println("ok-none"),
+        Result::Err(e) => println(e),
+    }
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"ok-some\n" src in
+  Alcotest.(check bool)
+    "no panic in generated code" true
+    (not (contains go "panic"))
+
+(* Nested Result(Option) with default fallback arm *)
+let test_result_nested_option_default_fallback () =
+  let src =
+    {|
+fn maybe_value(x: i64) -> Result<Option<i64>, str> {
+    if x > 0 {
+        Ok(Some(x))
+    } else if x == 0 {
+        Ok(None)
+    } else {
+        Err("negative")
+    }
+}
+
+fn main() {
+    match maybe_value(0) {
+        Result::Ok(Option::Some(v)) => println(v),
+        _ => println("fallback"),
+    }
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"fallback\n" src in
+  Alcotest.(check bool)
+    "no panic in generated code" true
+    (not (contains go "panic"))
+
+(* Nested Option(Result) with wildcard inner pattern *)
+let test_option_nested_result_wildcard_inner () =
+  let src =
+    {|
+fn maybe_result(x: i64) -> Result<Option<i64>, str> {
+    if x > 0 {
+        Ok(Some(x))
+    } else if x == 0 {
+        Ok(None)
+    } else {
+        Err("negative")
+    }
+}
+
+fn main() {
+    match maybe_result(42) {
+        Result::Ok(Option::Some(_)) => println("ok-some"),
+        Result::Ok(Option::None) => println("ok-none"),
+        Result::Err(e) => println(e),
+    }
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"ok-some\n" src in
+  Alcotest.(check bool)
+    "no panic in generated code" true
+    (not (contains go "panic"))
+
+(* Nested Option match in expression context with wildcard inner *)
+let test_option_nested_wildcard_expr () =
+  let src =
+    {|
+fn maybe_find(x: i64) -> Option<Option<i64>> {
+    if x > 0 {
+        Some(Some(x))
+    } else {
+        None
+    }
+}
+
+fn main() {
+    let label = match maybe_find(42) {
+        Option::Some(Option::Some(_)) => "found",
+        Option::Some(Option::None) => "empty",
+        Option::None => "missing",
+    };
+    println(label);
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"found\n" src in
+  Alcotest.(check bool)
+    "no panic in generated code" true
+    (not (contains go "panic"))
+
+(* Nested Result match in expression context with default fallback *)
+let test_result_nested_option_default_fallback_expr () =
+  let src =
+    {|
+fn maybe_value(x: i64) -> Result<Option<i64>, str> {
+    if x > 0 {
+        Ok(Some(x))
+    } else if x == 0 {
+        Ok(None)
+    } else {
+        Err("negative")
+    }
+}
+
+fn main() {
+    let label = match maybe_value(0) {
+        Result::Ok(Option::Some(_)) => "value",
+        _ => "other",
+    };
+    println(label);
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"other\n" src in
+  Alcotest.(check bool)
+    "no panic in generated code" true
+    (not (contains go "panic"))
+
 (* ---------- Result tests ---------- *)
 
 let test_result_basic () =
@@ -2316,6 +2505,20 @@ let () =
             test_result_nested_option_pattern;
           Alcotest.test_case "nested inline Option<Result<i64>>" `Quick
             test_option_nested_result_pattern;
+          Alcotest.test_case "nested Option wildcard inner" `Quick
+            test_option_nested_wildcard_inner;
+          Alcotest.test_case "nested Option default fallback" `Quick
+            test_option_nested_default_fallback;
+          Alcotest.test_case "nested Result(Option) wildcard inner" `Quick
+            test_result_nested_option_wildcard_inner;
+          Alcotest.test_case "nested Result(Option) default fallback" `Quick
+            test_result_nested_option_default_fallback;
+          Alcotest.test_case "nested Option(Result) wildcard inner" `Quick
+            test_option_nested_result_wildcard_inner;
+          Alcotest.test_case "nested Option wildcard inner expr" `Quick
+            test_option_nested_wildcard_expr;
+          Alcotest.test_case "nested Result(Option) default fallback expr"
+            `Quick test_result_nested_option_default_fallback_expr;
         ] );
       ( "result",
         [
