@@ -1156,6 +1156,33 @@ impl Summary for Article {
 fn main() {}
 |}
 
+(* --- Module-level let predeclaration: functions can see globals regardless of source order --- *)
+let valid_module_let_function_before_let =
+  {|
+fn get_counter() -> i64 {
+    counter
+}
+
+let counter: i64 = 42;
+
+fn main() {
+    println(get_counter());
+}
+|}
+
+let valid_module_let_function_after_let =
+  {|
+let counter: i64 = 42;
+
+fn get_counter() -> i64 {
+    counter
+}
+
+fn main() {
+    println(get_counter());
+}
+|}
+
 (* ======== Test registration ======== *)
 
 let positive_tests =
@@ -1225,6 +1252,12 @@ let positive_tests =
     ( "default trait self method call",
       `Quick,
       pass valid_default_trait_self_method_call );
+    ( "module let function before let",
+      `Quick,
+      pass valid_module_let_function_before_let );
+    ( "module let function after let",
+      `Quick,
+      pass valid_module_let_function_after_let );
   ]
 
 let negative_tests =

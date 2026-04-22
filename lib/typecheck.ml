@@ -2416,6 +2416,12 @@ let typecheck_exn (prog : program) : program =
       env prog.imports
   in
   let env = collect_type_info env prog.items in
+  (* Predeclare module-level let bindings so functions can reference
+     them regardless of source order. *)
+  let env =
+    List.fold_left check_item env
+      (List.filter (function ItemLet _ -> true | _ -> false) prog.items)
+  in
   ignore (List.fold_left check_item env prog.items);
   prog
 
