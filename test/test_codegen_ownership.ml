@@ -1913,6 +1913,48 @@ fn main() {
   in
   compile_and_check ~expected_output:"42\n" src |> ignore
 
+(* Deep nested Option<Option<Option<T>>> Copy-payload pattern compiles and runs *)
+let test_own_deep_nested_option_copy_runtime () =
+  let src =
+    {|
+fn main() {
+    let a: Option<Option<Option<i64>>> = Some(Some(Some(42)));
+    match a {
+        Option::Some(Option::Some(Option::Some(v))) => println(v),
+        Option::Some(Option::Some(Option::None)) => println("some-some-none"),
+        Option::Some(Option::None) => println("some-none"),
+        Option::None => println("none"),
+    }
+}
+|}
+  in
+  compile_and_check ~expected_output:"42\n" src |> ignore
+
+(* Deep nested Result<Option<i64>> with default fallback Copy-payload runtime *)
+let test_own_deep_nested_result_option_copy_runtime () =
+  let src =
+    {|
+fn maybe_value(x: i64) -> Result<Option<i64>, str> {
+    if x > 0 {
+        Ok(Some(x))
+    } else if x == 0 {
+        Ok(None)
+    } else {
+        Err("negative")
+    }
+}
+
+fn main() {
+    match maybe_value(42) {
+        Result::Ok(Option::Some(v)) => println(v),
+        Result::Ok(Option::None) => println("inner none"),
+        Result::Err(e) => println(e),
+    }
+}
+|}
+  in
+  compile_and_check ~expected_output:"42\n" src |> ignore
+
 (* ======== Test registration ======== *)
 
 let () =
@@ -2050,6 +2092,12 @@ let () =
           Alcotest.test_case
             "nested Result(Option) Copy-payload pattern compiles and runs"
             `Quick test_own_nested_result_option_copy_runtime;
+          Alcotest.test_case
+            "deep nested Option<Option<Option<T>>> Copy-payload runtime" `Quick
+            test_own_deep_nested_option_copy_runtime;
+          Alcotest.test_case
+            "deep nested Result<Option<Result<T, E>>> Copy-payload runtime"
+            `Quick test_own_deep_nested_result_option_copy_runtime;
         ] );
       ( "example-fixtures",
         [

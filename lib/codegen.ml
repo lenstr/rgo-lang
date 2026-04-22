@@ -2388,6 +2388,27 @@ and extract_inner_builtin_pat (arm : match_arm) :
       Some (inner_enum.node, inner_variant.node, inner_pats)
   | _ -> None
 
+(* Peel one level of built-in nesting from each arm, returning arms whose
+   pattern is the inner built-in variant.  Arms whose pattern is not a
+   nested built-in (leaf bind/wildcard) are dropped. *)
+and peel_one_builtin_level (arms : match_arm list) : match_arm list =
+  List.filter_map
+    (fun (arm : match_arm) ->
+      match arm.arm_pat with
+      | PatTuple (_, _, [ PatTuple (inner_enum, inner_variant, inner_pats) ])
+        when inner_enum.node = "Option" || inner_enum.node = "Result" ->
+          Some
+            {
+              arm with
+              arm_pat = PatTuple (inner_enum, inner_variant, inner_pats);
+            }
+      | _ -> None)
+    arms
+
+(* Safe head option - returns the first element or None *)
+and list_head_opt (l : 'a list) : 'a option =
+  match l with [] -> None | x :: _ -> Some x
+
 (* Generate a nested Option match for arms with nested Option patterns
    inside an outer Some arm.  This emits code like:
 
@@ -2410,15 +2431,16 @@ and gen_nested_option_match_stmt env buf indent outer_var inner_name
     if is_nullable_ty env nested_inner_ty then inner_name ^ ".some"
     else inner_name ^ " != nil"
   in
-  (* Find the inner Some arm among the nested arms *)
-  let inner_some_arm =
-    List.find_opt
+  (* Collect ALL inner Some arms and inner None arms at this level *)
+  let all_inner_some_arms =
+    List.filter
       (fun (arm : match_arm) ->
         match extract_inner_builtin_pat arm with
         | Some (_, "Some", _) -> true
         | _ -> false)
       some_arms
   in
+  let inner_some_arm = list_head_opt all_inner_some_arms in
   let inner_none_arm =
     List.find_opt
       (fun (arm : match_arm) ->
@@ -2446,6 +2468,25 @@ and gen_nested_option_match_stmt env buf indent outer_var inner_name
       | PatTuple (_, _, [ PatTuple (_, _, [ PatWild ]) ]) ->
           (* Wildcard inner: no binding needed, just emit body *)
           gen_arm_body_stmts env buf (indent ^ "\t") arm.arm_expr
+      | PatTuple (_, _, [ PatTuple (deeper_enum, _, _deeper_inner_pats) ])
+        when deeper_enum.node = "Option" || deeper_enum.node = "Result" -> (
+          (* Deeper nesting: pass the current inner struct to the
+             recursive function which will unwrap one more level.
+             We pass inner_name (the struct) as outer_var, and the
+             correct inner_ty so the function's own unwrap extracts
+             the Some payload correctly. *)
+          let peeled_arms = peel_one_builtin_level all_inner_some_arms in
+          match nested_inner_ty with
+          | TyGeneric ({ node = "Option"; _ }, [ deeper_inner_ty ]) ->
+              gen_nested_option_match_stmt env buf (indent ^ "\t") inner_name
+                (fresh_tmp env "inner_opt")
+                peeled_arms nested_inner_ty deeper_inner_ty CtxStmt default_arm
+          | TyGeneric ({ node = "Result"; _ }, _) ->
+              gen_nested_result_inner_match_stmt env buf (indent ^ "\t")
+                inner_name peeled_arms nested_inner_ty CtxStmt default_arm
+          | _ ->
+              Printf.bprintf buf "%spanic(\"unsupported nested match type\")\n"
+                (indent ^ "\t"))
       | _ ->
           Printf.bprintf buf "%spanic(\"unsupported nested pattern\")\n"
             (indent ^ "\t"))
@@ -2462,7 +2503,7 @@ and gen_nested_option_match_stmt env buf indent outer_var inner_name
       match default_arm with
       | Some arm -> gen_arm_body_stmts env buf (indent ^ "\t") arm.arm_expr
       | None -> Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t")));
-  Printf.bprintf buf "%s}" indent
+  Printf.bprintf buf "%s}\n" indent
 
 (* Same as above but for expression context (returns a value) *)
 and gen_nested_option_match_expr env buf indent outer_var inner_name
@@ -2474,14 +2515,16 @@ and gen_nested_option_match_expr env buf indent outer_var inner_name
     if is_nullable_ty env nested_inner_ty then inner_name ^ ".some"
     else inner_name ^ " != nil"
   in
-  let inner_some_arm =
-    List.find_opt
+  (* Collect ALL inner Some arms and inner None arms at this level *)
+  let all_inner_some_arms =
+    List.filter
       (fun (arm : match_arm) ->
         match extract_inner_builtin_pat arm with
         | Some (_, "Some", _) -> true
         | _ -> false)
       some_arms
   in
+  let inner_some_arm = list_head_opt all_inner_some_arms in
   let inner_none_arm =
     List.find_opt
       (fun (arm : match_arm) ->
@@ -2513,6 +2556,23 @@ and gen_nested_option_match_expr env buf indent outer_var inner_name
           Printf.bprintf buf "%sreturn " (indent ^ "\t");
           gen_expr env buf (indent ^ "\t") CtxExpr arm.arm_expr;
           Buffer.add_char buf '\n'
+      | PatTuple (_, _, [ PatTuple (deeper_enum, _, _deeper_inner_pats) ])
+        when deeper_enum.node = "Option" || deeper_enum.node = "Result" -> (
+          (* Deeper nesting: peel one level and recurse *)
+          (* Deeper nesting: pass the current inner struct to the
+             recursive function which will unwrap one more level *)
+          let peeled_arms = peel_one_builtin_level all_inner_some_arms in
+          match nested_inner_ty with
+          | TyGeneric ({ node = "Option"; _ }, [ deeper_inner_ty ]) ->
+              gen_nested_option_match_expr env buf (indent ^ "\t") inner_name
+                (fresh_tmp env "inner_opt")
+                peeled_arms nested_inner_ty deeper_inner_ty CtxExpr default_arm
+          | TyGeneric ({ node = "Result"; _ }, _) ->
+              gen_nested_result_inner_match_expr env buf (indent ^ "\t")
+                inner_name peeled_arms nested_inner_ty CtxExpr default_arm
+          | _ ->
+              Printf.bprintf buf "%spanic(\"unsupported nested match type\")\n"
+                (indent ^ "\t"))
       | _ ->
           Printf.bprintf buf "%spanic(\"unsupported nested pattern\")\n"
             (indent ^ "\t"))
@@ -2538,7 +2598,7 @@ and gen_nested_option_match_expr env buf indent outer_var inner_name
           gen_expr env buf (indent ^ "\t") CtxExpr arm.arm_expr;
           Buffer.add_char buf '\n'
       | None -> Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t")));
-  Printf.bprintf buf "%s}" indent
+  Printf.bprintf buf "%s}\n" indent
 
 (* Generate a nested Result-then-Option/Result match for arms with nested
    Result patterns inside an outer Ok/Err arm.
@@ -2573,14 +2633,15 @@ and gen_nested_result_inner_match_stmt env buf indent inner_var
         if is_nullable_ty env nested_inner_ty then inner_var ^ ".some"
         else inner_var ^ " != nil"
       in
-      let inner_some_arm =
-        List.find_opt
+      let all_inner_some_arms =
+        List.filter
           (fun (arm : match_arm) ->
             match extract_inner_builtin_pat arm with
             | Some ("Option", "Some", _) -> true
             | _ -> false)
           inner_arms
       in
+      let inner_some_arm = list_head_opt all_inner_some_arms in
       let inner_none_arm =
         List.find_opt
           (fun (arm : match_arm) ->
@@ -2609,6 +2670,24 @@ and gen_nested_result_inner_match_stmt env buf indent inner_var
           | PatTuple (_, _, [ PatTuple (_, _, [ PatWild ]) ]) ->
               (* Wildcard inner: no binding needed, just emit body *)
               gen_arm_body_stmts env buf (indent ^ "\t") arm.arm_expr
+          | PatTuple (_, _, [ PatTuple (deeper_enum, _, _deeper_inner_pats) ])
+            when deeper_enum.node = "Option" || deeper_enum.node = "Result" -> (
+              (* Deeper nesting: pass inner_var to the recursive function
+                 which will unwrap one more level itself *)
+              let peeled_arms = peel_one_builtin_level all_inner_some_arms in
+              match nested_inner_ty with
+              | TyGeneric ({ node = "Option"; _ }, [ deeper_inner_ty ]) ->
+                  gen_nested_option_match_stmt env buf (indent ^ "\t") inner_var
+                    (fresh_tmp env "inner_opt")
+                    peeled_arms nested_inner_ty deeper_inner_ty CtxStmt
+                    default_arm
+              | TyGeneric ({ node = "Result"; _ }, _) ->
+                  gen_nested_result_inner_match_stmt env buf (indent ^ "\t")
+                    inner_var peeled_arms nested_inner_ty CtxStmt default_arm
+              | _ ->
+                  Printf.bprintf buf
+                    "%spanic(\"unsupported nested match type\")\n"
+                    (indent ^ "\t"))
           | _ ->
               Printf.bprintf buf "%spanic(\"unsupported nested pattern\")\n"
                 (indent ^ "\t"))
@@ -2634,22 +2713,24 @@ and gen_nested_result_inner_match_stmt env buf indent inner_var
       let nested_err = fresh_tmp env "inner_err" in
       Printf.bprintf buf "%sif %s, %s := %s; %s == nil {\n" indent nested_val
         nested_err inner_var nested_err;
-      let inner_ok_arm =
-        List.find_opt
+      let all_inner_ok_arms =
+        List.filter
           (fun (arm : match_arm) ->
             match extract_inner_builtin_pat arm with
             | Some ("Result", "Ok", _) -> true
             | _ -> false)
           inner_arms
       in
-      let inner_err_arm =
-        List.find_opt
+      let inner_ok_arm = list_head_opt all_inner_ok_arms in
+      let all_inner_err_arms =
+        List.filter
           (fun (arm : match_arm) ->
             match extract_inner_builtin_pat arm with
             | Some ("Result", "Err", _) -> true
             | _ -> false)
           inner_arms
       in
+      let inner_err_arm = list_head_opt all_inner_err_arms in
       (match inner_ok_arm with
       | Some arm -> (
           match arm.arm_pat with
@@ -2664,6 +2745,14 @@ and gen_nested_result_inner_match_stmt env buf indent inner_var
           | PatTuple (_, _, [ PatTuple (_, _, [ PatWild ]) ]) ->
               (* Wildcard inner: no binding needed, just emit body *)
               gen_arm_body_stmts env buf (indent ^ "\t") arm.arm_expr
+          | PatTuple (_, _, [ PatTuple (deeper_enum, _, _deeper_inner_pats) ])
+            when deeper_enum.node = "Option" || deeper_enum.node = "Result" ->
+              (* Deeper nesting on Ok side: peel one level and recurse.
+                 nested_val holds the Ok value; pass it to the recursive
+                 function which handles the next level of matching. *)
+              let peeled_arms = peel_one_builtin_level all_inner_ok_arms in
+              gen_nested_result_inner_match_stmt env buf (indent ^ "\t")
+                nested_val peeled_arms ok_ty CtxStmt default_arm
           | _ ->
               Printf.bprintf buf "%spanic(\"unsupported nested pattern\")\n"
                 (indent ^ "\t"))
@@ -2684,6 +2773,12 @@ and gen_nested_result_inner_match_stmt env buf indent inner_var
           | PatTuple (_, _, [ PatTuple (_, _, [ PatWild ]) ]) ->
               (* Wildcard inner: no binding needed, just emit body *)
               gen_arm_body_stmts env buf (indent ^ "\t") arm.arm_expr
+          | PatTuple (_, _, [ PatTuple (deeper_enum, _, _deeper_inner_pats) ])
+            when deeper_enum.node = "Option" || deeper_enum.node = "Result" ->
+              (* Deeper nesting on Err side: peel one level and recurse *)
+              let peeled_arms = peel_one_builtin_level all_inner_err_arms in
+              gen_nested_result_inner_match_stmt env buf (indent ^ "\t")
+                nested_err peeled_arms _err_ty CtxStmt default_arm
           | _ ->
               Printf.bprintf buf "%spanic(\"unsupported nested pattern\")\n"
                 (indent ^ "\t"))
@@ -2706,14 +2801,15 @@ and gen_nested_result_inner_match_expr env buf indent inner_var
         if is_nullable_ty env nested_inner_ty then inner_var ^ ".some"
         else inner_var ^ " != nil"
       in
-      let inner_some_arm =
-        List.find_opt
+      let all_inner_some_arms =
+        List.filter
           (fun (arm : match_arm) ->
             match extract_inner_builtin_pat arm with
             | Some ("Option", "Some", _) -> true
             | _ -> false)
           inner_arms
       in
+      let inner_some_arm = list_head_opt all_inner_some_arms in
       let inner_none_arm =
         List.find_opt
           (fun (arm : match_arm) ->
@@ -2746,6 +2842,23 @@ and gen_nested_result_inner_match_expr env buf indent inner_var
               Printf.bprintf buf "%sreturn " (indent ^ "\t");
               gen_expr env buf (indent ^ "\t") CtxExpr arm.arm_expr;
               Buffer.add_char buf '\n'
+          | PatTuple (_, _, [ PatTuple (deeper_enum, _, _deeper_inner_pats) ])
+            when deeper_enum.node = "Option" || deeper_enum.node = "Result" -> (
+              (* Deeper nesting: pass inner_var to the recursive function *)
+              let peeled_arms = peel_one_builtin_level all_inner_some_arms in
+              match nested_inner_ty with
+              | TyGeneric ({ node = "Option"; _ }, [ deeper_inner_ty ]) ->
+                  gen_nested_option_match_expr env buf (indent ^ "\t") inner_var
+                    (fresh_tmp env "inner_opt")
+                    peeled_arms nested_inner_ty deeper_inner_ty CtxExpr
+                    default_arm
+              | TyGeneric ({ node = "Result"; _ }, _) ->
+                  gen_nested_result_inner_match_expr env buf (indent ^ "\t")
+                    inner_var peeled_arms nested_inner_ty CtxExpr default_arm
+              | _ ->
+                  Printf.bprintf buf
+                    "%spanic(\"unsupported nested match type\")\n"
+                    (indent ^ "\t"))
           | _ ->
               Printf.bprintf buf "%spanic(\"unsupported nested pattern\")\n"
                 (indent ^ "\t"))
@@ -2779,22 +2892,24 @@ and gen_nested_result_inner_match_expr env buf indent inner_var
       let nested_err = fresh_tmp env "inner_err" in
       Printf.bprintf buf "%sif %s, %s := %s; %s == nil {\n" indent nested_val
         nested_err inner_var nested_err;
-      let inner_ok_arm =
-        List.find_opt
+      let all_inner_ok_arms =
+        List.filter
           (fun (arm : match_arm) ->
             match extract_inner_builtin_pat arm with
             | Some ("Result", "Ok", _) -> true
             | _ -> false)
           inner_arms
       in
-      let inner_err_arm =
-        List.find_opt
+      let inner_ok_arm = list_head_opt all_inner_ok_arms in
+      let all_inner_err_arms =
+        List.filter
           (fun (arm : match_arm) ->
             match extract_inner_builtin_pat arm with
             | Some ("Result", "Err", _) -> true
             | _ -> false)
           inner_arms
       in
+      let inner_err_arm = list_head_opt all_inner_err_arms in
       (match inner_ok_arm with
       | Some arm -> (
           match arm.arm_pat with
@@ -2813,6 +2928,12 @@ and gen_nested_result_inner_match_expr env buf indent inner_var
               Printf.bprintf buf "%sreturn " (indent ^ "\t");
               gen_expr env buf (indent ^ "\t") CtxExpr arm.arm_expr;
               Buffer.add_char buf '\n'
+          | PatTuple (_, _, [ PatTuple (deeper_enum, _, _deeper_inner_pats) ])
+            when deeper_enum.node = "Option" || deeper_enum.node = "Result" ->
+              (* Deeper nesting on Ok side: peel and recurse *)
+              let peeled_arms = peel_one_builtin_level all_inner_ok_arms in
+              gen_nested_result_inner_match_expr env buf (indent ^ "\t")
+                nested_val peeled_arms ok_ty CtxExpr default_arm
           | _ ->
               Printf.bprintf buf "%spanic(\"unsupported nested pattern\")\n"
                 (indent ^ "\t"))
@@ -2840,6 +2961,12 @@ and gen_nested_result_inner_match_expr env buf indent inner_var
               Printf.bprintf buf "%sreturn " (indent ^ "\t");
               gen_expr env buf (indent ^ "\t") CtxExpr arm.arm_expr;
               Buffer.add_char buf '\n'
+          | PatTuple (_, _, [ PatTuple (deeper_enum, _, _deeper_inner_pats) ])
+            when deeper_enum.node = "Option" || deeper_enum.node = "Result" ->
+              (* Deeper nesting on Err side: peel and recurse *)
+              let peeled_arms = peel_one_builtin_level all_inner_err_arms in
+              gen_nested_result_inner_match_expr env buf (indent ^ "\t")
+                nested_err peeled_arms _err_ty CtxExpr default_arm
           | _ ->
               Printf.bprintf buf "%spanic(\"unsupported nested pattern\")\n"
                 (indent ^ "\t"))

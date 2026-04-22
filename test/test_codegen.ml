@@ -637,6 +637,78 @@ fn main() {
     "no panic in generated code" true
     (not (contains go "panic"))
 
+(* Deeper nested Option<Option<Option<T>>> with Copy payload *)
+let test_option_deep_nested_3_levels () =
+  let src =
+    {|
+fn main() {
+    let a: Option<Option<Option<i64>>> = Some(Some(Some(42)));
+    match a {
+        Option::Some(Option::Some(Option::Some(v))) => println(v),
+        Option::Some(Option::Some(Option::None)) => println("some-some-none"),
+        Option::Some(Option::None) => println("some-none"),
+        Option::None => println("none"),
+    }
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"42\n" src in
+  Alcotest.(check bool)
+    "no panic in generated code" true
+    (not (contains go "panic"))
+
+(* Deeper nested Option<Option<Option<T>>> with default fallback *)
+let test_option_deep_nested_3_levels_default_fallback () =
+  let src =
+    {|
+fn deep(x: i64) -> Option<Option<Option<i64>>> {
+    if x > 0 {
+        Some(Some(Some(x)))
+    } else {
+        None
+    }
+}
+
+fn main() {
+    match deep(-1) {
+        Option::Some(Option::Some(Option::Some(v))) => println(v),
+        _ => println("fallback"),
+    }
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"fallback\n" src in
+  Alcotest.(check bool)
+    "no panic in generated code" true
+    (not (contains go "panic"))
+
+(* Deeper nested Option<Option<Option<T>>> hitting outer None arm *)
+let test_option_deep_nested_3_levels_outer_none () =
+  let src =
+    {|
+fn deep(x: i64) -> Option<Option<Option<i64>>> {
+    if x > 0 {
+        Some(Some(Some(x)))
+    } else {
+        None
+    }
+}
+
+fn main() {
+    match deep(-1) {
+        Option::Some(Option::Some(Option::Some(v))) => println(v),
+        Option::Some(Option::Some(Option::None)) => println("some-some-none"),
+        Option::Some(Option::None) => println("some-none"),
+        Option::None => println("none"),
+    }
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"none\n" src in
+  Alcotest.(check bool)
+    "no panic in generated code" true
+    (not (contains go "panic"))
+
 (* ---------- Result tests ---------- *)
 
 let test_result_basic () =
@@ -2519,6 +2591,12 @@ let () =
             test_option_nested_wildcard_expr;
           Alcotest.test_case "nested Result(Option) default fallback expr"
             `Quick test_result_nested_option_default_fallback_expr;
+          Alcotest.test_case "deep nested Option<Option<Option<T>>> 3 levels"
+            `Quick test_option_deep_nested_3_levels;
+          Alcotest.test_case "deep nested 3 levels default fallback" `Quick
+            test_option_deep_nested_3_levels_default_fallback;
+          Alcotest.test_case "deep nested 3 levels outer None arm" `Quick
+            test_option_deep_nested_3_levels_outer_none;
         ] );
       ( "result",
         [
