@@ -1,0 +1,34 @@
+{
+  "featureId": "misc-typed-nonvoid-lambda-return-lowering",
+  "reviewedAt": "2026-04-22T22:34:32Z",
+  "commitId": "c7ecc0b5d40983203adab1341ffd5e3b9d6be9dd",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "Reviewed the feature metadata in `/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/features.json`, the worker handoff for session `b5e4a5df-6bf3-49b5-9036-ff42f9830682`, the transcript skeleton, the `compiler-worker` skill, mission/shared-state docs, and commit `c7ecc0b5d40983203adab1341ffd5e3b9d6be9dd`. The refactor correctly routes positive typed non-void lambda final-expression cases through `gen_function_body`, and the added codegen tests cover a simple final expression plus an `if` final arm. However, the feature description also required unsupported typed non-void lambdas to be rejected so typecheck and codegen stay aligned, and that gap remains: typed non-void lambdas whose bodies do not produce a value still typecheck and still lower to invalid Go with a declared return type but no guaranteed `return`.",
+    "issues": [
+      {
+        "file": "lib/typecheck.ml",
+        "line": 573,
+        "severity": "blocking",
+        "description": "Typed non-void lambdas are still not rejected when their body type is `void`. `ExprLambda` only checks the declared return type when `body_ty <> TVoid` (`lib/typecheck.ml:572-573`), so unsupported forms such as `let f = || -> i32 {};` or `let f = || -> i32 { let x = 1; };` still pass typecheck. Codegen then enters `gen_function_body` with a non-void return type and, when `body.final_expr` is absent, either emits no return at all (`n = 0` / last statement is not `StmtExpr`) or otherwise relies on shapes that were never rejected (`lib/codegen.ml:4203-4219`). That leaves typecheck/codegen misaligned for exactly the unsupported typed non-void lambda forms this feature was supposed to reject if they could not be lowered safely."
+      },
+      {
+        "file": "test/test_codegen.ml",
+        "line": 2985,
+        "severity": "non_blocking",
+        "description": "The new regression coverage only adds two positive cases (`test/test_codegen.ml:2985-3018`) and does not add a negative compile test for unsupported typed non-void lambda bodies (empty body, statement-only body, or other non-value-producing shapes). Because that negative coverage is missing, the remaining typecheck/codegen mismatch above is not locked down by tests."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `compiler-worker` skill still says to write tests first and to mark `skillFeedback.followedProcedure` false when that sequencing is not followed, but this worker edited `lib/codegen.ml` multiple times before later adding the new `test/test_codegen.ml` cases while the handoff still reported `followedProcedure: true`.",
+      "evidence": "Skill: `/home/lenstr/workspace/personal/hack/rgo-lang/.factory/skills/compiler-worker/SKILL.md` steps 3 and 9. Transcript skeleton for session `b5e4a5df-6bf3-49b5-9036-ff42f9830682` shows repeated `Edit` operations on `lib/codegen.ml` before the later `Edit` operations that added `test_typed_nonvoid_lambda_positive` / `test_typed_nonvoid_lambda_if_final` in `test/test_codegen.ml`; the handoff still records `skillFeedback.followedProcedure: true`."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Fail. The positive final-expression lowering path is fixed, but unsupported typed non-void lambda bodies are still accepted by typecheck and can still lower to invalid Go without a guaranteed return, so typecheck and codegen are not yet aligned for the full feature scope."
+}

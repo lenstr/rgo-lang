@@ -1,0 +1,53 @@
+{
+  "milestone": "misc-callback-followups",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "nix develop -c dune runtest -j 16",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "nix develop -c dune build -j 16",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "nix develop -c dune build @fmt",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "failedFeatures": [
+      "misc-typed-nonvoid-lambda-return-lowering"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "misc-typed-nonvoid-lambda-return-lowering",
+      "severity": "blocking",
+      "description": "Typed non-void lambdas whose bodies do not produce a value are still accepted by typecheck and can still lower to invalid Go with a declared return type but no guaranteed return, so typecheck and codegen remain misaligned for unsupported forms."
+    }
+  ],
+  "nonBlockingIssues": [
+    {
+      "featureId": "misc-typed-nonvoid-lambda-return-lowering",
+      "severity": "non_blocking",
+      "description": "Regression coverage only added positive typed non-void lambda cases and still lacks a negative compile test for unsupported empty or statement-only non-void lambda bodies."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [],
+  "rejectedObservations": [
+    {
+      "observation": "The worker edited implementation files before tests while the compiler-worker skill still reported `followedProcedure: true`.",
+      "reason": "ambiguous: this is a single-worker skill-compliance issue, and the existing compiler-worker skill already documents both the tests-first expectation and accurate `skillFeedback` reporting."
+    }
+  ],
+  "previousRound": null
+}
