@@ -1,0 +1,46 @@
+{
+  "milestone": "crud-validation",
+  "round": 1,
+  "status": "pass",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "nix develop -c dune runtest -j 16",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "nix develop -c dune build -j 16",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "nix develop -c dune build @fmt",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "failedFeatures": []
+  },
+  "blockingIssues": [],
+  "appliedUpdates": [
+    {
+      "target": "library",
+      "description": "Clarified in `.factory/library/user-testing.md` that `.factory/runtime/http-server.rg` remains the live HTTP validation source for `http-validation-server`, while `.factory/runtime/interop-crud.rg` is the tracked compile/determinism fixture for VAL-CROSS-003.",
+      "sourceFeature": "interop-codegen-determinism-and-validation-fixture"
+    }
+  ],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "skill:compiler-worker",
+      "suggestion": "Narrow step 7 so compile-only HTTP fixture features do not imply mandatory live `127.0.0.1:3111` probing when the feature contract is limited to deterministic code generation and downstream Go tooling checks.",
+      "evidence": "The review for `interop-codegen-determinism-and-validation-fixture` found the feature contract and recorded validation were satisfied with repeated `rgoc`, `cmp`, `gofmt -d`, `go build`, and `go vet` checks, while `.factory/skills/compiler-worker/SKILL.md` currently says callback or HTTP-facing work should manually exercise `127.0.0.1:3111` whenever possible.",
+      "isSystemic": false
+    }
+  ],
+  "rejectedObservations": [],
+  "previousRound": null
+}

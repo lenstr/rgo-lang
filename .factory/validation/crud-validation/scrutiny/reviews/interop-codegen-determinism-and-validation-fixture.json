@@ -1,0 +1,33 @@
+{
+  "featureId": "interop-codegen-determinism-and-validation-fixture",
+  "reviewedAt": "2026-04-22T19:01:49Z",
+  "commitId": "78d54f4",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Reviewed the feature metadata, handoff, transcript skeleton for session `49384a62-76c1-4565-957b-63d97636e2a4`, commit `78d54f4`, the `compiler-worker` skill, and the relevant mission shared-state docs. The new tracked fixture at `.factory/runtime/interop-crud.rg:1-44` is a representative interop-heavy CRUD program: it imports `net::http`, uses package-qualified PascalCase types and snake_case calls, keeps shared CRUD state at module scope, exercises both a named handler and a zero-capture anonymous handler, and covers the GET/POST/400/405 paths needed by the mission HTTP flow. The handoff also records the exact VAL-CROSS-003 validation sequence against that tracked fixture (`rgoc` twice, `cmp`, `gofmt -d`, `go build`, and `go vet`), so the feature does satisfy its contract. I did not find a blocking correctness bug, but the added regression tests do not compile the tracked fixture path directly, which leaves room for future drift between the representative validation fixture and the source covered by automated tests.",
+    "issues": [
+      {
+        "file": "test/test_codegen.ml",
+        "line": 2951,
+        "severity": "non_blocking",
+        "description": "Both new VAL-CROSS-003 tests inline a copy of the CRUD program instead of loading `.factory/runtime/interop-crud.rg`. That means future edits to the tracked representative fixture can diverge from the source exercised by automated coverage while these tests still pass, weakening the intended 'fixture exists for repeated mission validation' guarantee."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "`compiler-worker` step 7 is too broad for compile-only HTTP fixture features. This worker marked `followedProcedure: true`, and the transcript/handoff show only compile/diff/build/vet checks for VAL-CROSS-003 with no server start or `curl` probes. The current skill wording says every callback or HTTP-facing feature should manually exercise `127.0.0.1:3111`, but this determinism/buildability feature was reasonably handled without runtime probing, so the procedure and expected practice are out of sync.",
+      "evidence": "`.factory/skills/compiler-worker/SKILL.md:26` requires manual runtime exercise for HTTP-facing work; the handoff command list in `.../handoffs/2026-04-22T18-57-49-533Z__interop-codegen-determinism-and-validation-fixture__49384a62-76c1-4565-957b-63d97636e2a4.json:14-41` contains only compile/determinism/gofmt/build/vet commands and no server or curl steps."
+    },
+    {
+      "area": "library",
+      "observation": "Shared-state docs no longer identify the canonical CRUD validation fixture unambiguously. `user-testing.md` still refers to a singular 'representative HTTP fixture' / 'generated CRUD validation fixture', but the runtime directory now contains both `http-server.rg` and the new `interop-crud.rg`. Without naming which source should feed the live HTTP validation path, later validators can keep exercising the older fixture while the newer representative interop-heavy fixture drifts unused.",
+      "evidence": "`.factory/library/user-testing.md:16,23` describes one representative CRUD fixture compiled to `./.factory/runtime/http-validation-server`; `/home/lenstr/workspace/personal/hack/rgo-lang/.factory/runtime` now includes both `http-server.rg` and `interop-crud.rg`."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Pass. The feature adds a representative interop-heavy CRUD fixture and the recorded validation evidence satisfies VAL-CROSS-003, but the new automated tests duplicate the fixture inline instead of compiling `.factory/runtime/interop-crud.rg`, leaving a non-blocking drift risk."
+}
