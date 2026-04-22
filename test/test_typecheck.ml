@@ -3097,6 +3097,32 @@ fn main() {
 }
 |}
 
+(* Typed non-void lambda with trailing if-without-else is rejected *)
+let typed_nonvoid_lambda_if_no_else_negative =
+  {|
+fn main() {
+    let f = |a: i32| -> i32 {
+        if a > 0 {
+            println("x");
+        }
+    };
+    println(f(1));
+}
+|}
+
+(* Typed non-void lambda with trailing void block is rejected *)
+let typed_nonvoid_lambda_void_block_negative =
+  {|
+fn main() {
+    let f = |a: i32| -> i32 {
+        {
+            println("x");
+        }
+    };
+    println(f(1));
+}
+|}
+
 (* VAL-CROSS-002: Mixed named handler + anonymous handler *)
 let callback_mixed_handlers_positive =
   {|
@@ -3202,6 +3228,14 @@ let callback_negative_tests =
       `Quick,
       fail ~expect:"must produce a value"
         typed_nonvoid_lambda_statement_only_negative );
+    ( "typed non-void lambda if-without-else rejected",
+      `Quick,
+      fail ~expect:"must produce a value"
+        typed_nonvoid_lambda_if_no_else_negative );
+    ( "typed non-void lambda trailing void block rejected",
+      `Quick,
+      fail ~expect:"must produce a value"
+        typed_nonvoid_lambda_void_block_negative );
   ]
 
 let () =

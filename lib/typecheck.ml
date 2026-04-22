@@ -446,6 +446,26 @@ let expr_span (e : expr) : span =
   | ExprStructVariant (id, _, _) -> id.span
   | _ -> dummy_span
 
+(* Recursively check whether a block/expression guarantees a value
+   even when its top-level type is TVoid (e.g. through explicit returns). *)
+let rec block_guarantees_value (blk : block) =
+  match blk.final_expr with
+  | Some e -> expr_guarantees_value e
+  | None -> (
+      match List.rev blk.stmts with
+      | StmtExpr e :: _ -> expr_guarantees_value e
+      | _ -> false)
+
+and expr_guarantees_value = function
+  | ExprReturn _ -> true
+  | ExprIf (_, then_b, Some else_b) ->
+      block_guarantees_value then_b && block_guarantees_value else_b
+  | ExprIf (_, _, None) -> false
+  | ExprMatch (_, arms) ->
+      List.for_all (fun arm -> expr_guarantees_value arm.arm_expr) arms
+  | ExprBlock blk -> block_guarantees_value blk
+  | _ -> false
+
 let rec check_expr env (e : expr) : ty =
   match e with
   | ExprLit l -> type_of_lit l
@@ -572,14 +592,14 @@ let rec check_expr env (e : expr) : ty =
       let body_ty = check_block lambda_env body in
       if ret_type <> TVoid then begin
         let has_guaranteed_value =
+          body_ty <> TVoid
+          ||
           match body.final_expr with
-          | Some _ -> body_ty <> TVoid
+          | Some e -> expr_guarantees_value e
           | None -> (
               match List.rev body.stmts with
-              | StmtExpr (ExprReturn _ | ExprIf _ | ExprMatch _ | ExprBlock _)
-                :: _ ->
-                  true
-              | _ -> body_ty <> TVoid)
+              | StmtExpr e :: _ -> expr_guarantees_value e
+              | _ -> false)
         in
         if not has_guaranteed_value then
           error_at

@@ -3042,6 +3042,92 @@ fn main() {
 |}
     ()
 
+(* Negative: typed non-void lambda with trailing if-without-else *)
+let test_typed_nonvoid_lambda_if_no_else_rejected () =
+  compile_expect_error ~expect:"must produce a value"
+    {|
+fn main() {
+    let f = |a: i32| -> i32 {
+        if a > 0 {
+            println("x");
+        }
+    };
+    println(f(1));
+}
+|}
+    ()
+
+(* Negative: typed non-void lambda with trailing void block *)
+let test_typed_nonvoid_lambda_void_block_rejected () =
+  compile_expect_error ~expect:"must produce a value"
+    {|
+fn main() {
+    let f = |a: i32| -> i32 {
+        {
+            println("x");
+        }
+    };
+    println(f(1));
+}
+|}
+    ()
+
+(* Positive: typed non-void lambda with trailing match expression *)
+let test_typed_nonvoid_lambda_match_final () =
+  let src =
+    {|
+fn main() {
+    let f = |a: i32| -> i32 {
+        match Some(a) {
+            Option::Some(v) => v,
+            Option::None => 0,
+        }
+    };
+    println(f(5));
+    println(f(-1));
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"5\n-1\n" src in
+  Alcotest.(check bool) "has return in match arm" true (contains go "return v")
+
+(* Positive: typed non-void lambda with trailing block expression *)
+let test_typed_nonvoid_lambda_block_final () =
+  let src =
+    {|
+fn main() {
+    let f = |a: i32| -> i32 {
+        {
+            a + 1
+        }
+    };
+    println(f(2));
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"3\n" src in
+  Alcotest.(check bool) "has return in block" true (contains go "return a + 1")
+
+(* Positive: typed non-void lambda with if-else where both arms have explicit returns *)
+let test_typed_nonvoid_lambda_if_both_return () =
+  let src =
+    {|
+fn main() {
+    let f = |a: i32| -> i32 {
+        if a > 0 {
+            return a;
+        } else {
+            return 0;
+        }
+    };
+    println(f(5));
+    println(f(-1));
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"5\n0\n" src in
+  Alcotest.(check bool) "has return in if arm" true (contains go "return a")
+
 let test_module_level_let () =
   let src = {|
 let counter: i64 = 0;
@@ -3677,6 +3763,17 @@ let () =
           Alcotest.test_case
             "typed non-void lambda statement-only body rejected" `Quick
             test_typed_nonvoid_lambda_statement_only_rejected;
+          Alcotest.test_case "typed non-void lambda if-without-else rejected"
+            `Quick test_typed_nonvoid_lambda_if_no_else_rejected;
+          Alcotest.test_case
+            "typed non-void lambda trailing void block rejected" `Quick
+            test_typed_nonvoid_lambda_void_block_rejected;
+          Alcotest.test_case "typed non-void lambda match final arm returns"
+            `Quick test_typed_nonvoid_lambda_match_final;
+          Alcotest.test_case "typed non-void lambda block final arm returns"
+            `Quick test_typed_nonvoid_lambda_block_final;
+          Alcotest.test_case "typed non-void lambda if both arms return" `Quick
+            test_typed_nonvoid_lambda_if_both_return;
         ] );
       ( "module-level-let",
         [
