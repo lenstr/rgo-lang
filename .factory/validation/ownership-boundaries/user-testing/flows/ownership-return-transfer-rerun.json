@@ -1,0 +1,120 @@
+{
+  "groupId": "ownership-return-transfer-rerun",
+  "testedAt": "2026-04-22T15:14:18.962110+00:00",
+  "isolation": {
+    "mode": "serial-only",
+    "repoRoot": "/home/lenstr/workspace/personal/hack/rgo-lang",
+    "missionDir": "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7",
+    "surface": "rgoc CLI + generated Go ownership flows",
+    "notes": [
+      "Stayed within the shared repository worktree.",
+      "Used only repo-local CLI/generated-Go validation.",
+      "All temporary .rg, .go, binary, stdout, and stderr artifacts were written under the assigned evidence directory."
+    ]
+  },
+  "toolsUsed": [
+    "rgoc CLI",
+    "gofmt",
+    "go build",
+    "go vet",
+    "go run"
+  ],
+  "assertions": [
+    {
+      "id": "VAL-OWN-008",
+      "title": "By-value returns transfer ownership cleanly",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile the positive by-value return fixture with rgoc.",
+          "expected": "Compilation succeeds and emits Go output.",
+          "observed": "Compilation exited 0 and wrote by_value_return_positive.go."
+        },
+        {
+          "action": "Run gofmt -d, go build, go vet, and go run on the generated positive Go output.",
+          "expected": "All Go toolchain commands succeed; runtime output shows caller-side ownership with exactly-once cleanup and no double cleanup.",
+          "observed": "All commands exited 0. After the nix shell banner, runtime stdout was exactly 'caller:transferred\\ndrop:transferred\\n'. The generated Go disables the callee defer before return (`__live_0 = false`) and defers `owned.Drop()` in the caller only."
+        },
+        {
+          "action": "Compile the negative post-return reuse fixture with rgoc.",
+          "expected": "Compilation fails with a move-style diagnostic containing 'use of moved value' and leaves no output file at the requested -o path.",
+          "observed": "Compilation exited 1 with stderr 'error: /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-return-transfer-rerun/VAL-OWN-008/post_return_reuse_negative.rg:8:11: use of moved value 'r''. The requested output file check recorded 'absent'."
+        }
+      ],
+      "evidence": {
+        "files": [
+          "ownership-boundaries/ownership-return-transfer-rerun/VAL-OWN-008/by_value_return_positive.rg",
+          "ownership-boundaries/ownership-return-transfer-rerun/VAL-OWN-008/by_value_return_positive-rgoc.stdout.log",
+          "ownership-boundaries/ownership-return-transfer-rerun/VAL-OWN-008/by_value_return_positive-rgoc.stderr.log",
+          "ownership-boundaries/ownership-return-transfer-rerun/VAL-OWN-008/by_value_return_positive.go",
+          "ownership-boundaries/ownership-return-transfer-rerun/VAL-OWN-008/by_value_return_positive-gofmt.stdout.log",
+          "ownership-boundaries/ownership-return-transfer-rerun/VAL-OWN-008/by_value_return_positive-gofmt.stderr.log",
+          "ownership-boundaries/ownership-return-transfer-rerun/VAL-OWN-008/by_value_return_positive-go_build.stdout.log",
+          "ownership-boundaries/ownership-return-transfer-rerun/VAL-OWN-008/by_value_return_positive-go_build.stderr.log",
+          "ownership-boundaries/ownership-return-transfer-rerun/VAL-OWN-008/by_value_return_positive.bin",
+          "ownership-boundaries/ownership-return-transfer-rerun/VAL-OWN-008/by_value_return_positive-go_vet.stdout.log",
+          "ownership-boundaries/ownership-return-transfer-rerun/VAL-OWN-008/by_value_return_positive-go_vet.stderr.log",
+          "ownership-boundaries/ownership-return-transfer-rerun/VAL-OWN-008/by_value_return_positive-go_run.stdout.log",
+          "ownership-boundaries/ownership-return-transfer-rerun/VAL-OWN-008/by_value_return_positive-go_run.stderr.log",
+          "ownership-boundaries/ownership-return-transfer-rerun/VAL-OWN-008/post_return_reuse_negative.rg",
+          "ownership-boundaries/ownership-return-transfer-rerun/VAL-OWN-008/post_return_reuse_negative-rgoc.stdout.log",
+          "ownership-boundaries/ownership-return-transfer-rerun/VAL-OWN-008/post_return_reuse_negative-rgoc.stderr.log",
+          "ownership-boundaries/ownership-return-transfer-rerun/VAL-OWN-008/post_return_reuse_negative-output-check.log"
+        ],
+        "positiveRuntime": "caller:transferred\\ndrop:transferred\\n",
+        "negativeDiagnostic": "use of moved value 'r'",
+        "negativeOutputFile": "absent"
+      },
+      "commands": [
+        {
+          "command": "nix develop -c dune exec rgoc -- /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-return-transfer-rerun/VAL-OWN-008/by_value_return_positive.rg -o /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-return-transfer-rerun/VAL-OWN-008/by_value_return_positive.go",
+          "exitCode": 0,
+          "observation": "rgoc compiled the positive fixture successfully."
+        },
+        {
+          "command": "nix develop -c gofmt -d /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-return-transfer-rerun/VAL-OWN-008/by_value_return_positive.go",
+          "exitCode": 0,
+          "observation": "No formatter diff was produced after the nix shell banner."
+        },
+        {
+          "command": "nix develop -c go build -o /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-return-transfer-rerun/VAL-OWN-008/by_value_return_positive.bin /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-return-transfer-rerun/VAL-OWN-008/by_value_return_positive.go",
+          "exitCode": 0,
+          "observation": "go build succeeded and wrote the binary artifact."
+        },
+        {
+          "command": "nix develop -c go vet /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-return-transfer-rerun/VAL-OWN-008/by_value_return_positive.go",
+          "exitCode": 0,
+          "observation": "go vet reported no issues."
+        },
+        {
+          "command": "nix develop -c go run /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-return-transfer-rerun/VAL-OWN-008/by_value_return_positive.go",
+          "exitCode": 0,
+          "observation": "Runtime output proved a single caller-side cleanup: caller:transferred then drop:transferred."
+        },
+        {
+          "command": "nix develop -c dune exec rgoc -- /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-return-transfer-rerun/VAL-OWN-008/post_return_reuse_negative.rg -o /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-return-transfer-rerun/VAL-OWN-008/post_return_reuse_negative.go",
+          "exitCode": 1,
+          "observation": "rgoc rejected post-return reuse with 'use of moved value'."
+        },
+        {
+          "command": "test ! -e /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/ownership-boundaries/ownership-return-transfer-rerun/VAL-OWN-008/post_return_reuse_negative.go",
+          "exitCode": 0,
+          "observation": "The requested negative output path did not exist after the failed compile."
+        }
+      ],
+      "issues": null
+    }
+  ],
+  "frictions": [
+    {
+      "description": "Each nix develop -c invocation prepended the flake shell banner to stdout logs.",
+      "resolved": true,
+      "resolution": "Validated substantive command output after the banner and treated empty stderr plus expected post-banner output as the signal.",
+      "affectedAssertions": [
+        "VAL-OWN-008"
+      ]
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 1 assertion: VAL-OWN-008 passed. The positive by-value return flow compiled, passed gofmt/build/vet/run, and showed exactly-once caller-side cleanup; the negative post-return reuse flow failed with 'use of moved value' and produced no output file."
+}

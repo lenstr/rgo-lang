@@ -1,39 +1,18 @@
 {
   "milestone": "ownership-boundaries",
-  "round": 1,
-  "status": "fail",
+  "round": 2,
+  "status": "pass",
   "assertionsSummary": {
-    "total": 12,
-    "passed": 11,
-    "failed": 1,
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
     "blocked": 0
   },
   "passedAssertions": [
-    "VAL-OWN-001",
-    "VAL-OWN-002",
-    "VAL-OWN-003",
-    "VAL-OWN-004",
-    "VAL-OWN-005",
-    "VAL-OWN-006",
-    "VAL-OWN-007",
-    "VAL-OWN-009",
-    "VAL-OWN-010",
-    "VAL-OWN-011",
-    "VAL-OWN-012"
+    "VAL-OWN-008"
   ],
-  "failedAssertions": [
-    {
-      "id": "VAL-OWN-008",
-      "reason": "Negative by-value return reuse fixture compiled successfully and emitted invalid Go instead of failing with a move diagnostic; `go build` on the generated evidence then failed with \"too many return values\"."
-    }
-  ],
+  "failedAssertions": [],
   "blockedAssertions": [],
-  "appliedUpdates": [
-    {
-      "target": ".factory/library/user-testing.md",
-      "description": "Added a dedicated flow-validator guidance section for rgoc/generated-Go ownership validation, including serial execution, evidence location, representative fixture sources, move-diagnostic checks, cleanup-order checks, and generic-instantiation checks.",
-      "source": "setup"
-    }
-  ],
-  "previousRound": null
+  "appliedUpdates": [],
+  "previousRound": ".factory/validation/ownership-boundaries/user-testing/synthesis.round-1.json"
 }
