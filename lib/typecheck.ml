@@ -448,25 +448,34 @@ let expr_span (e : expr) : span =
 
 (* Recursively check whether a block/expression guarantees a value
    even when its top-level type is TVoid (e.g. through explicit returns). *)
-let rec block_guarantees_value (blk : block) =
+let rec block_guarantees_value env (blk : block) =
   match blk.final_expr with
-  | Some e -> expr_guarantees_value e
+  | Some e -> expr_guarantees_value env e
   | None -> (
       match List.rev blk.stmts with
-      | StmtExpr e :: _ -> expr_guarantees_value e
+      | StmtExpr e :: _ -> expr_guarantees_value env e
       | _ -> false)
 
-and expr_guarantees_value = function
+and expr_guarantees_value env = function
   | ExprReturn _ -> true
   | ExprIf (_, then_b, Some else_b) ->
-      block_guarantees_value then_b && block_guarantees_value else_b
+      let then_guarantees = block_guarantees_value env then_b in
+      let else_guarantees = block_guarantees_value env else_b in
+      if then_guarantees && else_guarantees then true
+      else if then_guarantees then
+        let else_ty = check_block env else_b in
+        else_ty <> TVoid
+      else if else_guarantees then
+        let then_ty = check_block env then_b in
+        then_ty <> TVoid
+      else false
   | ExprIf (_, _, None) -> false
   | ExprMatch (_, arms) ->
-      List.for_all (fun arm -> expr_guarantees_value arm.arm_expr) arms
-  | ExprBlock blk -> block_guarantees_value blk
+      List.for_all (fun arm -> expr_guarantees_value env arm.arm_expr) arms
+  | ExprBlock blk -> block_guarantees_value env blk
   | _ -> false
 
-let rec check_expr env (e : expr) : ty =
+and check_expr env (e : expr) : ty =
   match e with
   | ExprLit l -> type_of_lit l
   | ExprIdent name -> (
@@ -595,10 +604,10 @@ let rec check_expr env (e : expr) : ty =
           body_ty <> TVoid
           ||
           match body.final_expr with
-          | Some e -> expr_guarantees_value e
+          | Some e -> expr_guarantees_value lambda_env e
           | None -> (
               match List.rev body.stmts with
-              | StmtExpr e :: _ -> expr_guarantees_value e
+              | StmtExpr e :: _ -> expr_guarantees_value lambda_env e
               | _ -> false)
         in
         if not has_guaranteed_value then

@@ -3128,6 +3128,64 @@ fn main() {
   let go = compile_and_check ~expected_output:"5\n0\n" src in
   Alcotest.(check bool) "has return in if arm" true (contains go "return a")
 
+(* Positive: typed non-void lambda with mixed return/value if branches *)
+let test_typed_nonvoid_lambda_if_mixed_return_value () =
+  let src =
+    {|
+fn main() {
+    let f = |a: i32| -> i32 {
+        if a > 0 {
+            return a;
+        } else {
+            0
+        }
+    };
+    println(f(5));
+    println(f(-1));
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"5\n0\n" src in
+  Alcotest.(check bool) "has return in then arm" true (contains go "return a");
+  Alcotest.(check bool) "has return in else arm" true (contains go "return 0")
+
+(* Positive: typed non-void lambda with mixed value/return if branches *)
+let test_typed_nonvoid_lambda_if_mixed_value_return () =
+  let src =
+    {|
+fn main() {
+    let f = |a: i32| -> i32 {
+        if a > 0 {
+            a
+        } else {
+            return 0;
+        }
+    };
+    println(f(5));
+    println(f(-1));
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"5\n0\n" src in
+  Alcotest.(check bool) "has return in else arm" true (contains go "return 0")
+
+(* Negative: typed non-void lambda with mixed return/void if branches *)
+let test_typed_nonvoid_lambda_if_mixed_return_void_rejected () =
+  compile_expect_error ~expect:"must produce a value"
+    {|
+fn main() {
+    let f = |a: i32| -> i32 {
+        if a > 0 {
+            return a;
+        } else {
+            println("x");
+        }
+    };
+    println(f(1));
+}
+|}
+    ()
+
 let test_module_level_let () =
   let src = {|
 let counter: i64 = 0;
@@ -3774,6 +3832,13 @@ let () =
             `Quick test_typed_nonvoid_lambda_block_final;
           Alcotest.test_case "typed non-void lambda if both arms return" `Quick
             test_typed_nonvoid_lambda_if_both_return;
+          Alcotest.test_case "typed non-void lambda if mixed return/value"
+            `Quick test_typed_nonvoid_lambda_if_mixed_return_value;
+          Alcotest.test_case "typed non-void lambda if mixed value/return"
+            `Quick test_typed_nonvoid_lambda_if_mixed_value_return;
+          Alcotest.test_case
+            "typed non-void lambda if mixed return/void rejected" `Quick
+            test_typed_nonvoid_lambda_if_mixed_return_void_rejected;
         ] );
       ( "module-level-let",
         [

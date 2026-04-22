@@ -3123,6 +3123,21 @@ fn main() {
 }
 |}
 
+(* Typed non-void lambda with mixed return/void if branches is rejected *)
+let typed_nonvoid_lambda_if_mixed_return_void_negative =
+  {|
+fn main() {
+    let f = |a: i32| -> i32 {
+        if a > 0 {
+            return a;
+        } else {
+            println("x");
+        }
+    };
+    println(f(1));
+}
+|}
+
 (* VAL-CROSS-002: Mixed named handler + anonymous handler *)
 let callback_mixed_handlers_positive =
   {|
@@ -3236,6 +3251,10 @@ let callback_negative_tests =
       `Quick,
       fail ~expect:"must produce a value"
         typed_nonvoid_lambda_void_block_negative );
+    ( "typed non-void lambda if mixed return/void rejected",
+      `Quick,
+      fail ~expect:"must produce a value"
+        typed_nonvoid_lambda_if_mixed_return_void_negative );
   ]
 
 let () =
