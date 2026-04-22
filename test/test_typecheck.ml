@@ -2838,6 +2838,181 @@ let ownership_negative_tests =
       fail ~expect:"use of moved value" own_return_move_call_negative );
   ]
 
+(* ======== Callback interop: named handler registration ===== *)
+
+(* VAL-CALLBACK-001: Named top-level functions can be registered directly as
+   handlers.  A function with the approved http handler signature passes
+   typecheck when passed to handle_func. *)
+let callback_named_handler_positive =
+  {|
+use net::http;
+fn handler(w: http::ResponseWriter, r: http::Request) {
+    println("handled");
+}
+fn main() {
+    let mux = http::new_serve_mux();
+    mux.handle_func("/items", handler);
+}
+|}
+
+(* VAL-CALLBACK-001: Named handler registered on multiple routes *)
+let callback_named_handler_multiple_routes =
+  {|
+use net::http;
+fn handler(w: http::ResponseWriter, r: http::Request) {
+    println("handled");
+}
+fn main() {
+    let mux = http::new_serve_mux();
+    mux.handle_func("/items", handler);
+    mux.handle_func("/other", handler);
+}
+|}
+
+(* VAL-CALLBACK-006: Registering a named handler does not consume the original
+   callable binding.  The same named function can be used again after
+   registration — both for another registration and for a direct call. *)
+let callback_handler_reuse_after_register =
+  {|
+use net::http;
+fn handler(w: http::ResponseWriter, r: http::Request) {
+    println("handled");
+}
+fn main() {
+    let mux = http::new_serve_mux();
+    mux.handle_func("/items", handler);
+    mux.handle_func("/other", handler);
+}
+|}
+
+(* VAL-CALLBACK-006: Function value assigned to a local binding stays usable.
+   Since TFn is Copy, assigning a function name does not consume it. *)
+let callback_fn_value_assign_reuse =
+  {|
+use net::http;
+fn handler(w: http::ResponseWriter, r: http::Request) {
+    println("handled");
+}
+fn main() {
+    let f = handler;
+    let g = handler;
+    let mux = http::new_serve_mux();
+    mux.handle_func("/items", f);
+    mux.handle_func("/other", g);
+}
+|}
+
+(* VAL-CALLBACK-004: Wrong callback signatures fail in rgoc.
+   A handler with the wrong parameter count is rejected at the
+   handle_func call site. *)
+let callback_wrong_arity_negative =
+  {|
+use net::http;
+fn bad_handler(w: http::ResponseWriter) {
+    println("bad");
+}
+fn main() {
+    let mux = http::new_serve_mux();
+    mux.handle_func("/items", bad_handler);
+}
+|}
+
+(* VAL-CALLBACK-004: Wrong callback parameter types *)
+let callback_wrong_param_type_negative =
+  {|
+use net::http;
+fn bad_handler(x: i64, y: i64) {
+    println("bad");
+}
+fn main() {
+    let mux = http::new_serve_mux();
+    mux.handle_func("/items", bad_handler);
+}
+|}
+
+(* VAL-CALLBACK-004: Wrong return type for a handler *)
+let callback_wrong_return_type_negative =
+  {|
+use net::http;
+fn handler(w: http::ResponseWriter, r: http::Request) -> i64 {
+    return 42;
+}
+fn main() {
+    let mux = http::new_serve_mux();
+    mux.handle_func("/items", handler);
+}
+|}
+
+(* VAL-CALLBACK-005: Non-callable values are rejected at handler registration
+   sites.  Passing an integer literal where a function value is expected
+   produces a "not callable" diagnostic. *)
+let callback_non_callable_int_negative =
+  {|
+use net::http;
+fn main() {
+    let mux = http::new_serve_mux();
+    mux.handle_func("/items", 42);
+}
+|}
+
+(* VAL-CALLBACK-005: Non-callable string value *)
+let callback_non_callable_string_negative =
+  {|
+use net::http;
+fn main() {
+    let mux = http::new_serve_mux();
+    mux.handle_func("/items", "not a function");
+}
+|}
+
+(* VAL-CALLBACK-005: Non-callable struct instance *)
+let callback_non_callable_struct_negative =
+  {|
+use net::http;
+struct Point { x: i64, y: i64 }
+fn main() {
+    let p = Point { x: 1, y: 2 };
+    let mux = http::new_serve_mux();
+    mux.handle_func("/items", p);
+}
+|}
+
+let callback_positive_tests =
+  [
+    ("named handler registration", `Quick, pass callback_named_handler_positive);
+    ( "named handler on multiple routes",
+      `Quick,
+      pass callback_named_handler_multiple_routes );
+    ( "handler reuse after registration (VAL-CALLBACK-006)",
+      `Quick,
+      pass callback_handler_reuse_after_register );
+    ( "fn value assign and reuse (VAL-CALLBACK-006)",
+      `Quick,
+      pass callback_fn_value_assign_reuse );
+  ]
+
+let callback_negative_tests =
+  [
+    ( "wrong arity handler (VAL-CALLBACK-004)",
+      `Quick,
+      fail ~expect:"type mismatch" callback_wrong_arity_negative );
+    ( "wrong param type handler (VAL-CALLBACK-004)",
+      `Quick,
+      fail ~expect:"type mismatch" callback_wrong_param_type_negative );
+    ( "wrong return type handler (VAL-CALLBACK-004)",
+      `Quick,
+      fail ~expect:"type mismatch" callback_wrong_return_type_negative );
+    ( "non-callable int (VAL-CALLBACK-005)",
+      `Quick,
+      fail ~expect:"not callable" callback_non_callable_int_negative );
+    ( "non-callable string (VAL-CALLBACK-005)",
+      `Quick,
+      fail ~expect:"not callable" callback_non_callable_string_negative );
+    ( "non-callable struct (VAL-CALLBACK-005)",
+      `Quick,
+      fail ~expect:"not callable" callback_non_callable_struct_negative );
+  ]
+
 let () =
   Alcotest.run "typecheck"
     [
@@ -2851,4 +3026,6 @@ let () =
       ("void-return", void_return_tests);
       ("ownership-positive", ownership_positive_tests);
       ("ownership-negative", ownership_negative_tests);
+      ("callback-positive", callback_positive_tests);
+      ("callback-negative", callback_negative_tests);
     ]

@@ -2537,6 +2537,99 @@ fn main() {
 |}
     ()
 
+(* ======== Callback interop: named handler registration ===== *)
+
+(* VAL-CALLBACK-001: Named handler lowers to Go function reference *)
+let test_callback_named_handler () =
+  let src =
+    {|
+use net::http;
+fn handler(w: http::ResponseWriter, r: http::Request) {
+    println("handled");
+}
+fn main() {
+    let mux = http::new_serve_mux();
+    mux.handle_func("/items", handler);
+    http::listen_and_serve(":3111", mux);
+}
+|}
+  in
+  let go = compile_and_check src in
+  Alcotest.(check bool)
+    "has handler func" true
+    (contains go "func handler(w http.ResponseWriter, r *http.Request)");
+  Alcotest.(check bool)
+    "has HandleFunc with handler" true
+    (contains go "mux.HandleFunc(\"/items\", handler)");
+  Alcotest.(check bool)
+    "has ListenAndServe" true
+    (contains go "http.ListenAndServe")
+
+(* VAL-CALLBACK-006: Handler reuse across multiple registrations generates
+   correct Go — the same function is referenced on multiple HandleFunc calls
+   without being consumed. *)
+let test_callback_handler_reuse () =
+  let src =
+    {|
+use net::http;
+fn handler(w: http::ResponseWriter, r: http::Request) {
+    println("handled");
+}
+fn main() {
+    let mux = http::new_serve_mux();
+    mux.handle_func("/items", handler);
+    mux.handle_func("/other", handler);
+}
+|}
+  in
+  let go = compile_and_check src in
+  Alcotest.(check bool)
+    "has first HandleFunc" true
+    (contains go "mux.HandleFunc(\"/items\", handler)");
+  Alcotest.(check bool)
+    "has second HandleFunc" true
+    (contains go "mux.HandleFunc(\"/other\", handler)");
+  ()
+
+(* VAL-CALLBACK-004: Wrong-signature handler is rejected before Go output *)
+let test_callback_wrong_signature_rejected () =
+  compile_expect_error ~expect:"type mismatch"
+    {|
+use net::http;
+fn bad_handler(x: i64) {
+    println(x);
+}
+fn main() {
+    let mux = http::new_serve_mux();
+    mux.handle_func("/items", bad_handler);
+}
+|}
+    ()
+
+(* VAL-CALLBACK-005: Non-callable integer is rejected with not-callable diagnostic *)
+let test_callback_non_callable_int () =
+  compile_expect_error ~expect:"not callable"
+    {|
+use net::http;
+fn main() {
+    let mux = http::new_serve_mux();
+    mux.handle_func("/items", 42);
+}
+|}
+    ()
+
+(* VAL-CALLBACK-005: Non-callable string is rejected *)
+let test_callback_non_callable_string () =
+  compile_expect_error ~expect:"not callable"
+    {|
+use net::http;
+fn main() {
+    let mux = http::new_serve_mux();
+    mux.handle_func("/items", "not a function");
+}
+|}
+    ()
+
 let () =
   Alcotest.run "codegen"
     [
@@ -2800,5 +2893,18 @@ let () =
             test_stdlib_receiver_write_return_position;
           Alcotest.test_case "return w.write_header(...) rejected" `Quick
             test_stdlib_receiver_write_header_return_position;
+        ] );
+      ( "callback-interop",
+        [
+          Alcotest.test_case "named handler lowers to Go func ref" `Quick
+            test_callback_named_handler;
+          Alcotest.test_case "handler reuse across registrations" `Quick
+            test_callback_handler_reuse;
+          Alcotest.test_case "wrong-signature handler rejected" `Quick
+            test_callback_wrong_signature_rejected;
+          Alcotest.test_case "non-callable int rejected" `Quick
+            test_callback_non_callable_int;
+          Alcotest.test_case "non-callable string rejected" `Quick
+            test_callback_non_callable_string;
         ] );
     ]

@@ -146,12 +146,16 @@ let lookup_value name env =
 
 (* ---------- ownership: Copy / move tracking ---------- *)
 
-(* A type is Copy-eligible when it is a primitive, a reference, or a
-   user-defined nominal type that has `impl Copy`. *)
+(* A type is Copy-eligible when it is a primitive, a reference, a function
+   value, or a user-defined nominal type that has `impl Copy`.  Function-type
+   values (TFn) are inherently Copy because they are reference-like: passing
+   a named function as a callback does not transfer ownership of the original
+   callable binding. *)
 let rec is_copy_type (env : env) (t : ty) : bool =
   match t with
   | TInt _ | TUint _ | TFloat _ | TBool -> true
   | TRef _ -> true
+  | TFn _ -> true
   | TTuple ts -> List.for_all (fun t' -> is_copy_type env t') ts
   | TStruct (name, _) | TEnum (name, _) -> (
       match SMap.find_opt name env.trait_impls with
@@ -161,9 +165,9 @@ let rec is_copy_type (env : env) (t : ty) : bool =
       match SMap.find_opt p env.param_bounds with
       | Some bounds -> List.mem "Copy" bounds
       | None -> false)
-  (* Imported types, strings, containers, fn types: not Copy *)
-  | TString | TVec _ | THashMap _ | TOption _ | TResult _ | TFn _ | TVoid
-  | TVar _ | TSelf | TImported _ ->
+  (* Imported types, strings, containers: not Copy *)
+  | TString | TVec _ | THashMap _ | TOption _ | TResult _ | TVoid | TVar _
+  | TSelf | TImported _ ->
       false
 
 (* Check whether a type has Drop implemented.
@@ -350,8 +354,11 @@ let rec collect_tparams acc = function
 
 (* Check if a type is a numeric literal that can coerce to the target.
    ~type_params lists the generic type parameter names currently in scope;
-   TParam is only a wildcard when its name is in this list. *)
-let rec types_compatible ?(type_params = []) expected actual =
+   TParam is only a wildcard when its name is in this list.
+   ~strict disables the TVoid wildcard so function signature comparisons
+   don't treat TVoid as matching any type — function types are structural
+   contracts and must not accept mismatched return types. *)
+let rec types_compatible ?(type_params = []) ?(strict = false) expected actual =
   if expected = actual then true
   else
     match (expected, actual) with
@@ -370,9 +377,10 @@ let rec types_compatible ?(type_params = []) expected actual =
     | THashMap (k1, v1), THashMap (k2, v2) ->
         types_compatible ~type_params k1 k2
         && types_compatible ~type_params v1 v2
-    (* TVoid acts as a wildcard for builtin constructors like HashMap::new() *)
-    | _, TVoid -> true
-    | TVoid, _ -> true
+    (* TVoid acts as a wildcard for builtin constructors like HashMap::new(),
+       but NOT when comparing function signatures (strict mode). *)
+    | _, TVoid -> not strict
+    | TVoid, _ -> not strict
     (* TParam is a wildcard only when its name is in the ~type_params list
        (which should contain only the *callee's* generic parameters, not
        the caller's in-scope parameters).  Same-name TParams are already
@@ -388,6 +396,14 @@ let rec types_compatible ?(type_params = []) expected actual =
     | TEnum (n1, args1), TEnum (n2, args2) when n1 = n2 ->
         List.length args1 = List.length args2
         && List.for_all2 (types_compatible ~type_params) args1 args2
+    (* TFn: compatible when params and return type are structurally
+       compatible.  Uses strict comparison for the return type and
+       parameters so that TVoid wildcards don't make mismatched
+       function signatures pass — function types are structural contracts. *)
+    | TFn (ps1, r1), TFn (ps2, r2) ->
+        List.length ps1 = List.length ps2
+        && types_compatible ~type_params ~strict:true r1 r2
+        && List.for_all2 (types_compatible ~type_params ~strict:true) ps1 ps2
     (* TImported: same package+name is compatible *)
     | TImported (p1, n1), TImported (p2, n2) -> p1 = p2 && n1 = n2
     | _ -> false
@@ -602,7 +618,12 @@ and check_call env callee args =
 
 (* Ownership: after a by-value call, mark each identifier argument as
    moved when its type is non-Copy.  Also reject partial moves from
-   field access. *)
+   field access.
+
+   Function-type values (TFn) are inherently Copy (see is_copy_type), so
+   passing a named function as a callback never consumes the original
+   callable binding — essential for handler registration where the same
+   function can be registered on multiple routes. *)
 and consume_call_args env (args : expr list) (arg_types : ty list) : unit =
   List.iter2
     (fun arg ty ->
@@ -637,8 +658,20 @@ and check_fn_args ~env:_ ~span ~name expected actual =
   List.iter2
     (fun exp act ->
       if not (types_compatible ~type_params:sig_tparams exp act) then
-        error_at span "type mismatch: expected %s, got %s" (show_ty exp)
-          (show_ty act))
+        (* When a callback parameter expects a function type but the
+           actual argument is not callable, give a direct "not callable"
+           diagnostic instead of a generic type-mismatch message. *)
+        match (exp, act) with
+        | ( TFn _,
+            ( TInt _ | TUint _ | TFloat _ | TBool | TString | TStruct _
+            | TEnum _ | TVec _ | THashMap _ | TOption _ | TResult _ | TRef _
+            | TTuple _ | TVoid | TSelf ) ) ->
+            error_at span
+              "not callable: expected %s, but got non-callable type %s"
+              (show_ty exp) (show_ty act)
+        | _ ->
+            error_at span "type mismatch: expected %s, got %s" (show_ty exp)
+              (show_ty act))
     expected actual
 
 (* Check that trait bounds are satisfied when calling a bounded generic function.
