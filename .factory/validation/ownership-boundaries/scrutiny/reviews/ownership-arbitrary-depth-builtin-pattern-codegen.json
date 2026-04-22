@@ -1,0 +1,22 @@
+{
+  "featureId": "ownership-arbitrary-depth-builtin-pattern-codegen",
+  "reviewedAt": "2026-04-22T17:24:02+03:00",
+  "commitId": "66e2ad3",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "I reviewed the prior failed review, both feature handoffs, the fix transcript skeleton, both feature diffs (`764f697` and `66e2ad3`), and the current `lib/codegen.ml` / test coverage. The new recursive peeling-and-reentry logic in the four nested built-in match helpers addresses the round-6 blocker: deeper accepted nested Copy-payload `Option`/`Result` patterns now recurse instead of falling into generated panic branches, and default fallback continues to be threaded through the recursive calls. I found one non-blocking coverage/communication issue in the added ownership regression tests.",
+    "issues": [
+      {
+        "file": "test/test_codegen_ownership.ml",
+        "line": 2099,
+        "severity": "non_blocking",
+        "description": "The registered test name claims coverage for a deep `Result<Option<Result<T, E>>>` runtime case, but `test_own_deep_nested_result_option_copy_runtime` only exercises `Result<Option<i64>, str>` (`test/test_codegen_ownership.ml:1933-1956`). That overstates the added Result-depth coverage and can mislead future reviewers about which arbitrary-depth Result shapes are actually protected by runtime tests."
+      }
+    ]
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/ownership-boundaries/scrutiny/reviews/ownership-recursive-builtin-pattern-codegen-fallbacks.json",
+  "summary": "Pass. The fix resolves the prior blocking issue from round 6: deeper accepted nested Copy-payload built-in patterns are now lowered recursively instead of reaching generated panic paths. I recorded one non-blocking issue about an overstated ownership test name, and no shared-state gaps were identified."
+}
