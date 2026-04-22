@@ -1,0 +1,28 @@
+{
+  "featureId": "ownership-return-fast-path-and-loop-exit-cleanup",
+  "reviewedAt": "2026-04-22T05:50:48.553487Z",
+  "commitId": "0129357",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The fix correctly addresses the explicit `return Ok/Err/Some/None` path and the loop `break`/`continue` cleanup-depth bug from the prior review, but the mirrored final-expression fast paths are still missing the same cleanup/guard-suppression logic. Because implicit/final-expression `Ok`/`Err`/`Some`/`None` returns can still bypass nested cleanup and leave returned Drop bindings armed for cleanup, the original blocking return-path issue is only partially fixed.",
+    "issues": [
+      {
+        "file": "lib/codegen.ml",
+        "line": 2112,
+        "severity": "blocking",
+        "description": "`gen_final_expr_as_return` still special-cases `Ok(...)`, `Err(...)`, `Some(...)`, and `None` by emitting a direct `return` without calling `emit_return_cleanup` or otherwise suppressing consumed Drop guards. The enclosing `gen_block_with_return` cleanup remains after the emitted `return` (`emit_scope_cleanup` at line 2520), so it is unreachable for block-final early returns. As a result, final-expression forms such as `Ok(r)` / `Some(r)` can still return a Drop binding while its cleanup guard remains armed, and nested block-final fast paths can still skip nested-scope cleanup entirely. This leaves the prior specialized-return blocking issue only partially resolved."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The worker reported `skillFeedback.followedProcedure: true`, but the recorded coverage for this ownership-sensitive fix only includes positive runtime cases. The compiler-worker skill still requires one negative compile path plus one positive runtime path for ownership work, so the handoff/procedure reporting is looser than the skill text.",
+      "evidence": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/skills/compiler-worker/SKILL.md:25 requires a negative compile path and a positive runtime path; /home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/handoffs/2026-04-22T05-45-54-961Z__ownership-return-fast-path-and-loop-exit-cleanup__7e963053-7833-417a-85b0-f4e0b966d8ad.json:47-84 lists only positive runtime coverage while recording `followedProcedure: true`."
+    }
+  ],
+  "addressesFailureFrom": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/ownership-boundaries/scrutiny/reviews/ownership-cleanup-lexical-scope-and-guard-suppression-completeness.json",
+  "summary": "Reviewed the prior failed scrutiny report, the original failed feature diff (`06195d5`), the fix feature diff (`0129357`), the fix handoff and transcript skeleton, the compiler-worker skill, and the shared-state docs. The new commit fixes the explicit specialized-return path and the loop exit cleanup depth, but it still fails review because `gen_final_expr_as_return` retains the unfixed specialized `Ok`/`Err`/`Some`/`None` return fast paths, so implicit/final-expression returns can still skip cleanup or leave returned Drop guards armed."
+}

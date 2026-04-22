@@ -1,0 +1,64 @@
+{
+  "milestone": "ownership-boundaries",
+  "round": 2,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "nix develop -c dune runtest -j 16",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "nix develop -c dune build -j 16",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "nix develop -c dune build @fmt",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 3,
+    "passed": 1,
+    "failed": 2,
+    "failedFeatures": [
+      "ownership-typecheck-receiver-and-pattern-boundaries",
+      "ownership-cleanup-lexical-scope-and-guard-suppression-completeness"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "ownership-typecheck-receiver-and-pattern-boundaries",
+      "severity": "blocking",
+      "description": "Consuming `self` receivers are still not enforced for trait-bound generic dispatch, so non-`Copy` bindings can still be reused after by-value trait-method calls."
+    },
+    {
+      "featureId": "ownership-typecheck-receiver-and-pattern-boundaries",
+      "severity": "blocking",
+      "description": "Enum-payload partial-move rejection is still incomplete because built-in `Option`/`Result` payload bindings and borrowed-`self` match scrutinees bypass the new ownership guard."
+    },
+    {
+      "featureId": "ownership-cleanup-lexical-scope-and-guard-suppression-completeness",
+      "severity": "blocking",
+      "description": "Specialized `Ok(...)`, `Err(...)`, `Some(...)`, and `None` return fast paths still bypass the new nested cleanup and guard-suppression logic, leaving value-producing return cleanup incomplete."
+    },
+    {
+      "featureId": "ownership-cleanup-lexical-scope-and-guard-suppression-completeness",
+      "severity": "blocking",
+      "description": "Loop `break`/`continue` cleanup depth is still off, so `Drop` bindings declared in loop bodies can skip cleanup on those early exits."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "skill:compiler-worker",
+      "suggestion": "Clarify and enforce `skillFeedback.followedProcedure` reporting when a handoff explicitly records a tests-first or other documented skill deviation.",
+      "evidence": "The review for `ownership-cleanup-lexical-scope-and-guard-suppression-completeness` again found a handoff that set `followedProcedure: true` while also recording a `Test-first sequencing` deviation, repeating the same reporting ambiguity already seen in round 1.",
+      "isSystemic": true
+    }
+  ],
+  "rejectedObservations": [],
+  "previousRound": ".factory/validation/ownership-boundaries/scrutiny/synthesis.round1.json"
+}

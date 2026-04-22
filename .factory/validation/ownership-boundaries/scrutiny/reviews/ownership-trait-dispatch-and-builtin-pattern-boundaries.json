@@ -1,0 +1,28 @@
+{
+  "featureId": "ownership-trait-dispatch-and-builtin-pattern-boundaries",
+  "reviewedAt": "2026-04-22T08:50:07+03:00",
+  "commitId": "769f2b0",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "I reviewed the prior failed review, both feature diffs (`ccb6ea2` and `769f2b0`), the fix handoff, the worker transcript skeleton, and the current ownership/typecheck code. The fix does close the original trait-bound `self`-consumption gap and the borrowed-`self` match bypass by adding `consume_receiver` in the `TParam` branch and tracking `self_consumed` for method bodies. However, the built-in `Option`/`Result` partial-move fix is still incomplete: the new helper intentionally exempts nested built-in containers, which leaves some owned payload-binding partial moves accepted despite the mission's whole-binding-only ownership contract.",
+    "issues": [
+      {
+        "file": "lib/typecheck.ml",
+        "line": 1378,
+        "severity": "blocking",
+        "description": "Built-in payload partial-move rejection is still incomplete for nested `Option`/`Result` payloads. `check_pattern_partial_move` now calls `is_destructure_move_type` for `Option::Some` / `Result::{Ok,Err}` bindings (`lib/typecheck.ml:1374-1382`), but that helper explicitly excludes nested built-in containers (`lib/typecheck.ml:228-242` comment and cases), unlike the existing whole-binding helper `is_partial_move_type`, which treats `TOption` and `TResult` as move targets (`lib/typecheck.ml:212-226`). Because `bind_pattern` still binds the inner payload for built-ins (`lib/typecheck.ml:1462-1472`), a program like `match outer { Option::Some(inner_opt) => ... }` on `Option<Option<Inner>>` (or the analogous nested `Result` case) would still typecheck even though it partially moves an owned enum payload. That violates `VAL-OWN-010` and the shared `drop-copy-clone.md` rule that there are no partial moves from enum payloads."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The worker did not follow the compiler-worker skill's tests-first guidance, but the handoff still reported `skillFeedback.followedProcedure: true` with no deviations. The skill should either be followed more strictly or the handoff should record the deviation honestly.",
+      "evidence": "`compiler-worker/SKILL.md` step 3 says to write tests first. In the transcript skeleton, the worker states \"Let me now run the baseline tests, then implement\" and applies several `Edit` calls to `lib/typecheck.ml` before later saying \"Now let me write the test fixtures\". The handoff then records `skillFeedback.followedProcedure = true` and `deviations = []`."
+    }
+  ],
+  "addressesFailureFrom": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/ownership-boundaries/scrutiny/reviews/ownership-typecheck-receiver-and-pattern-boundaries.json",
+  "summary": "Fail. The rerun fixes the prior trait-bound consuming-receiver bug and the borrowed-`self` match bypass, but `Option`/`Result` payload checks still permit nested built-in payload bindings that partially move owned enum payloads, so the whole-binding ownership requirement is not fully enforced. Shared-state note: the worker reported following the compiler-worker procedure even though the transcript shows implementation edits before tests were added."
+}

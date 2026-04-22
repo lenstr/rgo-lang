@@ -1,6 +1,6 @@
 {
   "milestone": "ownership-boundaries",
-  "round": 2,
+  "round": 3,
   "status": "fail",
   "validatorsRun": {
     "test": {
@@ -20,45 +20,35 @@
     }
   },
   "reviewsSummary": {
-    "total": 3,
-    "passed": 1,
+    "total": 2,
+    "passed": 0,
     "failed": 2,
     "failedFeatures": [
-      "ownership-typecheck-receiver-and-pattern-boundaries",
-      "ownership-cleanup-lexical-scope-and-guard-suppression-completeness"
+      "ownership-trait-dispatch-and-builtin-pattern-boundaries",
+      "ownership-return-fast-path-and-loop-exit-cleanup"
     ]
   },
   "blockingIssues": [
     {
-      "featureId": "ownership-typecheck-receiver-and-pattern-boundaries",
+      "featureId": "ownership-trait-dispatch-and-builtin-pattern-boundaries",
       "severity": "blocking",
-      "description": "Consuming `self` receivers are still not enforced for trait-bound generic dispatch, so non-`Copy` bindings can still be reused after by-value trait-method calls."
+      "description": "Built-in payload partial-move rejection is still incomplete for nested Option/Result payloads, so some owned enum payload bindings still bypass the whole-binding ownership rule."
     },
     {
-      "featureId": "ownership-typecheck-receiver-and-pattern-boundaries",
+      "featureId": "ownership-return-fast-path-and-loop-exit-cleanup",
       "severity": "blocking",
-      "description": "Enum-payload partial-move rejection is still incomplete because built-in `Option`/`Result` payload bindings and borrowed-`self` match scrutinees bypass the new ownership guard."
-    },
-    {
-      "featureId": "ownership-cleanup-lexical-scope-and-guard-suppression-completeness",
-      "severity": "blocking",
-      "description": "Specialized `Ok(...)`, `Err(...)`, `Some(...)`, and `None` return fast paths still bypass the new nested cleanup and guard-suppression logic, leaving value-producing return cleanup incomplete."
-    },
-    {
-      "featureId": "ownership-cleanup-lexical-scope-and-guard-suppression-completeness",
-      "severity": "blocking",
-      "description": "Loop `break`/`continue` cleanup depth is still off, so `Drop` bindings declared in loop bodies can skip cleanup on those early exits."
+      "description": "Final-expression Ok/Err/Some/None fast paths still return directly without return-cleanup or consumed-guard suppression, so nested cleanup and exactly-once ownership behavior remain incomplete."
     }
   ],
   "appliedUpdates": [],
   "suggestedGuidanceUpdates": [
     {
       "target": "skill:compiler-worker",
-      "suggestion": "Clarify and enforce `skillFeedback.followedProcedure` reporting when a handoff explicitly records a tests-first or other documented skill deviation.",
-      "evidence": "The review for `ownership-cleanup-lexical-scope-and-guard-suppression-completeness` again found a handoff that set `followedProcedure: true` while also recording a `Test-first sequencing` deviation, repeating the same reporting ambiguity already seen in round 1.",
+      "suggestion": "Clarify that `skillFeedback.followedProcedure` must be false whenever workers skip documented tests-first or ownership-validation requirements, especially the negative-compile-plus-positive-runtime expectation for ownership fixes.",
+      "evidence": "Both round-3 fix reviews found `followedProcedure: true` despite transcript/handoff evidence of documented procedure deviations: `ownership-trait-dispatch-and-builtin-pattern-boundaries` edited implementation before tests, and `ownership-return-fast-path-and-loop-exit-cleanup` recorded only positive runtime coverage despite the ownership validation requirement calling for a negative compile path plus a positive runtime path.",
       "isSystemic": true
     }
   ],
   "rejectedObservations": [],
-  "previousRound": ".factory/validation/ownership-boundaries/scrutiny/synthesis.round1.json"
+  "previousRound": ".factory/validation/ownership-boundaries/scrutiny/synthesis.round2.json"
 }
