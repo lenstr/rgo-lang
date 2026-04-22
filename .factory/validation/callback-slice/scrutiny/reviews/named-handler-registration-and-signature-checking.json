@@ -1,0 +1,22 @@
+{
+  "featureId": "named-handler-registration-and-signature-checking",
+  "reviewedAt": "2026-04-22T20:00:00+03:00",
+  "commitId": "bb4db0d",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "I reviewed the feature entry, worker handoff, transcript skeleton, compiler-worker skill, commit diff bb4db0d, and the relevant typecheck/interop code. The core named-handler path is wired up in the intended place: `handle_func` expects a function-typed second argument from the interop registry, named functions resolve to `TFn`, and the new structural `TFn` compatibility plus Copy eligibility are meant to enforce signature checking and non-consuming registration. However, I found one blocking semantic hole in the new argument-checking path: handler registration still accepts some non-callable expressions of type `TVoid`, so VAL-CALLBACK-005 is not fully enforced in `rgoc`.",
+    "issues": [
+      {
+        "file": "lib/typecheck.ml",
+        "line": 704,
+        "severity": "blocking",
+        "description": "`check_fn_args` still calls `types_compatible` in non-strict mode for top-level argument comparison, and `types_compatible` still treats `TVoid` as a wildcard (`lib/typecheck.ml:382-383`). That means a void-valued non-callable expression can satisfy the `handle_func` callback parameter: e.g. `mux.handle_func(\"/items\", println(\"oops\"))` produces an actual type of `TVoid`, which is accepted as compatible with the expected `fn(http::ResponseWriter, http::Request) -> ()` instead of being rejected as non-callable. This violates VAL-CALLBACK-005 and can let invalid handler registrations escape semantic analysis."
+      }
+    ]
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": null,
+  "summary": "Fail. The feature mostly lands the intended named-handler plumbing, but callback argument checking still has a blocking hole: `TVoid` remains a wildcard during the outer `check_fn_args` comparison, so some void-valued non-callable expressions can be accepted at `handle_func` registration sites instead of being rejected in `rgoc`."
+}

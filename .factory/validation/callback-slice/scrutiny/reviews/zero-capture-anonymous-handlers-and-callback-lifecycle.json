@@ -1,0 +1,33 @@
+{
+  "featureId": "zero-capture-anonymous-handlers-and-callback-lifecycle",
+  "reviewedAt": "2026-04-22T16:39:24Z",
+  "commitId": "da5db83",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The core zero-capture handler slice looks sound: inline anonymous handlers parse, resolve, typecheck in a no-capture scope, lower to Go func literals, and the reviewed tests/runtime fixture cover the required named-plus-anonymous repeated-request flows. I found one non-blocking correctness gap in the broader lambda surface that was added alongside the handler work.",
+    "issues": [
+      {
+        "file": "lib/codegen.ml",
+        "line": 1340,
+        "severity": "non_blocking",
+        "description": "The parser and typechecker accept typed lambdas (`|...| -> ty { ... }`) and allow the block's final expression to satisfy the declared return type (`lib/parser.mly:407`, `lib/typecheck.ml:525`), but codegen emits lambda bodies through `gen_block_stmts`, which writes a final expression as a bare statement instead of `return ...`. A lambda like `|x: i64| -> i64 { x + 1 }` therefore typechecks but lowers to invalid Go (`func(x int64) int64 { x + 1 }`). This does not break the void `net/http` handler slice, but the advertised typed-lambda form is currently unsound."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The worker marked `skillFeedback.followedProcedure` as true, but the transcript skeleton shows implementation edits landing before test edits, which conflicts with the compiler-worker skill's tests-first requirement.",
+      "evidence": "`.factory/skills/compiler-worker/SKILL.md` step 3 says to 'Write tests first'. The transcript skeleton for session `6f17b892-8922-412a-9a4d-f5284508646d` shows edits to `lib/ast.ml`, `lib/token.ml`, `lib/lexer.ml`, `lib/parser.mly`, `lib/typecheck.ml`, and `lib/codegen.ml` before later edits to `test/test_typecheck.ml` and `test/test_codegen.ml`, while the handoff records `skillFeedback.followedProcedure: true`."
+    },
+    {
+      "area": "conventions",
+      "observation": "The recorded generated-Go verification commands did not consistently follow the repository's Nix-only command convention.",
+      "evidence": "`AGENTS.md` requires project commands to run through `nix develop -c ...`, but the handoff for commit `da5db83` records `go build -o .factory/runtime/mixed-handlers-server .factory/runtime/mixed-handlers.go && go vet .factory/runtime/mixed-handlers.go` without the Nix wrapper."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Pass with one non-blocking issue. The required zero-capture anonymous handler behavior for the callback milestone appears correctly implemented and evidenced, but the newly added typed-lambda syntax can typecheck programs that codegen lowers to invalid Go because lambda final expressions are not returned."
+}
