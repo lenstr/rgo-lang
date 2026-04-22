@@ -1219,6 +1219,251 @@ let test_generic_enum_nested_example () =
     "repeated tparam preserves type" true
     (contains go "PairBoth[int64]")
 
+(* ======== Specialized return fast-path cleanup tests ======== *)
+
+(* VAL-OWN-006: return Ok(...) cleans up nested Drop bindings exactly once *)
+let test_own_return_ok_nested_cleanup () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+struct Resource {
+  pub name: str,
+}
+
+impl Drop for Resource {
+  fn drop(&mut self) {
+    println("drop:" + self.name);
+  }
+}
+
+fn early_ok() -> Result<i64, str> {
+  let outer = Resource { name: "outer" };
+  {
+    let inner = Resource { name: "inner" };
+    println("before-ok");
+    return Ok(42);
+  }
+}
+
+fn main() {
+  let result = early_ok();
+  println("done");
+}
+|}
+  in
+  compile_and_check ~expected_output:"before-ok\ndrop:inner\ndrop:outer\ndone\n"
+    src
+  |> ignore
+
+(* VAL-OWN-006: return Err(...) cleans up nested Drop bindings exactly once *)
+let test_own_return_err_nested_cleanup () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+struct Resource {
+  pub name: str,
+}
+
+impl Drop for Resource {
+  fn drop(&mut self) {
+    println("drop:" + self.name);
+  }
+}
+
+fn early_err() -> Result<i64, str> {
+  let outer = Resource { name: "outer" };
+  {
+    let inner = Resource { name: "inner" };
+    println("before-err");
+    return Err("fail");
+  }
+}
+
+fn main() {
+  let result = early_err();
+  println("done");
+}
+|}
+  in
+  compile_and_check
+    ~expected_output:"before-err\ndrop:inner\ndrop:outer\ndone\n" src
+  |> ignore
+
+(* VAL-OWN-006: return Some(...) cleans up nested Drop bindings exactly once *)
+let test_own_return_some_nested_cleanup () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+struct Resource {
+  pub name: str,
+}
+
+impl Drop for Resource {
+  fn drop(&mut self) {
+    println("drop:" + self.name);
+  }
+}
+
+fn early_some() -> Option<i64> {
+  let outer = Resource { name: "outer" };
+  {
+    let inner = Resource { name: "inner" };
+    println("before-some");
+    return Some(42);
+  }
+}
+
+fn main() {
+  let r = early_some();
+  println("done");
+}
+|}
+  in
+  compile_and_check
+    ~expected_output:"before-some\ndrop:inner\ndrop:outer\ndone\n" src
+  |> ignore
+
+(* VAL-OWN-006: return None cleans up nested Drop bindings exactly once *)
+let test_own_return_none_nested_cleanup () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+struct Resource {
+  pub name: str,
+}
+
+impl Drop for Resource {
+  fn drop(&mut self) {
+    println("drop:" + self.name);
+  }
+}
+
+fn early_none() -> Option<i64> {
+  let outer = Resource { name: "outer" };
+  {
+    let inner = Resource { name: "inner" };
+    println("before-none");
+    return None;
+  }
+}
+
+fn main() {
+  let r = early_none();
+  println("done");
+}
+|}
+  in
+  compile_and_check
+    ~expected_output:"before-none\ndrop:inner\ndrop:outer\ndone\n" src
+  |> ignore
+
+(* ======== Loop break/continue cleanup tests ======== *)
+
+(* Loop break cleans up loop-body Drop bindings exactly once *)
+let test_own_loop_break_cleanup () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+struct Resource {
+  pub name: str,
+}
+
+impl Drop for Resource {
+  fn drop(&mut self) {
+    println("drop:" + self.name);
+  }
+}
+
+fn test_loop() {
+  let outer = Resource { name: "outer" };
+  let mut i = 0;
+  while i < 3 {
+    let a = Resource { name: "loop-body" };
+    if i == 1 {
+      break;
+    }
+    println("iter");
+    i = i + 1;
+  }
+  println("after-loop");
+}
+
+fn main() {
+  test_loop();
+}
+|}
+  in
+  compile_and_check
+    ~expected_output:
+      "iter\ndrop:loop-body\ndrop:loop-body\nafter-loop\ndrop:outer\n"
+    src
+  |> ignore
+
+(* Loop continue cleans up loop-body Drop bindings exactly once *)
+let test_own_loop_continue_cleanup () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+struct Resource {
+  pub name: str,
+}
+
+impl Drop for Resource {
+  fn drop(&mut self) {
+    println("drop:" + self.name);
+  }
+}
+
+fn test_loop() {
+  let outer = Resource { name: "outer" };
+  let mut i = 0;
+  while i < 3 {
+    let a = Resource { name: "loop-body" };
+    if i == 1 {
+      i = i + 1;
+      continue;
+    }
+    println("iter");
+    i = i + 1;
+  }
+  println("after-loop");
+}
+
+fn main() {
+  test_loop();
+}
+|}
+  in
+  compile_and_check
+    ~expected_output:
+      "iter\n\
+       drop:loop-body\n\
+       drop:loop-body\n\
+       iter\n\
+       drop:loop-body\n\
+       after-loop\n\
+       drop:outer\n"
+    src
+  |> ignore
+
 (* ======== Test registration ======== *)
 
 let () =
@@ -1268,6 +1513,18 @@ let () =
             test_own_nested_block_cleanup;
           Alcotest.test_case "loop body cleanup each iteration" `Quick
             test_own_loop_cleanup;
+          Alcotest.test_case "return Ok cleans nested Drop" `Quick
+            test_own_return_ok_nested_cleanup;
+          Alcotest.test_case "return Err cleans nested Drop" `Quick
+            test_own_return_err_nested_cleanup;
+          Alcotest.test_case "return Some cleans nested Drop" `Quick
+            test_own_return_some_nested_cleanup;
+          Alcotest.test_case "return None cleans nested Drop" `Quick
+            test_own_return_none_nested_cleanup;
+          Alcotest.test_case "loop break cleans loop-body Drop" `Quick
+            test_own_loop_break_cleanup;
+          Alcotest.test_case "loop continue cleans loop-body Drop" `Quick
+            test_own_loop_continue_cleanup;
           Alcotest.test_case "let init consume suppresses guard once" `Quick
             test_own_let_init_consume_suppresses;
           Alcotest.test_case "return consume suppresses guard once" `Quick

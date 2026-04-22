@@ -59,7 +59,9 @@ let compile_and_check ?expected_output source =
       let code, diff, _ =
         run_cmd (Printf.sprintf "gofmt -d %s" (Filename.quote out))
       in
-      Alcotest.(check int) "gofmt exit 0" 0 code;
+      if code <> 0 then
+        Alcotest.fail
+          (Printf.sprintf "gofmt exit %d\nGenerated Go:\n%s" code go_src);
       if diff <> "" then
         Alcotest.fail ("gofmt diff:\n" ^ diff ^ "\nGenerated Go:\n" ^ go_src);
       let code, _, stderr =

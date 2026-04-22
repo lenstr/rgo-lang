@@ -149,6 +149,11 @@ let emit_scope_cleanup env buf indent =
         (List.rev current_drops)
   | [] -> ()
 
+let has_nested_drops env =
+  List.exists
+    (fun drops -> List.exists (fun name -> SMap.mem name env.drop_guards) drops)
+    env.scope_drops
+
 let emit_all_nested_cleanup env buf indent =
   let rec clean drops_list =
     match drops_list with
@@ -368,6 +373,45 @@ let dummy_loc n =
 
 (* Check if a name is an imported stdlib package alias *)
 let is_imported_package name env = SMap.mem name env.imported_packages
+
+(* Emit cleanup and guard suppression before an early-return expression.
+   Returns true if any cleanup was emitted (in which case the caller must
+   add indent before the return keyword on a fresh line).
+   Returns false if no cleanup was needed (the caller's indent is still
+   the current line content). *)
+let emit_return_cleanup env buf indent (return_expr : Ast.expr) =
+  let has_consumed =
+    let consumed =
+      Codegen_ownership.collect_consumed_idents
+        ~is_user_fn:(fun n -> SMap.mem n env.fns)
+        ~is_user_method:(fun tn mn ->
+          match SMap.find_opt tn env.impls with
+          | Some ii -> SMap.mem mn ii.ii_methods
+          | None -> false)
+        ~is_stdlib_call:(fun pkg _member ->
+          is_imported_package pkg env || SMap.mem pkg env.enums)
+        ~lookup_value_ty:(fun n -> lookup_value_ty n env)
+        return_expr
+    in
+    List.exists (fun name -> SMap.mem name env.drop_guards) consumed
+  in
+  if (not (has_nested_drops env)) && not has_consumed then false
+  else begin
+    Buffer.add_char buf '\n';
+    emit_all_nested_cleanup env buf indent;
+    Codegen_ownership.suppress_consumed_guards_inline
+      ~lookup_guard:(fun n -> SMap.find_opt n env.drop_guards)
+      ~is_user_fn:(fun n -> SMap.mem n env.fns)
+      ~is_user_method:(fun tn mn ->
+        match SMap.find_opt tn env.impls with
+        | Some ii -> SMap.mem mn ii.ii_methods
+        | None -> false)
+      ~is_stdlib_call:(fun pkg _member ->
+        is_imported_package pkg env || SMap.mem pkg env.enums)
+      ~lookup_value_ty:(fun n -> lookup_value_ty n env)
+      buf indent return_expr;
+    true
+  end
 
 (* Convert a Types.ty (from the Interop registry) to an Ast.ty option
    for codegen-side type inference. *)
@@ -1052,6 +1096,8 @@ let rec gen_expr env buf indent (ctx : expr_ctx) (e : Ast.expr) : unit =
   | ExprMatch (scrutinee, arms) -> gen_match env buf indent ctx scrutinee arms
   | ExprBlock blk -> gen_block_expr env buf indent ctx blk
   | ExprReturn (Some (ExprCall (ExprIdent { node = "Ok"; _ }, [ arg ]))) -> (
+      let _cleaned = emit_return_cleanup env buf indent arg in
+      Buffer.add_string buf indent;
       match env.ret_ty with
       | Some (TyGeneric ({ node = "Result"; _ }, _)) ->
           Buffer.add_string buf "return ";
@@ -1061,6 +1107,8 @@ let rec gen_expr env buf indent (ctx : expr_ctx) (e : Ast.expr) : unit =
           Buffer.add_string buf "return ";
           gen_expr env buf indent CtxExpr arg)
   | ExprReturn (Some (ExprCall (ExprIdent { node = "Err"; _ }, [ arg ]))) -> (
+      let _cleaned = emit_return_cleanup env buf indent arg in
+      Buffer.add_string buf indent;
       match env.ret_ty with
       | Some (TyGeneric ({ node = "Result"; _ }, [ ok_ty; _ ])) -> (
           env.shared.needs_errors <- true;
@@ -1083,6 +1131,8 @@ let rec gen_expr env buf indent (ctx : expr_ctx) (e : Ast.expr) : unit =
                ( ExprIdent { node = "Err"; span = (dummy_loc "Err").span },
                  [ arg ] )))
   | ExprReturn (Some (ExprCall (ExprIdent { node = "Some"; _ }, [ arg ]))) -> (
+      let _cleaned = emit_return_cleanup env buf indent arg in
+      Buffer.add_string buf indent;
       match env.ret_ty with
       | Some (TyGeneric ({ node = "Option"; _ }, [ inner ])) ->
           Buffer.add_string buf "return ";
@@ -1091,11 +1141,21 @@ let rec gen_expr env buf indent (ctx : expr_ctx) (e : Ast.expr) : unit =
           Buffer.add_string buf "return ";
           gen_some env buf indent arg)
   | ExprReturn (Some (ExprIdent { node = "None"; _ })) ->
+      let cleaned = has_nested_drops env in
+      if cleaned then begin
+        Buffer.add_char buf '\n';
+        emit_all_nested_cleanup env buf indent
+      end;
+      Buffer.add_string buf indent;
       gen_return_none env buf
   | ExprReturn (Some (ExprIdent { node = name; _ } as e)) ->
       (* Ownership: emit cleanup for nested scope drops before returning,
          and suppress the returned binding's guard. *)
-      emit_all_nested_cleanup env buf indent;
+      let cleaned = has_nested_drops env in
+      if cleaned then begin
+        Buffer.add_char buf '\n';
+        emit_all_nested_cleanup env buf indent
+      end;
       (match SMap.find_opt name env.drop_guards with
       | Some guard -> Printf.bprintf buf "%s%s = false\n" indent guard
       | None -> ());
@@ -1105,31 +1165,46 @@ let rec gen_expr env buf indent (ctx : expr_ctx) (e : Ast.expr) : unit =
   | ExprReturn (Some e) ->
       (* Ownership: emit cleanup for nested scope drops before returning,
          and suppress guards for consumed identifiers in the return expr. *)
-      emit_all_nested_cleanup env buf indent;
-      Codegen_ownership.suppress_consumed_guards_inline
-        ~lookup_guard:(fun n -> SMap.find_opt n env.drop_guards)
-        ~is_user_fn:(fun n -> SMap.mem n env.fns)
-        ~is_user_method:(fun tn mn ->
-          match SMap.find_opt tn env.impls with
-          | Some ii -> SMap.mem mn ii.ii_methods
-          | None -> false)
-        ~is_stdlib_call:(fun pkg _member ->
-          is_imported_package pkg env || SMap.mem pkg env.enums)
-        ~lookup_value_ty:(fun n -> lookup_value_ty n env)
-        buf indent e;
+      let _cleaned = emit_return_cleanup env buf indent e in
       Buffer.add_string buf indent;
       Buffer.add_string buf "return ";
       gen_expr env buf indent CtxExpr e
   | ExprReturn None ->
-      emit_all_nested_cleanup env buf indent;
+      let cleaned = has_nested_drops env in
+      if cleaned then begin
+        Buffer.add_char buf '\n';
+        emit_all_nested_cleanup env buf indent
+      end;
       Buffer.add_string buf indent;
       Buffer.add_string buf "return"
   | ExprBreak ->
-      emit_loop_cleanup env buf indent;
+      let has_loop_drops =
+        match env.loop_body_depths with
+        | target_depth :: _ ->
+            let current_depth = List.length env.values in
+            let scopes_to_clean = current_depth - target_depth in
+            scopes_to_clean > 0
+        | [] -> false
+      in
+      if has_loop_drops then begin
+        Buffer.add_char buf '\n';
+        emit_loop_cleanup env buf indent
+      end;
       Buffer.add_string buf indent;
       Buffer.add_string buf "break"
   | ExprContinue ->
-      emit_loop_cleanup env buf indent;
+      let has_loop_drops =
+        match env.loop_body_depths with
+        | target_depth :: _ ->
+            let current_depth = List.length env.values in
+            let scopes_to_clean = current_depth - target_depth in
+            scopes_to_clean > 0
+        | [] -> false
+      in
+      if has_loop_drops then begin
+        Buffer.add_char buf '\n';
+        emit_loop_cleanup env buf indent
+      end;
       Buffer.add_string buf indent;
       Buffer.add_string buf "continue"
   | ExprAssign (op, lhs, rhs) ->
@@ -1153,7 +1228,7 @@ let rec gen_expr env buf indent (ctx : expr_ctx) (e : Ast.expr) : unit =
       Buffer.add_char buf ')'
   | ExprLoop (None, blk) ->
       Buffer.add_string buf "for {\n";
-      let loop_body_depth = List.length env.values + 1 in
+      let loop_body_depth = List.length env.values in
       let inner =
         { env with loop_body_depths = loop_body_depth :: env.loop_body_depths }
       in
@@ -1164,7 +1239,7 @@ let rec gen_expr env buf indent (ctx : expr_ctx) (e : Ast.expr) : unit =
       Buffer.add_string buf "for ";
       gen_expr env buf indent CtxExpr cond;
       Buffer.add_string buf " {\n";
-      let loop_body_depth = List.length env.values + 1 in
+      let loop_body_depth = List.length env.values in
       let inner =
         { env with loop_body_depths = loop_body_depth :: env.loop_body_depths }
       in
@@ -1175,7 +1250,7 @@ let rec gen_expr env buf indent (ctx : expr_ctx) (e : Ast.expr) : unit =
       Buffer.add_string buf "for ";
       gen_expr env buf indent CtxExpr cond;
       Buffer.add_string buf " {\n";
-      let loop_body_depth = List.length env.values + 1 in
+      let loop_body_depth = List.length env.values in
       let inner =
         { env with loop_body_depths = loop_body_depth :: env.loop_body_depths }
       in
@@ -1189,7 +1264,7 @@ let rec gen_expr env buf indent (ctx : expr_ctx) (e : Ast.expr) : unit =
       gen_expr env buf indent CtxExpr iter_expr;
       Buffer.add_string buf " {\n";
       let inner = push_scope ~is_function:false env in
-      let loop_body_depth = List.length inner.values + 1 in
+      let loop_body_depth = List.length inner.values in
       let inner =
         {
           inner with
@@ -2420,7 +2495,12 @@ and gen_block_with_return env buf indent blk =
   let inner =
     List.fold_left
       (fun env s ->
-        Buffer.add_string buf indent;
+        let needs_stmt_indent =
+          match s with
+          | StmtExpr (ExprReturn _ | ExprBreak | ExprContinue) -> false
+          | _ -> true
+        in
+        if needs_stmt_indent then Buffer.add_string buf indent;
         let env = gen_stmt env buf indent s in
         Buffer.add_char buf '\n';
         env)
@@ -2444,7 +2524,12 @@ and gen_block_stmts env buf indent blk =
   let inner =
     List.fold_left
       (fun env s ->
-        Buffer.add_string buf indent;
+        let needs_stmt_indent =
+          match s with
+          | StmtExpr (ExprReturn _ | ExprBreak | ExprContinue) -> false
+          | _ -> true
+        in
+        if needs_stmt_indent then Buffer.add_string buf indent;
         let env = gen_stmt env buf indent s in
         Buffer.add_char buf '\n';
         env)
@@ -2460,14 +2545,22 @@ and gen_block_stmts env buf indent blk =
   in
   match blk.final_expr with
   | Some e ->
+      (* Early-exit expressions (return, break, continue) manage their own
+         indentation via emit_return_cleanup / emit_loop_cleanup, so do not
+         add indent here to avoid double-indenting. *)
+      let needs_indent =
+        match e with
+        | ExprReturn _ | ExprBreak | ExprContinue -> false
+        | _ -> true
+      in
       if contains_question e then begin
         let e' = hoist_question_exprs inner buf indent e in
-        Buffer.add_string buf indent;
+        if needs_indent then Buffer.add_string buf indent;
         gen_expr inner buf indent CtxStmt e';
         Buffer.add_char buf '\n'
       end
       else begin
-        Buffer.add_string buf indent;
+        if needs_indent then Buffer.add_string buf indent;
         gen_expr inner buf indent CtxStmt e;
         Buffer.add_char buf '\n'
       end;
@@ -2811,7 +2904,12 @@ and gen_stmt env buf indent (s : Ast.stmt) : cg_env =
       let inner =
         List.fold_left
           (fun env s ->
-            Buffer.add_string buf indent;
+            let needs_stmt_indent =
+              match s with
+              | StmtExpr (ExprReturn _ | ExprBreak | ExprContinue) -> false
+              | _ -> true
+            in
+            if needs_stmt_indent then Buffer.add_string buf indent;
             let env = gen_stmt env buf indent s in
             Buffer.add_char buf '\n';
             env)
@@ -2827,14 +2925,19 @@ and gen_stmt env buf indent (s : Ast.stmt) : cg_env =
       in
       (match blk.final_expr with
       | Some e ->
+          let needs_indent =
+            match e with
+            | ExprReturn _ | ExprBreak | ExprContinue -> false
+            | _ -> true
+          in
           if contains_question e then begin
             let e' = hoist_question_exprs inner buf indent e in
-            Buffer.add_string buf indent;
+            if needs_indent then Buffer.add_string buf indent;
             gen_expr inner buf indent CtxStmt e';
             Buffer.add_char buf '\n'
           end
           else begin
-            Buffer.add_string buf indent;
+            if needs_indent then Buffer.add_string buf indent;
             gen_expr inner buf indent CtxStmt e;
             Buffer.add_char buf '\n'
           end;
@@ -2891,6 +2994,9 @@ and gen_question_let env buf indent name inner_e =
       Printf.bprintf buf "%s, %s := " name err_name;
       gen_expr env buf indent CtxExpr inner_e;
       Printf.bprintf buf "\n%sif %s != nil {\n" indent err_name;
+      (* Ownership: emit cleanup for nested scope drops before the
+         early return triggered by the ? propagation. *)
+      emit_all_nested_cleanup env buf (indent ^ "\t");
       (match env.ret_ty with
       | Some (TyGeneric ({ node = "Result"; _ }, [ ok_ty; _ ])) ->
           Printf.bprintf buf "%s\treturn %s, %s\n" indent
@@ -2904,6 +3010,9 @@ and gen_question_let env buf indent name inner_e =
         Printf.bprintf buf "%s := " tmp;
         gen_expr env buf indent CtxExpr inner_e;
         Printf.bprintf buf "\n%sif !%s.some {\n" indent tmp;
+        (* Ownership: emit cleanup for nested scope drops before the
+           early return triggered by the ? propagation. *)
+        emit_all_nested_cleanup env buf (indent ^ "\t");
         (match env.ret_ty with
         | Some (TyGeneric ({ node = "Option"; _ }, [ ret_inner ])) ->
             if is_nullable_ty env ret_inner then begin
@@ -2921,6 +3030,9 @@ and gen_question_let env buf indent name inner_e =
         Printf.bprintf buf "%s := " tmp;
         gen_expr env buf indent CtxExpr inner_e;
         Printf.bprintf buf "\n%sif %s == nil {\n" indent tmp;
+        (* Ownership: emit cleanup for nested scope drops before the
+           early return triggered by the ? propagation. *)
+        emit_all_nested_cleanup env buf (indent ^ "\t");
         (match env.ret_ty with
         | Some (TyGeneric ({ node = "Option"; _ }, [ ret_inner ])) ->
             if is_nullable_ty env ret_inner then begin
@@ -2970,6 +3082,9 @@ and gen_question_stmt env buf indent e =
       gen_expr env buf indent CtxExpr e;
       Buffer.add_char buf '\n';
       Printf.bprintf buf "%sif %s != nil {\n" indent tmp_err;
+      (* Ownership: emit cleanup for nested scope drops before the
+         early return triggered by the ? propagation. *)
+      emit_all_nested_cleanup env buf (indent ^ "\t");
       (match env.ret_ty with
       | Some (TyGeneric ({ node = "Result"; _ }, [ ok_ty; _ ])) ->
           Printf.bprintf buf "%s\treturn %s, %s\n" indent
@@ -3042,7 +3157,12 @@ and gen_fn_body env buf body _ret_ty =
   let fold_stmts env stmts =
     List.fold_left
       (fun env s ->
-        Buffer.add_string buf indent;
+        let needs_stmt_indent =
+          match s with
+          | StmtExpr (ExprReturn _ | ExprBreak | ExprContinue) -> false
+          | _ -> true
+        in
+        if needs_stmt_indent then Buffer.add_string buf indent;
         let env = gen_stmt env buf indent s in
         Buffer.add_char buf '\n';
         env)
