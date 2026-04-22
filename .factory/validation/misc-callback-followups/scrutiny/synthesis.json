@@ -1,6 +1,6 @@
 {
   "milestone": "misc-callback-followups",
-  "round": 3,
+  "round": 4,
   "status": "fail",
   "validatorsRun": {
     "test": {
@@ -24,19 +24,26 @@
     "passed": 0,
     "failed": 1,
     "failedFeatures": [
-      "misc-typed-nonvoid-lambda-semantic-value-check"
+      "misc-typed-lambda-mixed-return-value-if"
     ]
   },
   "blockingIssues": [
     {
-      "featureId": "misc-typed-nonvoid-lambda-semantic-value-check",
+      "featureId": "misc-typed-lambda-mixed-return-value-if",
       "severity": "blocking",
-      "description": "The rerun fixes the previous unsupported no-value tails, but the new semantic-value check is too narrow and now rejects a semantically value-producing trailing `if` where one branch returns and the other ends with an ordinary value expression, so the feature still does not fully satisfy its expected behavior."
+      "description": "The mixed return/value typed-lambda fix still re-runs semantic-value analysis through `check_block`, which replays move side effects and wrongly rejects semantically value-producing tails when the value branch consumes a non-Copy binding."
     }
   ],
   "nonBlockingIssues": [],
   "appliedUpdates": [],
-  "suggestedGuidanceUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "skill:.factory/skills/compiler-worker/SKILL.md",
+      "suggestion": "Clarify whether the \"Write tests first\" step is mandatory or aspirational, or require workers to mark a deviation when implementation edits precede tests.",
+      "evidence": "The reviewer for fix feature `misc-typed-lambda-mixed-return-value-if` observed that worker session `e4aeb5c5-b185-484b-a656-3ac0962b2d49` edited `lib/typecheck.ml` before `test/test_codegen.ml` and `test/test_typecheck.ml`, while the handoff still marked `skillFeedback.followedProcedure: true`.",
+      "isSystemic": false
+    }
+  ],
   "rejectedObservations": [],
-  "previousRound": ".factory/validation/misc-callback-followups/scrutiny/synthesis.round2.json"
+  "previousRound": ".factory/validation/misc-callback-followups/scrutiny/synthesis.round3.json"
 }

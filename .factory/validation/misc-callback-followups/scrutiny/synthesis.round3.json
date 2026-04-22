@@ -1,0 +1,42 @@
+{
+  "milestone": "misc-callback-followups",
+  "round": 3,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "nix develop -c dune runtest -j 16",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "nix develop -c dune build -j 16",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "nix develop -c dune build @fmt",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "failedFeatures": [
+      "misc-typed-nonvoid-lambda-semantic-value-check"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "misc-typed-nonvoid-lambda-semantic-value-check",
+      "severity": "blocking",
+      "description": "The rerun fixes the previous unsupported no-value tails, but the new semantic-value check is too narrow and now rejects a semantically value-producing trailing `if` where one branch returns and the other ends with an ordinary value expression, so the feature still does not fully satisfy its expected behavior."
+    }
+  ],
+  "nonBlockingIssues": [],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [],
+  "rejectedObservations": [],
+  "previousRound": ".factory/validation/misc-callback-followups/scrutiny/synthesis.round2.json"
+}

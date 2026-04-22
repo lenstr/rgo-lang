@@ -1,0 +1,28 @@
+{
+  "featureId": "misc-typed-lambda-mixed-return-value-if",
+  "reviewedAt": "2026-04-23T02:47:11+03:00",
+  "commitId": "b13f9385291c75ec543e5b7198fa31f3aa0d07e2",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "Reviewed the prior failed review and synthesis, the original failed feature commit `892286b431827fc6a3b9afd9e7c35e5946ddcdf5`, the fix commit `b13f9385291c75ec543e5b7198fa31f3aa0d07e2`, both features' handoffs/transcript skeletons, the compiler-worker skill, and the current typecheck/tests. The fix closes the originally reported mixed return/value `if` rejection for simple value branches, but it re-checks one branch with `check_block` during the semantic-value probe, which replays stateful move analysis and can still reject valid mixed return/value tails when the value-producing branch consumes a non-Copy binding.",
+    "issues": [
+      {
+        "file": "lib/typecheck.ml",
+        "line": 451,
+        "severity": "blocking",
+        "description": "The new mixed-branch acceptance path calls `check_block env` from `expr_guarantees_value` after `check_if` has already typechecked the same branch (`lib/typecheck.ml:461-469`, `lib/typecheck.ml:1479-1488`). Because `push_scope` keeps the same mutable `env.moved` set (`lib/typecheck.ml:131`) and branch statements can consume bindings via `consume_if_non_copy` (`lib/typecheck.ml:205-209`, `lib/typecheck.ml:1682-1714`), the second `check_block` replays ownership side effects. A trailing lambda tail like `if cond { return alt; } else { let x = s; x }` for non-Copy `s` is semantically value-producing and should satisfy this feature, but the first pass through `check_if` moves `s` and the semantic-value probe then revisits the else block and raises `use of moved value 's'`. The added regression coverage only exercises copy-typed `i32` branches (`test/test_codegen.ml:3132-3186`, `test/test_typecheck.ml:3127-3257`), so this remaining mixed return/value case is still unprotected."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The compiler-worker skill still says to 'Write tests first', but this fix session edited `lib/typecheck.ml` before adding the new regression tests while the handoff still reported `skillFeedback.followedProcedure: true`. Either the skill should clarify that tests-first is aspirational, or the review process should treat this sequencing as a deviation.",
+      "evidence": ".factory/skills/compiler-worker/SKILL.md:22 requires tests first. The extracted transcript skeleton for worker session `e4aeb5c5-b185-484b-a656-3ac0962b2d49` shows `Edit lib/typecheck.ml` before the later `Edit test/test_codegen.ml` and `Edit test/test_typecheck.ml` entries, while the handoff JSON marks `skillFeedback.followedProcedure` true."
+    }
+  ],
+  "addressesFailureFrom": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/misc-callback-followups/scrutiny/reviews/misc-typed-nonvoid-lambda-semantic-value-check.json",
+  "summary": "Fail. The fix resolves the originally reported simple mixed return/value `if` case, but it still re-typechecks one branch during the semantic-value check and can wrongly reject valid mixed return/value lambda tails that consume a non-Copy binding."
+}
