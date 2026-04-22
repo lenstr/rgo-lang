@@ -1930,15 +1930,15 @@ fn main() {
   in
   compile_and_check ~expected_output:"42\n" src |> ignore
 
-(* Deep nested Result<Option<i64>> with default fallback Copy-payload runtime *)
+(* Deep nested Result<Option<Result<i64, str>>> with explicit ascription runtime *)
 let test_own_deep_nested_result_option_copy_runtime () =
   let src =
     {|
-fn maybe_value(x: i64) -> Result<Option<i64>, str> {
+fn maybe_value(x: i64) -> Result<Option<Result<i64, str>>, str> {
     if x > 0 {
-        Ok(Some(x))
+        Ok(Some(Ok(x) as Result<i64, str>))
     } else if x == 0 {
-        Ok(None)
+        Ok(Some(Err("zero") as Result<i64, str>))
     } else {
         Err("negative")
     }
@@ -1946,14 +1946,27 @@ fn maybe_value(x: i64) -> Result<Option<i64>, str> {
 
 fn main() {
     match maybe_value(42) {
-        Result::Ok(Option::Some(v)) => println(v),
-        Result::Ok(Option::None) => println("inner none"),
+        Result::Ok(Option::Some(Result::Ok(v))) => println(v),
+        Result::Ok(Option::Some(Result::Err(e))) => println(e),
+        Result::Ok(Option::None) => println("none"),
         Result::Err(e) => println(e),
-    }
+    };
+    match maybe_value(0) {
+        Result::Ok(Option::Some(Result::Ok(v))) => println(v),
+        Result::Ok(Option::Some(Result::Err(e))) => println(e),
+        Result::Ok(Option::None) => println("none"),
+        Result::Err(e) => println(e),
+    };
+    match maybe_value(-1) {
+        Result::Ok(Option::Some(Result::Ok(v))) => println(v),
+        Result::Ok(Option::Some(Result::Err(e))) => println(e),
+        Result::Ok(Option::None) => println("none"),
+        Result::Err(e) => println(e),
+    };
 }
 |}
   in
-  compile_and_check ~expected_output:"42\n" src |> ignore
+  compile_and_check ~expected_output:"42\nzero\nnegative\n" src |> ignore
 
 (* ======== Test registration ======== *)
 

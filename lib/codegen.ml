@@ -85,6 +85,7 @@ type cg_shared = {
   mutable needs_errors : bool;
   mutable needs_math : bool;
   mutable needs_imported_pkgs : bool;
+  mutable needs_result_struct : bool;
   mutable self_ref_traits : string list;
       (* Trait names that use Self in their signatures *)
 }
@@ -285,9 +286,9 @@ let rec go_type env (t : Ast.ty) : string =
         "Option[" ^ go_type env arg ^ "]"
       end
       else "*" ^ go_type env arg
-  | TyGeneric ({ node = "Result"; _ }, [ _ok; _err ]) ->
-      (* Result is handled specially in return types *)
-      failwith "codegen: Result should not appear as standalone go_type"
+  | TyGeneric ({ node = "Result"; _ }, [ ok; err ]) ->
+      env.shared.needs_result_struct <- true;
+      "Result[" ^ go_type env ok ^ ", " ^ go_type env err ^ "]"
   | TyGeneric ({ node = "Vec"; _ }, [ arg ]) -> "[]" ^ go_type env arg
   | TyGeneric ({ node = "HashMap"; _ }, [ k; v ]) ->
       "map[" ^ go_type env k ^ "]" ^ go_type env v
@@ -692,6 +693,7 @@ let collect_env (prog : Ast.program) : cg_env =
       needs_errors = false;
       needs_math = false;
       needs_imported_pkgs = false;
+      needs_result_struct = false;
       self_ref_traits = [];
     }
   in
@@ -1262,11 +1264,43 @@ let rec gen_expr env buf indent (ctx : expr_ctx) (e : Ast.expr) : unit =
       Buffer.add_char buf '[';
       gen_expr env buf indent CtxExpr idx;
       Buffer.add_char buf ']'
-  | ExprCast (e, ty) ->
-      Buffer.add_string buf (go_type env ty);
-      Buffer.add_char buf '(';
-      gen_expr env buf indent CtxExpr e;
-      Buffer.add_char buf ')'
+  | ExprCast (e, ty) -> (
+      match (e, ty) with
+      | ExprCall (ExprIdent { node = "Ok"; _ }, [ arg ]),
+        TyGeneric ({ node = "Result"; _ }, [ ok_ty; err_ty ]) ->
+          env.shared.needs_result_struct <- true;
+          Printf.bprintf buf "Result[%s, %s]{ok: true, value: "
+            (go_type env ok_ty) (go_type env err_ty);
+          gen_expr env buf indent CtxExpr arg;
+          Buffer.add_string buf "}"
+      | ExprCall (ExprIdent { node = "Err"; _ }, [ arg ]),
+        TyGeneric ({ node = "Result"; _ }, [ ok_ty; err_ty ]) ->
+          env.shared.needs_result_struct <- true;
+          Printf.bprintf buf "Result[%s, %s]{err: "
+            (go_type env ok_ty) (go_type env err_ty);
+          gen_expr env buf indent CtxExpr arg;
+          Buffer.add_string buf "}"
+      | ExprCall (ExprIdent { node = "Some"; _ }, [ arg ]),
+        TyGeneric ({ node = "Option"; _ }, [ inner_ty ]) ->
+          if is_nullable_ty env inner_ty then begin
+            env.shared.needs_option_struct <- true;
+            Printf.bprintf buf "rgo_some[%s](" (go_type env inner_ty);
+            gen_expr env buf indent CtxExpr arg;
+            Buffer.add_char buf ')'
+          end
+          else gen_new_expr env buf indent (Some inner_ty) arg
+      | ExprIdent { node = "None"; _ },
+        TyGeneric ({ node = "Option"; _ }, [ inner_ty ]) ->
+          if is_nullable_ty env inner_ty then begin
+            env.shared.needs_option_struct <- true;
+            Printf.bprintf buf "rgo_none[%s]()" (go_type env inner_ty)
+          end
+          else Buffer.add_string buf "nil"
+      | _ ->
+          Buffer.add_string buf (go_type env ty);
+          Buffer.add_char buf '(';
+          gen_expr env buf indent CtxExpr e;
+          Buffer.add_char buf ')')
   | ExprLoop (None, blk) ->
       Buffer.add_string buf "for {\n";
       let loop_body_depth = List.length env.values in
@@ -2762,11 +2796,11 @@ and gen_nested_result_inner_match_stmt env buf indent inner_var
               Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t")));
       Printf.bprintf buf "%s}" indent
   | TyGeneric ({ node = "Result"; _ }, [ ok_ty; _err_ty ]) ->
-      (* Inner is Result: generate nested if/else on err == nil *)
+      (* Inner Result value: generate nested if/else on .ok field *)
       let nested_val = fresh_tmp env "inner_val" in
-      let nested_err = fresh_tmp env "inner_err" in
-      Printf.bprintf buf "%sif %s, %s := %s; %s == nil {\n" indent nested_val
-        nested_err inner_var nested_err;
+      Printf.bprintf buf "%sif %s.ok {\n" indent inner_var;
+      Printf.bprintf buf "%s%s := %s.value\n" (indent ^ "\t") nested_val
+        inner_var;
       let all_inner_ok_arms =
         List.filter
           (fun (arm : match_arm) ->
@@ -2817,6 +2851,9 @@ and gen_nested_result_inner_match_stmt env buf indent inner_var
           | None ->
               Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t")));
       Printf.bprintf buf "%s} else {\n" indent;
+      let nested_err = fresh_tmp env "inner_err" in
+      Printf.bprintf buf "%s%s := %s.err\n" (indent ^ "\t") nested_err
+        inner_var;
       (match inner_err_arm with
       | Some arm -> (
           match arm.arm_pat with
@@ -2842,7 +2879,7 @@ and gen_nested_result_inner_match_stmt env buf indent inner_var
           | Some arm -> gen_arm_body_stmts env buf (indent ^ "\t") arm.arm_expr
           | None ->
               Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t")));
-      Printf.bprintf buf "%s}" indent
+      Printf.bprintf buf "%s}\n" indent
   | _ ->
       Printf.bprintf buf "%spanic(\"unsupported nested match type\")\n" indent
 
@@ -2942,10 +2979,11 @@ and gen_nested_result_inner_match_expr env buf indent inner_var
               Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t")));
       Printf.bprintf buf "%s}" indent
   | TyGeneric ({ node = "Result"; _ }, [ ok_ty; _err_ty ]) ->
+      (* Inner Result value: generate nested if/else on .ok field *)
       let nested_val = fresh_tmp env "inner_val" in
-      let nested_err = fresh_tmp env "inner_err" in
-      Printf.bprintf buf "%sif %s, %s := %s; %s == nil {\n" indent nested_val
-        nested_err inner_var nested_err;
+      Printf.bprintf buf "%sif %s.ok {\n" indent inner_var;
+      Printf.bprintf buf "%s%s := %s.value\n" (indent ^ "\t") nested_val
+        inner_var;
       let all_inner_ok_arms =
         List.filter
           (fun (arm : match_arm) ->
@@ -3001,6 +3039,9 @@ and gen_nested_result_inner_match_expr env buf indent inner_var
           | None ->
               Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t")));
       Printf.bprintf buf "%s} else {\n" indent;
+      let nested_err = fresh_tmp env "inner_err" in
+      Printf.bprintf buf "%s%s := %s.err\n" (indent ^ "\t") nested_err
+        inner_var;
       (match inner_err_arm with
       | Some arm -> (
           match arm.arm_pat with
@@ -3033,7 +3074,7 @@ and gen_nested_result_inner_match_expr env buf indent inner_var
               Buffer.add_char buf '\n'
           | None ->
               Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t")));
-      Printf.bprintf buf "%s}" indent
+      Printf.bprintf buf "%s}\n" indent
   | _ ->
       Printf.bprintf buf "%spanic(\"unsupported nested match type\")\n" indent
 
@@ -4533,6 +4574,13 @@ let gen_prelude buf env =
        value: v} }\n";
     Buffer.add_string buf
       "func rgo_none[T any]() Option[T]    { return Option[T]{} }\n"
+  end;
+  if env.shared.needs_result_struct then begin
+    Buffer.add_string buf "\ntype Result[T any, E any] struct {\n";
+    Buffer.add_string buf "\tok    bool\n";
+    Buffer.add_string buf "\tvalue T\n";
+    Buffer.add_string buf "\terr   E\n";
+    Buffer.add_string buf "}\n"
   end;
   if env.shared.needs_rgo_repeat then begin
     Buffer.add_string buf "\nfunc rgo_repeat[T any](x T, n int64) []T {\n";

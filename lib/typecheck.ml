@@ -506,8 +506,17 @@ let rec check_expr env (e : expr) : ty =
   | ExprRepeat (elem, count) -> check_repeat env elem count
   | ExprIndex (e, idx) -> check_index env e idx
   | ExprCast (e, ty) ->
-      let _ = check_expr env e in
-      resolve_ast_ty env ty
+      let cast_ty = resolve_ast_ty env ty in
+      (match e with
+      | ExprCall (ExprIdent { node = "Ok" | "Err" | "Some" | "None"; _ }, _)
+      | ExprIdent { node = "None"; _ } ->
+          let env' = { env with ret_ty = Some cast_ty } in
+          let _ = check_expr env' e in
+          ()
+      | _ ->
+          let _ = check_expr env e in
+          ());
+      cast_ty
   | ExprLoop (cond, blk) ->
       Option.iter
         (fun c ->

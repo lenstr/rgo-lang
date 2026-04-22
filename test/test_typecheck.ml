@@ -230,6 +230,28 @@ fn foo() -> Option<i32> {
 }
 |}
 
+(* Explicit type ascription for deeply nested Result constructors *)
+let valid_deep_nested_result_ascription =
+  {|
+fn maybe_value(x: i64) -> Result<Option<Result<i64, str>>, str> {
+    if x > 0 {
+        Ok(Some(Ok(x) as Result<i64, str>))
+    } else if x == 0 {
+        Ok(Some(Err("zero") as Result<i64, str>))
+    } else {
+        Err("negative")
+    }
+}
+fn main() {
+    match maybe_value(42) {
+        Result::Ok(Option::Some(Result::Ok(v))) => println(v),
+        Result::Ok(Option::Some(Result::Err(e))) => println(e),
+        Result::Ok(Option::None) => println("none"),
+        Result::Err(e) => println(e),
+    };
+}
+|}
+
 let valid_self_in_impl =
   {|
 struct Point {
@@ -1202,6 +1224,9 @@ let positive_tests =
     ("array repeat", `Quick, pass valid_array_repeat);
     ("Result ? propagation", `Quick, pass valid_result_question_mark);
     ("Option ? propagation", `Quick, pass valid_option_question_mark);
+    ( "deep nested Result ascription",
+      `Quick,
+      pass valid_deep_nested_result_ascription );
     ("Self in impl", `Quick, pass valid_self_in_impl);
     ("chained constructor method", `Quick, pass valid_chained_constructor_method);
     ("chained constructor field", `Quick, pass valid_chained_constructor_field);
