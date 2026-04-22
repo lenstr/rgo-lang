@@ -1,0 +1,33 @@
+{
+  "featureId": "http-crud-state-observability-and-error-paths",
+  "reviewedAt": "2026-04-22T18:13:45.753252Z",
+  "commitId": "ae916b4",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Reviewed the feature handoff, transcript skeleton, and commit ae916b4 in the context of the live CRUD fixture. The actual runtime implementation in `.factory/runtime/http-server.rg:3-39` satisfies the contracted behavior: shared state lives at module scope, successful POSTs append into `items`, missing-name POSTs return 400 without mutating state, and unsupported methods return 405 while leaving the handler process alive. The reviewed commit itself is mostly regression-test expansion plus formatting-only churn; I did not find a blocking correctness bug in the feature implementation, but the new test coverage is weaker than the feature contract because it only checks for generated-Go substrings rather than exercising the required request sequences.",
+    "issues": [
+      {
+        "file": "test/test_codegen.ml",
+        "line": 2832,
+        "severity": "non_blocking",
+        "description": "The added assertions only check for substrings such as `WriteHeader(400)`, `WriteHeader(405)`, and `append(items, name)`. They do not actually verify the contract's read-after-create, malformed-create state preservation, or post-error health sequences, so a future regression could still mutate state on the 400 path or stop GET from observing appends while this test continues to pass."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "Feature ownership is blurred for this milestone: the reviewed feature's commit only changes tests/formatting, while the CRUD runtime behavior it describes was already present in the previous commit. That makes later review and milestone accounting harder because the feature record does not line up cleanly with the code that actually implemented the behavior.",
+      "evidence": "`git show --stat ae916b4` touches only `test/test_codegen.ml` plus formatting-only OCaml files, while `git show ec0c4cb:.factory/runtime/http-server.rg` already contains the full GET/POST/missing-name/405 CRUD behavior."
+    },
+    {
+      "area": "skills",
+      "observation": "`compiler-worker` step 8 is ambiguous about whether workers should run every command in `.factory/services.yaml` or only the relevant validators. This worker marked `followedProcedure: true`, but the recorded commands omit `cli_version` and `go_version`, so the skill wording and expected practice appear out of sync.",
+      "evidence": "`.factory/skills/compiler-worker/SKILL.md:27` says to 'run the mission-level commands from `.factory/services.yaml` before handoff'; `.factory/services.yaml:2-8` lists `install`, `build`, `typecheck`, `test`, `lint`, `cli_version`, and `go_version`; the handoff's `commandsRun` section lists only `dune runtest`, `dune build`, `dune build @fmt`, `rgoc ...`, and `go build`."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Result: pass. The CRUD fixture implementation itself satisfies the feature contract and I found no blocking runtime defects. One non-blocking review note remains: the added regression test in `test/test_codegen.ml` checks generated-Go substrings instead of the full read-after-create/state-preservation/post-error-health sequences."
+}

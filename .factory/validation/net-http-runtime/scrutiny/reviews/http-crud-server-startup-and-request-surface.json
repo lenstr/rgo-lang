@@ -1,0 +1,22 @@
+{
+  "featureId": "http-crud-server-startup-and-request-surface",
+  "reviewedAt": "2026-04-22T18:13:34+00:00",
+  "commitId": "ec0c4cb81eb6e3b16084a7653a09a7dd8a879145",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "I reviewed the feature metadata, worker handoff, transcript skeleton, the compiler-worker skill, the mission/shared-state docs, and commit `ec0c4cb81eb6e3b16084a7653a09a7dd8a879145`. The runtime fixture itself covers the contracted `GET /items`, `POST /items`, unsupported-method, and port-in-use flows, but the newly added compiler support for module-level `let`/`let mut` is still order-dependent in typechecking. Resolver/global collection treats top-level lets as file-scope globals, yet typecheck only makes an `ItemLet` visible after it has already walked earlier `ItemFn` items. That means a handler or helper declared before the shared-state binding will fail typechecking even though the binding is meant to be globally reachable, so the feature's compiler slice is incomplete.",
+    "issues": [
+      {
+        "file": "lib/typecheck.ml",
+        "line": 2419,
+        "severity": "blocking",
+        "description": "`typecheck_exn` folds `check_item` over `prog.items` in source order, but `collect_type_info` explicitly skips `ItemLet` entries (`lib/typecheck.ml:2047`). As a result, `check_fn_decl` at `lib/typecheck.ml:2184-2186` only sees module-level bindings that appeared earlier in the file. Resolver already collects `ItemLet` into the global environment (`lib/resolver.ml:392-396`), so the new module-level state support is inconsistent across phases: a natural program layout like `fn handle_items(...) { items.push(...) }` followed later by `let mut items: Vec<String> = Vec::new();` resolves but then fails typechecking because `items` is missing from the type environment. That makes the advertised module-level/global shared-state support incomplete for this feature."
+      }
+    ]
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": null,
+  "summary": "Fail. The HTTP CRUD fixture and runtime behavior look correct, but the supporting compiler change is incomplete: module-level `let` bindings are only visible to functions that appear later in the file, so shared global CRUD state is still order-dependent and can break reasonable programs within the intended slice."
+}
