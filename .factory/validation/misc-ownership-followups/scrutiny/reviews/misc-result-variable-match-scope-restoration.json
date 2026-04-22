@@ -1,0 +1,15 @@
+{
+  "featureId": "misc-result-variable-match-scope-restoration",
+  "reviewedAt": "2026-04-22T21:47:43Z",
+  "commitId": "9c27c398b4a6004ee6a29915c41c85b453858c64",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Reviewed the prior failed review at `.factory/validation/misc-ownership-followups/scrutiny/reviews/misc-result-variable-match-codegen.json`, both feature handoffs, both transcript skeletons, the `compiler-worker` skill, and the original/fix diffs for `lib/codegen.ml`, `test/test_codegen.ml`, and the tracked runtime fixtures. The original blocking regression was that `result_decomps` leaked across statement-block scope exit, so a shadowed inner `Result` binding could overwrite the outer variable's decomposition and later `match r` lowered against the wrong error variable. The fix commit addresses both necessary pieces: it restores `result_decomps` when `StmtExpr (ExprBlock blk)` returns to the outer environment, and it now emits explicit Go braces for statement-context blocks so inner `let r = ...` shadowing lowers to a real nested Go scope instead of reusing the outer binding. The new regression fixture/test covers the exact failing shape from the prior review (`negative\\n42\\n`), and I did not find any remaining blocking or non-blocking issues in the reviewed scope.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": ".factory/validation/misc-ownership-followups/scrutiny/reviews/misc-result-variable-match-codegen.json",
+  "summary": "Pass. The fix adequately resolves the prior shadowing/scope leak by restoring `result_decomps` on statement-block exit and by emitting real Go block braces for statement-context blocks; the added regression coverage matches the original failure and no new high-confidence issues were found."
+}

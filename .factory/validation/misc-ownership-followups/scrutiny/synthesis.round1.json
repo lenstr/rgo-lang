@@ -1,0 +1,59 @@
+{
+  "milestone": "misc-ownership-followups",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "nix develop -c dune runtest -j 16",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "nix develop -c dune build -j 16",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "nix develop -c dune build @fmt",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 2,
+    "passed": 0,
+    "failed": 2,
+    "failedFeatures": [
+      "misc-result-variable-match-codegen",
+      "misc-deep-nested-result-constructor-inference"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "misc-result-variable-match-codegen",
+      "severity": "blocking",
+      "description": "`result_decomps` is not restored on block exit, so shadowing a `Result` variable inside a block can leak the inner decomposition and corrupt later outer-variable `match` lowering."
+    },
+    {
+      "featureId": "misc-deep-nested-result-constructor-inference",
+      "severity": "blocking",
+      "description": "Top-level `Result` lets and matches still assume Go multi-return pairs, so direct value-position deeply nested `Result` constructor expressions typecheck but lower to invalid Go instead of the new `Result[T, E]` struct form."
+    }
+  ],
+  "nonBlockingIssues": [
+    {
+      "featureId": "misc-result-variable-match-codegen",
+      "severity": "non_blocking",
+      "description": "The added regression tests only cover straight-line `Result` variable matches and miss scope-exit/shadowing cases that would catch the `result_decomps` leak."
+    },
+    {
+      "featureId": "misc-deep-nested-result-constructor-inference",
+      "severity": "non_blocking",
+      "description": "The new deep nested `Result` runtime regression only exercises the function-return path and does not cover direct top-level ascribed `Result` matches or let-bindings."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [],
+  "rejectedObservations": [],
+  "previousRound": null
+}

@@ -1,0 +1,40 @@
+{
+  "featureId": "misc-direct-result-value-position-lowering",
+  "reviewedAt": "2026-04-22T21:47:09Z",
+  "commitId": "e01ef5c90fe06e9003f5aad22204f68321a1b6a7",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "Reviewed the prior failed feature review (`.factory/validation/misc-ownership-followups/scrutiny/reviews/misc-deep-nested-result-constructor-inference.json`), both feature handoffs, the original `aa97260` and fix `e01ef5c90fe06e9003f5aad22204f68321a1b6a7` diffs, the fix feature transcript skeleton for session `26ef7288-20d3-4c3a-8eff-01f37f51a67e`, the `compiler-worker` skill, and mission shared-state docs. The fix correctly switches naked `Ok(...)`/`Err(...)` value-position expressions over to `Result[T,E]` structs, but it still does not cover the annotated/ascribed direct `Result` value-position forms called out by the original failure: `ExprCast`-wrapped `Result` lets and direct match scrutinees still fall back to the old multi-return decomposition paths.",
+    "issues": [
+      {
+        "file": "lib/codegen.ml",
+        "line": 4049,
+        "severity": "blocking",
+        "description": "`init_is_result` now skips decomposition only for naked `Ok`/`Err` constructor calls (`lib/codegen.ml:4044-4053`). An annotated direct value-position expression such as `let r: Result<Option<Result<i64, str>>, str> = Ok(Some(Ok(42) as Result<i64, str>)) as Result<Option<Result<i64, str>>, str>;` is still an `ExprCast`, so `init_is_result` returns true and `StmtLet` routes it into `gen_result_let_binding` (`lib/codegen.ml:3846-3853`, `4055-4058`). That emits `r, __err := <expr>` even though `ExprCast` now lowers the initializer to a `Result[T,E]{...}` struct literal, reproducing the invalid Go multi-return assumption that the original failure reported."
+      },
+      {
+        "file": "lib/codegen.ml",
+        "line": 3167,
+        "severity": "blocking",
+        "description": "`gen_result_match` / `gen_result_match_as_return` only classify a scrutinee as struct-mode when it is a naked `Ok`/`Err` call or an identifier (`lib/codegen.ml:3167-3177`, `3306-3316`). The original failure case uses direct ascribed scrutinees, e.g. `match (Ok(Some(Ok(42) as Result<i64, str>)) as Result<Option<Result<i64, str>>, str>) { ... }`. That outer `ExprCast` still falls into the `if val, err := <scrutinee>; err == nil` path (`lib/codegen.ml:3236-3239`, `3278-3281`, `3349-3355`), even though `ExprCast` now emits a `Result[T,E]{...}` struct literal (`lib/codegen.ml:1269-1284`). So direct annotated match scrutinees remain miscompiled and the original failure is not actually resolved."
+      },
+      {
+        "file": "test/test_codegen.ml",
+        "line": 1018,
+        "severity": "non_blocking",
+        "description": "The new regressions only exercise un-ascribed constructor forms (`Ok(42)`, `Err(\"hello\")`, `Ok(Ok(7))`, and a variable match) (`test/test_codegen.ml:1018-1078`). They do not cover the annotated/ascribed direct let-binding or direct match-scrutinee shapes named in the feature description and in the prior failed review, so the remaining bug above was left untested."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `compiler-worker` skill says to \"Write tests first\" (step 3), but the fix session edited `lib/codegen.ml` repeatedly before later adding the `test/test_codegen.ml` regressions, while `handoff.skillFeedback.followedProcedure` still reports `true`. Either the skill should explicitly allow investigation/patch-first codegen bugfixes, or workers should record this as a deviation.",
+      "evidence": "Skill: `.factory/skills/compiler-worker/SKILL.md` step 3. Transcript skeleton for session `26ef7288-20d3-4c3a-8eff-01f37f51a67e` shows multiple `Edit` operations on `lib/codegen.ml` before the later `Edit` operations that add the new `test/test_codegen.ml` cases; the handoff still reports `skillFeedback.followedProcedure: true`."
+    }
+  ],
+  "addressesFailureFrom": ".factory/validation/misc-ownership-followups/scrutiny/reviews/misc-deep-nested-result-constructor-inference.json",
+  "summary": "Fail. `e01ef5c90fe06e9003f5aad22204f68321a1b6a7` fixes naked `Ok`/`Err` value-position cases, but the annotated/ascribed `Result` let-binding and direct match-scrutinee forms from the original `misc-deep-nested-result-constructor-inference` failure still route through Go multi-return decomposition. The added regressions miss those ascribed shapes, so the original failure remains."
+}
