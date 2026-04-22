@@ -616,6 +616,7 @@ let rec infer_expr_type env (e : Ast.expr) : Ast.ty option =
       | _ -> None)
   | ExprCast (_, ty) -> Some ty
   | ExprLoop _ | ExprWhile _ | ExprFor _ -> None
+  | ExprLambda _ -> None
   | ExprCall (_, _) -> None
 
 and infer_block_type env blk =
@@ -1304,6 +1305,39 @@ let rec gen_expr env buf indent (ctx : expr_ctx) (e : Ast.expr) : unit =
           ~is_mut:false inner
       in
       gen_block_stmts inner buf (indent ^ "\t") blk;
+      Buffer.add_string buf indent;
+      Buffer.add_char buf '}'
+  | ExprLambda (params, ret_ty, body) ->
+      (* Zero-capture anonymous function → Go func literal *)
+      Buffer.add_string buf "func(";
+      let inner = push_scope ~is_function:true env in
+      List.iteri
+        (fun i (p : Ast.param) ->
+          if i > 0 then Buffer.add_string buf ", ";
+          Buffer.add_string buf (escape_ident p.p_name.node);
+          Buffer.add_string buf " ";
+          Buffer.add_string buf (go_type inner p.p_ty))
+        params;
+      Buffer.add_string buf ")";
+      (match ret_ty with
+      | Some t ->
+          Buffer.add_string buf " ";
+          Buffer.add_string buf (go_type inner t)
+      | None -> ());
+      Buffer.add_string buf " {\n";
+      let inner =
+        List.fold_left
+          (fun e (p : Ast.param) ->
+            add_value p.p_name.node (Some p.p_ty) ~is_mut:p.p_mut e)
+          inner params
+      in
+      let inner =
+        {
+          inner with
+          ret_ty = (match ret_ty with Some _ -> ret_ty | None -> env.ret_ty);
+        }
+      in
+      gen_block_stmts inner buf (indent ^ "\t") body;
       Buffer.add_string buf indent;
       Buffer.add_char buf '}'
 
@@ -3399,7 +3433,7 @@ and contains_question (e : Ast.expr) : bool =
         (fun (sf : Ast.struct_field_init) -> contains_question sf.sf_expr)
         fields
   | ExprIf _ | ExprMatch _ | ExprBlock _ | ExprLoop _ | ExprWhile _ | ExprFor _
-    ->
+  | ExprLambda _ ->
       false
 
 (* Hoist ExprQuestion subexpressions out of an expression tree.
@@ -3475,7 +3509,7 @@ and hoist_question_exprs env buf indent (e : Ast.expr) : Ast.expr =
       in
       ExprStructVariant (tn, vn, fields')
   | ExprIf _ | ExprMatch _ | ExprBlock _ | ExprLoop _ | ExprWhile _ | ExprFor _
-    ->
+  | ExprLambda _ ->
       (* Don't descend into blocks/control flow - ? inside those is handled
          at their own statement boundaries *)
       e

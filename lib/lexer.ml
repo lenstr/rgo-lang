@@ -198,6 +198,7 @@ let rec token state buf =
   | ">=" -> Token.{ token = GtEq; span = make_span state buf }
   | "&&" -> Token.{ token = AmpAmp; span = make_span state buf }
   | "||" -> Token.{ token = PipePipe; span = make_span state buf }
+  | '|' -> Token.{ token = Pipe; span = make_span state buf }
   | "+=" -> Token.{ token = PlusEq; span = make_span state buf }
   | "-=" -> Token.{ token = MinusEq; span = make_span state buf }
   | "*=" -> Token.{ token = StarEq; span = make_span state buf }

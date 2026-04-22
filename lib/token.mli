@@ -82,6 +82,7 @@ type t =
   | Colon
   | Question
   | Amp
+  | Pipe
   | LParen
   | RParen
   | LBrace

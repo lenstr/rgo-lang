@@ -2977,6 +2977,81 @@ fn main() {
 }
 |}
 
+(* VAL-CALLBACK-002: Zero-capture anonymous handler passes typecheck *)
+let callback_anonymous_handler_positive =
+  {|
+use net::http;
+fn main() {
+    let mux = http::new_serve_mux();
+    mux.handle_func("/items", |w: http::ResponseWriter, r: http::Request| {
+        w.write_header(200);
+        w.write("hello");
+    });
+}
+|}
+
+(* VAL-CALLBACK-002: Zero-capture anonymous handler with method check *)
+let callback_anonymous_handler_method_check =
+  {|
+use net::http;
+fn main() {
+    let mux = http::new_serve_mux();
+    mux.handle_func("/items", |w: http::ResponseWriter, r: http::Request| {
+        let m = r.method;
+        let v = r.form_value("name");
+        w.write_header(200);
+        w.write("ok");
+    });
+}
+|}
+
+(* VAL-CALLBACK-003: Capturing anonymous handler is rejected *)
+let callback_capturing_lambda_negative =
+  {|
+use net::http;
+fn main() {
+    let greeting = "hello";
+    let mux = http::new_serve_mux();
+    mux.handle_func("/items", |w: http::ResponseWriter, r: http::Request| {
+        w.write_header(200);
+        w.write(greeting);
+    });
+}
+|}
+
+(* VAL-CROSS-002: Mixed named handler + anonymous handler *)
+let callback_mixed_handlers_positive =
+  {|
+use net::http;
+fn named_handler(w: http::ResponseWriter, r: http::Request) {
+    w.write_header(200);
+    w.write("named");
+}
+fn main() {
+    let mux = http::new_serve_mux();
+    mux.handle_func("/named", named_handler);
+    mux.handle_func("/anon", |w: http::ResponseWriter, r: http::Request| {
+        w.write_header(200);
+        w.write("anonymous");
+    });
+}
+|}
+
+(* VAL-CALLBACK-007: Multiple registrations of zero-capture anonymous handler *)
+let callback_anonymous_handler_reuse =
+  {|
+use net::http;
+fn main() {
+    let mux = http::new_serve_mux();
+    let handler = |w: http::ResponseWriter, r: http::Request| {
+        w.write_header(200);
+        w.write("reused");
+    };
+    mux.handle_func("/items", handler);
+    mux.handle_func("/other", handler);
+}
+|}
+
 let callback_positive_tests =
   [
     ("named handler registration", `Quick, pass callback_named_handler_positive);
@@ -2989,6 +3064,18 @@ let callback_positive_tests =
     ( "fn value assign and reuse (VAL-CALLBACK-006)",
       `Quick,
       pass callback_fn_value_assign_reuse );
+    ( "zero-capture anonymous handler (VAL-CALLBACK-002)",
+      `Quick,
+      pass callback_anonymous_handler_positive );
+    ( "anonymous handler with receiver members (VAL-CALLBACK-002)",
+      `Quick,
+      pass callback_anonymous_handler_method_check );
+    ( "mixed named + anonymous handlers (VAL-CROSS-002)",
+      `Quick,
+      pass callback_mixed_handlers_positive );
+    ( "anonymous handler reuse (VAL-CALLBACK-007)",
+      `Quick,
+      pass callback_anonymous_handler_reuse );
   ]
 
 let callback_negative_tests =
@@ -3011,6 +3098,9 @@ let callback_negative_tests =
     ( "non-callable struct (VAL-CALLBACK-005)",
       `Quick,
       fail ~expect:"not callable" callback_non_callable_struct_negative );
+    ( "capturing anonymous handler rejected (VAL-CALLBACK-003)",
+      `Quick,
+      fail ~expect:"undefined" callback_capturing_lambda_negative );
   ]
 
 let () =

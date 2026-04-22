@@ -23,7 +23,7 @@ let mk_loc node (s, e) = { node; span = mk_span (s, e) }
 %token PLUS MINUS STAR SLASH PERCENT
 %token EQEQ NEQ LT GT LTEQ GTEQ AMPAMP PIPEPIPE BANG
 %token EQ PLUSEQ MINUSEQ STAREQ SLASHEQ
-%token ARROW FAT_ARROW COLON_COLON DOT COMMA SEMI COLON QUESTION AMP
+%token ARROW FAT_ARROW COLON_COLON DOT COMMA SEMI COLON QUESTION AMP PIPE
 %token LPAREN RPAREN LBRACE RBRACE LBRACKET RBRACKET
 %token UNDERSCORE
 %token EOF
@@ -401,6 +401,12 @@ expr_primary_no_struct:
     { ExprRepeat (e, n) }
   | LBRACKET; es = separated_nonempty_list(COMMA, expr); option(COMMA); RBRACKET
     { ExprArray es }
+  (* Lambda / anonymous function: |params| block or |params| -> ty block *)
+  | PIPE; ps = separated_list(COMMA, param); PIPE; b = block_expr
+    { ExprLambda (ps, None, b) }
+  | PIPE; ps = separated_list(COMMA, param); PIPE; ARROW; t = ty;
+    b = block_expr
+    { ExprLambda (ps, Some t, b) }
   ;
 
 expr_assign:
@@ -539,6 +545,12 @@ expr_primary:
     { ExprRepeat (e, n) }
   | LBRACKET; es = separated_nonempty_list(COMMA, expr); option(COMMA); RBRACKET
     { ExprArray es }
+  (* Lambda / anonymous function: |params| block or |params| -> ty block *)
+  | PIPE; ps = separated_list(COMMA, param); PIPE; b = block_expr
+    { ExprLambda (ps, None, b) }
+  | PIPE; ps = separated_list(COMMA, param); PIPE; ARROW; t = ty;
+    b = block_expr
+    { ExprLambda (ps, Some t, b) }
   ;
 
 else_branch:

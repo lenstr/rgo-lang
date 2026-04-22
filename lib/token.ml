@@ -82,6 +82,7 @@ type t =
   | Colon
   | Question
   | Amp
+  | Pipe
   | LParen
   | RParen
   | LBrace
@@ -169,6 +170,7 @@ let show = function
   | Colon -> ":"
   | Question -> "?"
   | Amp -> "&"
+  | Pipe -> "|"
   | LParen -> "("
   | RParen -> ")"
   | LBrace -> "{"

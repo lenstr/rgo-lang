@@ -522,6 +522,50 @@ let rec check_expr env (e : expr) : ty =
       let _ = check_block env blk in
       TVoid
   | ExprFor (binding, iter_expr, blk) -> check_for env binding iter_expr blk
+  | ExprLambda (params, ret_ty, body) ->
+      (* Zero-capture anonymous handler: typecheck the body in a fresh scope
+         that only contains the lambda's own parameters (no outer locals). *)
+      let param_types =
+        List.map (fun (p : Ast.param) -> resolve_ast_ty env p.p_ty) params
+      in
+      let ret_type =
+        match ret_ty with Some t -> resolve_ast_ty env t | None -> TVoid
+      in
+      (* Build a fresh environment with only imported packages and the
+         lambda's own parameters — no outer values are accessible, which
+         enforces zero-capture. *)
+      let lambda_env =
+        {
+          empty_env with
+          imported_packages = env.imported_packages;
+          structs = env.structs;
+          enums = env.enums;
+          fns = env.fns;
+          impls = env.impls;
+          traits = env.traits;
+          trait_impls = env.trait_impls;
+          ret_ty = Some ret_type;
+          self_ty = None;
+          current_trait = None;
+          type_params = env.type_params;
+          param_bounds = env.param_bounds;
+          moved = ref SSet.empty;
+        }
+      in
+      let lambda_env = push_scope lambda_env in
+      let lambda_env =
+        List.fold_left
+          (fun e (p : Ast.param) ->
+            let ty = resolve_ast_ty e p.p_ty in
+            add_value p.p_name.node ty ~is_mut:p.p_mut e)
+          lambda_env params
+      in
+      let body_ty = check_block lambda_env body in
+      if ret_type <> TVoid && body_ty <> TVoid then
+        expect_type ~env:lambda_env
+          ~span:(expr_span (ExprLambda (params, ret_ty, body)))
+          ~expected:ret_type ~actual:body_ty;
+      TFn (param_types, ret_type)
 
 and check_binop env op l r =
   let lt = check_expr env l in

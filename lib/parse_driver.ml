@@ -82,6 +82,7 @@ let token_to_parser (tok : Token.located) : Parser.token =
   | Token.Colon -> Parser.COLON
   | Token.Question -> Parser.QUESTION
   | Token.Amp -> Parser.AMP
+  | Token.Pipe -> Parser.PIPE
   | Token.LParen -> Parser.LPAREN
   | Token.RParen -> Parser.RPAREN
   | Token.LBrace -> Parser.LBRACE

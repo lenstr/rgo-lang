@@ -292,6 +292,16 @@ let rec resolve_expr env (e : expr) =
       let inner = push_scope env in
       let inner = add_value binding inner in
       resolve_block inner blk
+  | ExprLambda (params, _ret_ty, body) ->
+      (* Zero-capture lambda: resolve param types and body *)
+      List.iter (fun (p : Ast.param) -> resolve_ty env p.p_ty) params;
+      let inner = push_scope env in
+      let inner =
+        List.fold_left
+          (fun acc (p : Ast.param) -> add_value p.p_name acc)
+          inner params
+      in
+      resolve_block inner body
 
 and resolve_struct_constructor env ty fields =
   (* Resolve the type name and check fields *)

@@ -210,6 +210,7 @@ let rec walk_expr enums tenv fn_ret_types (e : expr) : unit =
   | ExprFor (_, iter, blk) ->
       walk_expr enums tenv fn_ret_types iter;
       walk_block enums tenv fn_ret_types blk
+  | ExprLambda (_, _, body) -> walk_block enums tenv fn_ret_types body
 
 and walk_block enums tenv fn_ret_types (blk : block) : unit =
   let tenv =

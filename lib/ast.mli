@@ -33,6 +33,13 @@ and lit =
   | LitBool of bool
 [@@deriving show]
 
+(* ---------- self param ---------- *)
+type self_param = SelfValue | SelfRef | SelfMutRef [@@deriving show]
+
+(* ---------- function parameters ---------- *)
+type param = { p_mut : bool; p_name : ident located; p_ty : ty }
+[@@deriving show]
+
 (* ---------- expressions ---------- *)
 type unop = Neg | Not [@@deriving show]
 
@@ -82,6 +89,7 @@ type expr =
   | ExprLoop of expr option * block
   | ExprWhile of expr * block
   | ExprFor of ident located * expr * block
+  | ExprLambda of param list * ty option * block
 [@@deriving show]
 
 and struct_field_init = { sf_name : ident located; sf_expr : expr }
@@ -94,13 +102,6 @@ and block = { stmts : stmt list; final_expr : expr option } [@@deriving show]
 and stmt =
   | StmtLet of { is_mut : bool; pat : pat; ty : ty option; init : expr }
   | StmtExpr of expr
-[@@deriving show]
-
-(* ---------- self param ---------- *)
-type self_param = SelfValue | SelfRef | SelfMutRef [@@deriving show]
-
-(* ---------- function parameters ---------- *)
-type param = { p_mut : bool; p_name : ident located; p_ty : ty }
 [@@deriving show]
 
 (* ---------- type parameters (generics) ---------- *)

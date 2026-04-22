@@ -2630,6 +2630,112 @@ fn main() {
 |}
     ()
 
+(* VAL-CALLBACK-002: Zero-capture anonymous handler lowers to Go func literal *)
+let test_callback_anonymous_handler () =
+  let src =
+    {|
+use net::http;
+fn main() {
+    let mux = http::new_serve_mux();
+    mux.handle_func("/items", |w: http::ResponseWriter, r: http::Request| {
+        w.write_header(200);
+        w.write("hello");
+    });
+    http::listen_and_serve(":3111", mux);
+}
+|}
+  in
+  let go = compile_and_check src in
+  Alcotest.(check bool)
+    "has Go func literal" true
+    (contains go "func(w http.ResponseWriter, r *http.Request) {");
+  Alcotest.(check bool)
+    "has HandleFunc" true
+    (contains go
+       "mux.HandleFunc(\"/items\", func(w http.ResponseWriter, r \
+        *http.Request) {");
+  Alcotest.(check bool)
+    "has WriteHeader" true
+    (contains go "w.WriteHeader(200)");
+  Alcotest.(check bool)
+    "has Write([]byte)" true
+    (contains go "w.Write([]byte(\"hello\"))")
+
+(* VAL-CROSS-002: Mixed named handler + anonymous handler lowers to valid Go *)
+let test_callback_mixed_handlers () =
+  let src =
+    {|
+use net::http;
+fn named_handler(w: http::ResponseWriter, r: http::Request) {
+    w.write_header(200);
+    w.write("named");
+}
+fn main() {
+    let mux = http::new_serve_mux();
+    mux.handle_func("/named", named_handler);
+    mux.handle_func("/anon", |w: http::ResponseWriter, r: http::Request| {
+        w.write_header(200);
+        w.write("anonymous");
+    });
+    http::listen_and_serve(":3111", mux);
+}
+|}
+  in
+  let go = compile_and_check src in
+  Alcotest.(check bool)
+    "has named handler func" true
+    (contains go "func named_handler(w http.ResponseWriter, r *http.Request)");
+  Alcotest.(check bool)
+    "has HandleFunc for named" true
+    (contains go "mux.HandleFunc(\"/named\", named_handler)");
+  Alcotest.(check bool)
+    "has HandleFunc for anonymous" true
+    (contains go
+       "mux.HandleFunc(\"/anon\", func(w http.ResponseWriter, r *http.Request)");
+  Alcotest.(check bool)
+    "has ListenAndServe" true
+    (contains go "http.ListenAndServe")
+
+(* VAL-CALLBACK-003: Capturing anonymous handler is rejected *)
+let test_callback_capturing_lambda_rejected () =
+  compile_expect_error ~expect:"undefined"
+    {|
+use net::http;
+fn main() {
+    let greeting = "hello";
+    let mux = http::new_serve_mux();
+    mux.handle_func("/items", |w: http::ResponseWriter, r: http::Request| {
+        w.write_header(200);
+        w.write(greeting);
+    });
+}
+|}
+    ()
+
+(* VAL-CALLBACK-007: Anonymous handler can be reused across registrations *)
+let test_callback_anonymous_handler_reuse () =
+  let src =
+    {|
+use net::http;
+fn main() {
+    let mux = http::new_serve_mux();
+    let handler = |w: http::ResponseWriter, r: http::Request| {
+        w.write_header(200);
+        w.write("reused");
+    };
+    mux.handle_func("/items", handler);
+    mux.handle_func("/other", handler);
+}
+|}
+  in
+  let go = compile_and_check src in
+  Alcotest.(check bool)
+    "has first HandleFunc" true
+    (contains go "mux.HandleFunc(\"/items\",");
+  Alcotest.(check bool)
+    "has second HandleFunc" true
+    (contains go "mux.HandleFunc(\"/other\",")
+
 let () =
   Alcotest.run "codegen"
     [
@@ -2906,5 +3012,13 @@ let () =
             test_callback_non_callable_int;
           Alcotest.test_case "non-callable string rejected" `Quick
             test_callback_non_callable_string;
+          Alcotest.test_case "anonymous handler lowers to Go func literal"
+            `Quick test_callback_anonymous_handler;
+          Alcotest.test_case "mixed named + anonymous handlers" `Quick
+            test_callback_mixed_handlers;
+          Alcotest.test_case "capturing lambda rejected" `Quick
+            test_callback_capturing_lambda_rejected;
+          Alcotest.test_case "anonymous handler reuse" `Quick
+            test_callback_anonymous_handler_reuse;
         ] );
     ]
