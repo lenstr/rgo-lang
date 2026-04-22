@@ -1864,6 +1864,55 @@ fn main() {
   in
   compile_and_check ~expected_output:"done\ndrop:other\n" src |> ignore
 
+(* VAL-OWN-010: Nested built-in Option Copy-payload pattern compiles and runs *)
+let test_own_nested_option_copy_runtime () =
+  let src =
+    {|
+fn maybe_find(x: i64) -> Option<Option<i64>> {
+    if x > 0 {
+        Some(Some(x))
+    } else {
+        None
+    }
+}
+
+fn main() {
+    let outer = maybe_find(42);
+    match outer {
+        Option::Some(Option::Some(v)) => println(v),
+        Option::Some(Option::None) => println("inner none"),
+        Option::None => println("outer none"),
+    }
+}
+|}
+  in
+  compile_and_check ~expected_output:"42\n" src |> ignore
+
+(* VAL-OWN-010: Nested built-in Result(Option) Copy-payload pattern compiles and runs *)
+let test_own_nested_result_option_copy_runtime () =
+  let src =
+    {|
+fn maybe_value(x: i64) -> Result<Option<i64>, str> {
+    if x > 0 {
+        Ok(Some(x))
+    } else if x == 0 {
+        Ok(None)
+    } else {
+        Err("negative")
+    }
+}
+
+fn main() {
+    match maybe_value(42) {
+        Result::Ok(Option::Some(v)) => println(v),
+        Result::Ok(Option::None) => println("inner none"),
+        Result::Err(e) => println(e),
+    }
+}
+|}
+  in
+  compile_and_check ~expected_output:"42\n" src |> ignore
+
 (* ======== Test registration ======== *)
 
 let () =
@@ -1995,6 +2044,10 @@ let () =
             test_own_generic_enum_repeated_conflict;
           Alcotest.test_case "nested generic enum move transfers cleanup" `Quick
             test_own_generic_enum_nested_move;
+          Alcotest.test_case "nested Option Copy-payload pattern compiles and runs"
+            `Quick test_own_nested_option_copy_runtime;
+          Alcotest.test_case "nested Result(Option) Copy-payload pattern compiles and runs"
+            `Quick test_own_nested_result_option_copy_runtime;
         ] );
       ( "example-fixtures",
         [

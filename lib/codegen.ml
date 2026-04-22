@@ -2359,6 +2359,421 @@ and env_with_option_binding env (arm : match_arm) inner_ty =
   | PatBind name -> add_value name.node (Some inner_ty) ~is_mut:false scope_env
   | _ -> scope_env
 
+(* ---------- Nested built-in pattern helpers ---------- *)
+
+(* Extract the inner type from a built-in Option/Result type *)
+and inner_type_of_builtin (t : Ast.ty) : Ast.ty option =
+  match t with
+  | TyGeneric ({ node = "Option"; _ }, [ inner ]) -> Some inner
+  | TyGeneric ({ node = "Result"; _ }, [ ok; _ ]) -> Some ok
+  | _ -> None
+
+(* Collect all arms with a given variant name at the top level *)
+and find_all_builtin_variant_arms variant_name arms =
+  List.filter
+    (fun (arm : match_arm) ->
+      match arm.arm_pat with
+      | PatTuple (_, vname, _) -> vname.node = variant_name
+      | _ -> false)
+    arms
+
+(* For an arm whose top-level pattern is Some/Ok/Err with a nested
+   built-in pattern inside, extract the inner pattern.
+   E.g. Option::Some(Option::Some(v)) -> Some(Option, Some, [PatBind v]) *)
+and extract_inner_builtin_pat (arm : match_arm) :
+    (string * string * pat list) option =
+  match arm.arm_pat with
+  | PatTuple (_, _, [ PatTuple (inner_enum, inner_variant, inner_pats) ])
+    when inner_enum.node = "Option" || inner_enum.node = "Result" ->
+      Some (inner_enum.node, inner_variant.node, inner_pats)
+  | _ -> None
+
+(* Generate a nested Option match for arms with nested Option patterns
+   inside an outer Some arm.  This emits code like:
+
+     inner := *__match_opt_0
+     if inner.some / inner != nil {
+       <Some arm body with inner bindings>
+     } else {
+       <None arm body>
+     }
+
+   some_arms are the outer Some arms whose inner patterns are
+   built-in Option patterns.  We find the inner Some/None among them. *)
+and gen_nested_option_match_stmt env buf indent outer_var inner_name
+    (some_arms : match_arm list) inner_ty nested_inner_ty _ctx =
+  (* Emit the outer binding: unwrap the outer Option value *)
+  if is_nullable_ty env inner_ty then
+    Printf.bprintf buf "%s%s := %s.value\n" indent inner_name outer_var
+  else
+    Printf.bprintf buf "%s%s := *%s\n" indent inner_name outer_var;
+  let cond =
+    if is_nullable_ty env nested_inner_ty then inner_name ^ ".some"
+    else inner_name ^ " != nil"
+  in
+  (* Find the inner Some arm among the nested arms *)
+  let inner_some_arm =
+    List.find_opt
+      (fun (arm : match_arm) ->
+        match extract_inner_builtin_pat arm with
+        | Some (_, "Some", _) -> true
+        | _ -> false)
+      some_arms
+  in
+  let inner_none_arm =
+    List.find_opt
+      (fun (arm : match_arm) ->
+        match extract_inner_builtin_pat arm with
+        | Some (_, "None", _) -> true
+        | _ -> false)
+      some_arms
+  in
+  Printf.bprintf buf "%sif %s {\n" indent cond;
+  (match inner_some_arm with
+  | Some arm ->
+      (match arm.arm_pat with
+      | PatTuple (_, _, [ PatTuple (_, _, [ PatBind name ]) ]) ->
+          let some_env = push_scope env in
+          let some_env =
+            add_value name.node (Some nested_inner_ty) ~is_mut:false some_env
+          in
+          if is_nullable_ty env nested_inner_ty then
+            Printf.bprintf buf "%s%s := %s.value\n" (indent ^ "\t")
+              (escape_ident name.node) inner_name
+          else
+            Printf.bprintf buf "%s%s := *%s\n" (indent ^ "\t")
+              (escape_ident name.node) inner_name;
+          gen_arm_body_stmts some_env buf (indent ^ "\t") arm.arm_expr
+      | _ ->
+          Printf.bprintf buf "%spanic(\"unsupported nested pattern\")\n"
+            (indent ^ "\t"))
+  | None ->
+      Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t")
+  );
+  Printf.bprintf buf "%s} else {\n" indent;
+  (match inner_none_arm with
+  | Some arm ->
+      gen_arm_body_stmts env buf (indent ^ "\t") arm.arm_expr
+  | None ->
+      Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t"));
+  Printf.bprintf buf "%s}" indent
+
+(* Same as above but for expression context (returns a value) *)
+and gen_nested_option_match_expr env buf indent outer_var inner_name
+    (some_arms : match_arm list) inner_ty nested_inner_ty _ctx =
+  if is_nullable_ty env inner_ty then
+    Printf.bprintf buf "%s%s := %s.value\n" indent inner_name outer_var
+  else
+    Printf.bprintf buf "%s%s := *%s\n" indent inner_name outer_var;
+  let cond =
+    if is_nullable_ty env nested_inner_ty then inner_name ^ ".some"
+    else inner_name ^ " != nil"
+  in
+  let inner_some_arm =
+    List.find_opt
+      (fun (arm : match_arm) ->
+        match extract_inner_builtin_pat arm with
+        | Some (_, "Some", _) -> true
+        | _ -> false)
+      some_arms
+  in
+  let inner_none_arm =
+    List.find_opt
+      (fun (arm : match_arm) ->
+        match extract_inner_builtin_pat arm with
+        | Some (_, "None", _) -> true
+        | _ -> false)
+      some_arms
+  in
+  Printf.bprintf buf "%sif %s {\n" indent cond;
+  (match inner_some_arm with
+  | Some arm -> (
+      match arm.arm_pat with
+      | PatTuple (_, _, [ PatTuple (_, _, [ PatBind name ]) ]) ->
+          let some_env = push_scope env in
+          let some_env =
+            add_value name.node (Some nested_inner_ty) ~is_mut:false some_env
+          in
+          if is_nullable_ty env nested_inner_ty then
+            Printf.bprintf buf "%s%s := %s.value\n" (indent ^ "\t")
+              (escape_ident name.node) inner_name
+          else
+            Printf.bprintf buf "%s%s := *%s\n" (indent ^ "\t")
+              (escape_ident name.node) inner_name;
+          Printf.bprintf buf "%sreturn " (indent ^ "\t");
+          gen_expr some_env buf (indent ^ "\t") CtxExpr arm.arm_expr;
+          Buffer.add_char buf '\n'
+      | _ ->
+          Printf.bprintf buf "%spanic(\"unsupported nested pattern\")\n"
+            (indent ^ "\t"))
+  | None ->
+      Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t")
+  );
+  Printf.bprintf buf "%s} else {\n" indent;
+  (match inner_none_arm with
+  | Some arm ->
+      Printf.bprintf buf "%sreturn " (indent ^ "\t");
+      gen_expr env buf (indent ^ "\t") CtxExpr arm.arm_expr;
+      Buffer.add_char buf '\n'
+  | None ->
+      Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t"));
+  Printf.bprintf buf "%s}" indent
+
+(* Generate a nested Result-then-Option/Result match for arms with nested
+   Result patterns inside an outer Ok/Err arm.
+
+   For Result::Ok(Option::Some(v)) => body:
+   Emits:
+     inner := value_name  (or err_name for Err)
+     if inner != nil {
+       v := *inner
+       <body>
+     } else {
+       <inner None arm body>
+     }
+
+   For Result::Ok(Result::Ok(v)) => body:
+   Emits:
+     inner := value_name
+     inner_val, inner_err := inner
+     if inner_err == nil {
+       v := inner_val
+       <body>
+     } else {
+       <inner Err arm body>
+     } *)
+and gen_nested_result_inner_match_stmt env buf indent inner_var
+    (inner_arms : match_arm list) inner_ty _ctx =
+  (* Determine the inner type and generate the appropriate nested matching *)
+  match inner_ty with
+  | TyGeneric ({ node = "Option"; _ }, [ nested_inner_ty ]) ->
+      (* Inner is Option: generate nested if/else on some/nil *)
+      let cond =
+        if is_nullable_ty env nested_inner_ty then inner_var ^ ".some"
+        else inner_var ^ " != nil"
+      in
+      let inner_some_arm =
+        List.find_opt
+          (fun (arm : match_arm) ->
+            match extract_inner_builtin_pat arm with
+            | Some ("Option", "Some", _) -> true
+            | _ -> false)
+          inner_arms
+      in
+      let inner_none_arm =
+        List.find_opt
+          (fun (arm : match_arm) ->
+            match extract_inner_builtin_pat arm with
+            | Some ("Option", "None", _) -> true
+            | _ -> false)
+          inner_arms
+      in
+      Printf.bprintf buf "%sif %s {\n" indent cond;
+      (match inner_some_arm with
+      | Some arm -> (
+          match arm.arm_pat with
+          | PatTuple (_, _, [ PatTuple (_, _, [ PatBind name ]) ]) ->
+              let some_env = push_scope env in
+              let some_env =
+                add_value name.node (Some nested_inner_ty) ~is_mut:false
+                  some_env
+              in
+              if is_nullable_ty env nested_inner_ty then
+                Printf.bprintf buf "%s%s := %s.value\n" (indent ^ "\t")
+                  (escape_ident name.node) inner_var
+              else
+                Printf.bprintf buf "%s%s := *%s\n" (indent ^ "\t")
+                  (escape_ident name.node) inner_var;
+              gen_arm_body_stmts some_env buf (indent ^ "\t") arm.arm_expr
+          | _ ->
+              Printf.bprintf buf "%spanic(\"unsupported nested pattern\")\n"
+                (indent ^ "\t"))
+      | None ->
+              Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t")
+      );
+      Printf.bprintf buf "%s} else {\n" indent;
+      (match inner_none_arm with
+      | Some arm ->
+          gen_arm_body_stmts env buf (indent ^ "\t") arm.arm_expr
+      | None ->
+          Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t"));
+      Printf.bprintf buf "%s}" indent
+  | TyGeneric ({ node = "Result"; _ }, [ ok_ty; _err_ty ]) ->
+      (* Inner is Result: generate nested if/else on err == nil *)
+      let nested_val = fresh_tmp env "inner_val" in
+      let nested_err = fresh_tmp env "inner_err" in
+      Printf.bprintf buf "%sif %s, %s := %s; %s == nil {\n" indent
+        nested_val nested_err inner_var nested_err;
+      let inner_ok_arm =
+        List.find_opt
+          (fun (arm : match_arm) ->
+            match extract_inner_builtin_pat arm with
+            | Some ("Result", "Ok", _) -> true
+            | _ -> false)
+          inner_arms
+      in
+      let inner_err_arm =
+        List.find_opt
+          (fun (arm : match_arm) ->
+            match extract_inner_builtin_pat arm with
+            | Some ("Result", "Err", _) -> true
+            | _ -> false)
+          inner_arms
+      in
+      (match inner_ok_arm with
+      | Some arm ->
+          (match arm.arm_pat with
+          | PatTuple (_, _, [ PatTuple (_, _, [ PatBind name ]) ]) ->
+              let ok_env = push_scope env in
+              let ok_env =
+                add_value name.node (Some ok_ty) ~is_mut:false ok_env
+              in
+              Printf.bprintf buf "%s%s := %s\n" (indent ^ "\t")
+                (escape_ident name.node) nested_val;
+              gen_arm_body_stmts ok_env buf (indent ^ "\t") arm.arm_expr
+          | _ ->
+              Printf.bprintf buf "%spanic(\"unsupported nested pattern\")\n"
+                (indent ^ "\t"))
+      | None ->
+              Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t")
+      );
+      Printf.bprintf buf "%s} else {\n" indent;
+      (match inner_err_arm with
+      | Some arm ->
+          (match arm.arm_pat with
+          | PatTuple (_, _, [ PatTuple (_, _, [ PatBind name ]) ]) ->
+              Printf.bprintf buf "%s%s := %s\n" (indent ^ "\t")
+                (escape_ident name.node) nested_err;
+              gen_arm_body_stmts env buf (indent ^ "\t") arm.arm_expr
+          | _ ->
+              Printf.bprintf buf "%spanic(\"unsupported nested pattern\")\n"
+                (indent ^ "\t"))
+      | None ->
+              Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t")
+      );
+      Printf.bprintf buf "%s}" indent
+  | _ ->
+      Printf.bprintf buf "%spanic(\"unsupported nested match type\")\n" indent
+
+(* Expression-context version of nested Result inner match *)
+and gen_nested_result_inner_match_expr env buf indent inner_var
+    (inner_arms : match_arm list) inner_ty _ctx =
+  match inner_ty with
+  | TyGeneric ({ node = "Option"; _ }, [ nested_inner_ty ]) ->
+      let cond =
+        if is_nullable_ty env nested_inner_ty then inner_var ^ ".some"
+        else inner_var ^ " != nil"
+      in
+      let inner_some_arm =
+        List.find_opt
+          (fun (arm : match_arm) ->
+            match extract_inner_builtin_pat arm with
+            | Some ("Option", "Some", _) -> true
+            | _ -> false)
+          inner_arms
+      in
+      let inner_none_arm =
+        List.find_opt
+          (fun (arm : match_arm) ->
+            match extract_inner_builtin_pat arm with
+            | Some ("Option", "None", _) -> true
+            | _ -> false)
+          inner_arms
+      in
+      Printf.bprintf buf "%sif %s {\n" indent cond;
+      (match inner_some_arm with
+      | Some arm -> (
+          match arm.arm_pat with
+          | PatTuple (_, _, [ PatTuple (_, _, [ PatBind name ]) ]) ->
+              let some_env = push_scope env in
+              let some_env =
+                add_value name.node (Some nested_inner_ty) ~is_mut:false
+                  some_env
+              in
+              if is_nullable_ty env nested_inner_ty then
+                Printf.bprintf buf "%s%s := %s.value\n" (indent ^ "\t")
+                  (escape_ident name.node) inner_var
+              else
+                Printf.bprintf buf "%s%s := *%s\n" (indent ^ "\t")
+                  (escape_ident name.node) inner_var;
+              Printf.bprintf buf "%sreturn " (indent ^ "\t");
+              gen_expr some_env buf (indent ^ "\t") CtxExpr arm.arm_expr;
+              Buffer.add_char buf '\n'
+          | _ ->
+              Printf.bprintf buf "%spanic(\"unsupported nested pattern\")\n"
+                (indent ^ "\t"))
+      | None ->
+          Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t")
+      );
+      Printf.bprintf buf "%s} else {\n" indent;
+      (match inner_none_arm with
+      | Some arm ->
+          Printf.bprintf buf "%sreturn " (indent ^ "\t");
+          gen_expr env buf (indent ^ "\t") CtxExpr arm.arm_expr;
+          Buffer.add_char buf '\n'
+      | None ->
+          Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t"));
+      Printf.bprintf buf "%s}" indent
+  | TyGeneric ({ node = "Result"; _ }, [ ok_ty; _err_ty ]) ->
+      let nested_val = fresh_tmp env "inner_val" in
+      let nested_err = fresh_tmp env "inner_err" in
+      Printf.bprintf buf "%sif %s, %s := %s; %s == nil {\n" indent
+        nested_val nested_err inner_var nested_err;
+      let inner_ok_arm =
+        List.find_opt
+          (fun (arm : match_arm) ->
+            match extract_inner_builtin_pat arm with
+            | Some ("Result", "Ok", _) -> true
+            | _ -> false)
+          inner_arms
+      in
+      let inner_err_arm =
+        List.find_opt
+          (fun (arm : match_arm) ->
+            match extract_inner_builtin_pat arm with
+            | Some ("Result", "Err", _) -> true
+            | _ -> false)
+          inner_arms
+      in
+      (match inner_ok_arm with
+      | Some arm -> (
+          match arm.arm_pat with
+          | PatTuple (_, _, [ PatTuple (_, _, [ PatBind name ]) ]) ->
+              let ok_env = push_scope env in
+              let ok_env =
+                add_value name.node (Some ok_ty) ~is_mut:false ok_env
+              in
+              Printf.bprintf buf "%s%s := %s\n" (indent ^ "\t")
+                (escape_ident name.node) nested_val;
+              Printf.bprintf buf "%sreturn " (indent ^ "\t");
+              gen_expr ok_env buf (indent ^ "\t") CtxExpr arm.arm_expr;
+              Buffer.add_char buf '\n'
+          | _ ->
+              Printf.bprintf buf "%spanic(\"unsupported nested pattern\")\n"
+                (indent ^ "\t"))
+      | None ->
+              Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t")
+      );
+      Printf.bprintf buf "%s} else {\n" indent;
+      (match inner_err_arm with
+      | Some arm -> (
+          match arm.arm_pat with
+          | PatTuple (_, _, [ PatTuple (_, _, [ PatBind name ]) ]) ->
+              Printf.bprintf buf "%s%s := %s\n" (indent ^ "\t")
+                (escape_ident name.node) nested_err;
+              Printf.bprintf buf "%sreturn " (indent ^ "\t");
+              gen_expr env buf (indent ^ "\t") CtxExpr arm.arm_expr;
+              Buffer.add_char buf '\n'
+          | _ ->
+              Printf.bprintf buf "%spanic(\"unsupported nested pattern\")\n"
+                (indent ^ "\t"))
+      | None ->
+              Printf.bprintf buf "%spanic(\"unreachable\")\n" (indent ^ "\t")
+      );
+      Printf.bprintf buf "%s}" indent
+  | _ ->
+      Printf.bprintf buf "%spanic(\"unsupported nested match type\")\n" indent
+
 and gen_match_stmt_branch env buf indent arm default_arm bind_pattern =
   match arm with
   | Some arm ->
@@ -2397,17 +2812,52 @@ and gen_result_match env buf indent ctx scrutinee arms _ok_ty _err_ty =
   let default_arm = find_builtin_default_arm arms in
   let value_name = fresh_tmp env "match_val" in
   let err_name = fresh_tmp env "match_err" in
+  (* Detect nested built-in patterns inside Ok/Err arms *)
+  let has_nested_ok =
+    match ok_arm with
+    | Some arm -> (
+        match arm.arm_pat with
+        | PatTuple (_, _, [ PatTuple (inner_enum, _, _) ])
+            when inner_enum.node = "Option" || inner_enum.node = "Result" ->
+            true
+        | _ -> false)
+    | None -> false
+  in
+  let has_nested_err =
+    match err_arm with
+    | Some arm -> (
+        match arm.arm_pat with
+        | PatTuple (_, _, [ PatTuple (inner_enum, _, _) ])
+            when inner_enum.node = "Option" || inner_enum.node = "Result" ->
+            true
+        | _ -> false)
+    | None -> false
+  in
   match ctx with
   | CtxStmt ->
       Printf.bprintf buf "if %s, %s := " value_name err_name;
       gen_expr env buf indent CtxExpr scrutinee;
       Printf.bprintf buf "; %s == nil {\n" err_name;
-      gen_match_stmt_branch env buf (indent ^ "\t") ok_arm default_arm
-        (gen_result_pattern_binding buf (indent ^ "\t") value_name err_name true);
-      Printf.bprintf buf "%s} else {\n" indent;
-      gen_match_stmt_branch env buf (indent ^ "\t") err_arm default_arm
-        (gen_result_pattern_binding buf (indent ^ "\t") value_name err_name
-           false);
+      if has_nested_ok then
+        let ok_arms = find_all_builtin_variant_arms "Ok" arms in
+        gen_nested_result_inner_match_stmt env buf (indent ^ "\t") value_name
+          ok_arms _ok_ty CtxStmt
+      else
+        gen_match_stmt_branch env buf (indent ^ "\t") ok_arm default_arm
+          (gen_result_pattern_binding buf (indent ^ "\t") value_name err_name
+             true);
+      if has_nested_ok then
+        Printf.bprintf buf "\n%s} else {\n" indent
+      else
+        Printf.bprintf buf "%s} else {\n" indent;
+      if has_nested_err then
+        let err_arms = find_all_builtin_variant_arms "Err" arms in
+        gen_nested_result_inner_match_stmt env buf (indent ^ "\t") err_name
+          err_arms _err_ty CtxStmt
+      else
+        gen_match_stmt_branch env buf (indent ^ "\t") err_arm default_arm
+          (gen_result_pattern_binding buf (indent ^ "\t") value_name err_name
+             false);
       Printf.bprintf buf "%s}" indent
   | CtxExpr ->
       let ret_ty =
@@ -2421,11 +2871,24 @@ and gen_result_match env buf indent ctx scrutinee arms _ok_ty _err_ty =
       Printf.bprintf buf "%sif %s, %s := " ni value_name err_name;
       gen_expr env buf ni CtxExpr scrutinee;
       Printf.bprintf buf "; %s == nil {\n" err_name;
-      gen_match_return_branch env buf (ni ^ "\t") ok_arm default_arm
-        (gen_result_pattern_binding buf (ni ^ "\t") value_name err_name true);
-      Printf.bprintf buf "%s} else {\n" ni;
-      gen_match_return_branch env buf (ni ^ "\t") err_arm default_arm
-        (gen_result_pattern_binding buf (ni ^ "\t") value_name err_name false);
+      if has_nested_ok then
+        let ok_arms = find_all_builtin_variant_arms "Ok" arms in
+        gen_nested_result_inner_match_expr env buf (ni ^ "\t") value_name
+          ok_arms _ok_ty CtxExpr
+      else
+        gen_match_return_branch env buf (ni ^ "\t") ok_arm default_arm
+          (gen_result_pattern_binding buf (ni ^ "\t") value_name err_name true);
+      if has_nested_ok then
+        Printf.bprintf buf "\n%s} else {\n" ni
+      else
+        Printf.bprintf buf "%s} else {\n" ni;
+      if has_nested_err then
+        let err_arms = find_all_builtin_variant_arms "Err" arms in
+        gen_nested_result_inner_match_expr env buf (ni ^ "\t") err_name
+          err_arms _err_ty CtxExpr
+      else
+        gen_match_return_branch env buf (ni ^ "\t") err_arm default_arm
+          (gen_result_pattern_binding buf (ni ^ "\t") value_name err_name false);
       Printf.bprintf buf "%s}\n" ni;
       Printf.bprintf buf "%s}()" indent
 
@@ -2435,12 +2898,30 @@ and gen_result_match_as_return env buf indent scrutinee arms _ok_ty _err_ty =
   let default_arm = find_builtin_default_arm arms in
   let value_name = fresh_tmp env "match_val" in
   let err_name = fresh_tmp env "match_err" in
+  let has_nested_ok =
+    match ok_arm with
+    | Some arm -> (
+        match arm.arm_pat with
+        | PatTuple (_, _, [ PatTuple (inner_enum, _, _) ])
+            when inner_enum.node = "Option" || inner_enum.node = "Result" ->
+            true
+        | _ -> false)
+    | None -> false
+  in
   Printf.bprintf buf "%sif %s, %s := " indent value_name err_name;
   gen_expr env buf indent CtxExpr scrutinee;
   Printf.bprintf buf "; %s == nil {\n" err_name;
-  gen_match_return_branch env buf (indent ^ "\t") ok_arm default_arm
-    (gen_result_pattern_binding buf (indent ^ "\t") value_name err_name true);
-  Printf.bprintf buf "%s} else {\n" indent;
+  if has_nested_ok then
+    let ok_arms = find_all_builtin_variant_arms "Ok" arms in
+    gen_nested_result_inner_match_expr env buf (indent ^ "\t") value_name
+      ok_arms _ok_ty CtxExpr
+  else
+    gen_match_return_branch env buf (indent ^ "\t") ok_arm default_arm
+      (gen_result_pattern_binding buf (indent ^ "\t") value_name err_name true);
+  if has_nested_ok then
+    Printf.bprintf buf "\n%s} else {\n" indent
+  else
+    Printf.bprintf buf "%s} else {\n" indent;
   gen_match_return_branch env buf (indent ^ "\t") err_arm default_arm
     (gen_result_pattern_binding buf (indent ^ "\t") value_name err_name false);
   Printf.bprintf buf "%s}\n" indent
@@ -2454,24 +2935,52 @@ and gen_option_match env buf indent ctx scrutinee arms inner_ty =
     if is_nullable_ty env inner_ty then opt_name ^ ".some"
     else opt_name ^ " != nil"
   in
+  (* Detect nested built-in patterns: if the Some arm has an inner pattern
+     that is itself Option/Result, we need recursive matching. *)
+  let has_nested_builtin =
+    match some_arm with
+    | Some arm -> (
+        match arm.arm_pat with
+        | PatTuple (_, _, [ PatTuple (inner_enum, _, _) ])
+            when inner_enum.node = "Option" || inner_enum.node = "Result" ->
+            true
+        | _ -> false)
+    | None -> false
+  in
   match ctx with
   | CtxStmt ->
       Printf.bprintf buf "if %s := " opt_name;
       gen_expr env buf indent CtxExpr scrutinee;
       Printf.bprintf buf "; %s {\n" cond;
-      let some_env =
-        match some_arm with
-        | Some arm -> env_with_option_binding env arm inner_ty
-        | None -> (
-            match default_arm with
-            | Some arm -> env_with_option_binding env arm inner_ty
-            | None -> env)
-      in
-      gen_match_stmt_branch some_env buf (indent ^ "\t") some_arm default_arm
-        (fun arm ->
-          gen_option_pattern_binding env buf (indent ^ "\t") opt_name arm
-            inner_ty);
-      Printf.bprintf buf "%s} else {\n" indent;
+      if has_nested_builtin then
+        (* Collect all Some arms for nested matching *)
+        let some_arms = find_all_builtin_variant_arms "Some" arms in
+        let nested_inner_ty =
+          match inner_type_of_builtin inner_ty with
+          | Some ty -> ty
+          | None -> inner_ty
+        in
+        gen_nested_option_match_stmt env buf (indent ^ "\t") opt_name
+          (fresh_tmp env "inner_opt") some_arms inner_ty nested_inner_ty
+          CtxStmt
+      else begin
+        let some_env =
+          match some_arm with
+          | Some arm -> env_with_option_binding env arm inner_ty
+          | None -> (
+              match default_arm with
+              | Some arm -> env_with_option_binding env arm inner_ty
+              | None -> env)
+        in
+        gen_match_stmt_branch some_env buf (indent ^ "\t") some_arm default_arm
+          (fun arm ->
+            gen_option_pattern_binding env buf (indent ^ "\t") opt_name arm
+              inner_ty)
+      end;
+      if has_nested_builtin then
+        Printf.bprintf buf "\n%s} else {\n" indent
+      else
+        Printf.bprintf buf "%s} else {\n" indent;
       gen_match_stmt_branch env buf (indent ^ "\t") none_arm default_arm
         (fun _ -> ());
       Printf.bprintf buf "%s}" indent
@@ -2487,18 +2996,33 @@ and gen_option_match env buf indent ctx scrutinee arms inner_ty =
       Printf.bprintf buf "%sif %s := " ni opt_name;
       gen_expr env buf ni CtxExpr scrutinee;
       Printf.bprintf buf "; %s {\n" cond;
-      let some_env =
-        match some_arm with
-        | Some arm -> env_with_option_binding env arm inner_ty
-        | None -> (
-            match default_arm with
-            | Some arm -> env_with_option_binding env arm inner_ty
-            | None -> env)
-      in
-      gen_match_return_branch some_env buf (ni ^ "\t") some_arm default_arm
-        (fun arm ->
-          gen_option_pattern_binding env buf (ni ^ "\t") opt_name arm inner_ty);
-      Printf.bprintf buf "%s} else {\n" ni;
+      if has_nested_builtin then
+        let some_arms = find_all_builtin_variant_arms "Some" arms in
+        let nested_inner_ty =
+          match inner_type_of_builtin inner_ty with
+          | Some ty -> ty
+          | None -> inner_ty
+        in
+        gen_nested_option_match_expr env buf (ni ^ "\t") opt_name
+          (fresh_tmp env "inner_opt") some_arms inner_ty nested_inner_ty CtxExpr
+      else begin
+        let some_env =
+          match some_arm with
+          | Some arm -> env_with_option_binding env arm inner_ty
+          | None -> (
+              match default_arm with
+              | Some arm -> env_with_option_binding env arm inner_ty
+              | None -> env)
+        in
+        gen_match_return_branch some_env buf (ni ^ "\t") some_arm default_arm
+          (fun arm ->
+            gen_option_pattern_binding env buf (ni ^ "\t") opt_name arm
+              inner_ty)
+      end;
+      if has_nested_builtin then
+        Printf.bprintf buf "\n%s} else {\n" ni
+      else
+        Printf.bprintf buf "%s} else {\n" ni;
       gen_match_return_branch env buf (ni ^ "\t") none_arm default_arm (fun _ ->
           ());
       Printf.bprintf buf "%s}\n" ni;
@@ -2513,21 +3037,46 @@ and gen_option_match_as_return env buf indent scrutinee arms inner_ty =
     if is_nullable_ty env inner_ty then opt_name ^ ".some"
     else opt_name ^ " != nil"
   in
+  let has_nested_builtin =
+    match some_arm with
+    | Some arm -> (
+        match arm.arm_pat with
+        | PatTuple (_, _, [ PatTuple (inner_enum, _, _) ])
+            when inner_enum.node = "Option" || inner_enum.node = "Result" ->
+            true
+        | _ -> false)
+    | None -> false
+  in
   Printf.bprintf buf "%sif %s := " indent opt_name;
   gen_expr env buf indent CtxExpr scrutinee;
   Printf.bprintf buf "; %s {\n" cond;
-  let some_env =
-    match some_arm with
-    | Some arm -> env_with_option_binding env arm inner_ty
-    | None -> (
-        match default_arm with
-        | Some arm -> env_with_option_binding env arm inner_ty
-        | None -> env)
-  in
-  gen_match_return_branch some_env buf (indent ^ "\t") some_arm default_arm
-    (fun arm ->
-      gen_option_pattern_binding env buf (indent ^ "\t") opt_name arm inner_ty);
-  Printf.bprintf buf "%s} else {\n" indent;
+  if has_nested_builtin then
+    let some_arms = find_all_builtin_variant_arms "Some" arms in
+    let nested_inner_ty =
+      match inner_type_of_builtin inner_ty with
+      | Some ty -> ty
+      | None -> inner_ty
+    in
+    gen_nested_option_match_expr env buf (indent ^ "\t") opt_name
+      (fresh_tmp env "inner_opt") some_arms inner_ty nested_inner_ty CtxExpr
+  else begin
+    let some_env =
+      match some_arm with
+      | Some arm -> env_with_option_binding env arm inner_ty
+      | None -> (
+          match default_arm with
+          | Some arm -> env_with_option_binding env arm inner_ty
+          | None -> env)
+    in
+    gen_match_return_branch some_env buf (indent ^ "\t") some_arm default_arm
+      (fun arm ->
+        gen_option_pattern_binding env buf (indent ^ "\t") opt_name arm
+          inner_ty)
+  end;
+  if has_nested_builtin then
+    Printf.bprintf buf "\n%s} else {\n" indent
+  else
+    Printf.bprintf buf "%s} else {\n" indent;
   gen_match_return_branch env buf (indent ^ "\t") none_arm default_arm (fun _ ->
       ());
   Printf.bprintf buf "%s}\n" indent

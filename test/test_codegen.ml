@@ -371,6 +371,89 @@ fn main() {
     (contains go "Option[*int64]");
   Alcotest.(check bool) "no double pointer" true (not (contains go "**int64"))
 
+(* Nested inline built-in Option pattern with Copy payload *)
+let test_option_nested_inline_pattern () =
+  let src =
+    {|
+fn maybe_find(x: i64) -> Option<Option<i64>> {
+    if x > 0 {
+        Some(Some(x))
+    } else {
+        None
+    }
+}
+
+fn main() {
+    let outer = maybe_find(42);
+    match outer {
+        Option::Some(Option::Some(v)) => println(v),
+        Option::Some(Option::None) => println("inner none"),
+        Option::None => println("outer none"),
+    }
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"42\n" src in
+  Alcotest.(check bool)
+    "inner binding is emitted" true
+    (contains go "v :=")
+
+(* Nested inline Result(Option) pattern with Copy payload *)
+let test_result_nested_option_pattern () =
+  let src =
+    {|
+fn maybe_value(x: i64) -> Result<Option<i64>, str> {
+    if x > 0 {
+        Ok(Some(x))
+    } else if x == 0 {
+        Ok(None)
+    } else {
+        Err("negative")
+    }
+}
+
+fn main() {
+    match maybe_value(42) {
+        Result::Ok(Option::Some(v)) => println(v),
+        Result::Ok(Option::None) => println("inner none"),
+        Result::Err(e) => println(e),
+    }
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"42\n" src in
+  Alcotest.(check bool)
+    "inner binding is emitted" true
+    (contains go "v :=")
+
+(* Nested inline Option(Result) pattern with Copy payload *)
+let test_option_nested_result_pattern () =
+  let src =
+    {|
+fn maybe_result(x: i64) -> Result<Option<i64>, str> {
+    if x > 0 {
+        Ok(Some(x))
+    } else if x == 0 {
+        Ok(None)
+    } else {
+        Err("negative")
+    }
+}
+
+fn main() {
+    match maybe_result(42) {
+        Result::Ok(Option::Some(v)) => println(v),
+        Result::Ok(Option::None) => println("inner none"),
+        Result::Err(e) => println(e),
+    }
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"42\n" src in
+  Alcotest.(check bool)
+    "inner binding is emitted" true
+    (contains go "v :=")
+
 (* ---------- Result tests ---------- *)
 
 let test_result_basic () =
@@ -2233,6 +2316,12 @@ let () =
             test_option_negative_float_literal;
           Alcotest.test_case "nested Option<Option<T>>" `Quick
             test_option_nested;
+          Alcotest.test_case "nested inline Option<Option<i64>>" `Quick
+            test_option_nested_inline_pattern;
+          Alcotest.test_case "nested inline Result<Option<i64>>" `Quick
+            test_result_nested_option_pattern;
+          Alcotest.test_case "nested inline Option<Result<i64>>" `Quick
+            test_option_nested_result_pattern;
         ] );
       ( "result",
         [
