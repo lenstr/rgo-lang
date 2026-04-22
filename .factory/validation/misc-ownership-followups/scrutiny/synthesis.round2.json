@@ -1,0 +1,60 @@
+{
+  "milestone": "misc-ownership-followups",
+  "round": 2,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "nix develop -c dune runtest -j 16",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "nix develop -c dune build -j 16",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "nix develop -c dune build @fmt",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 2,
+    "passed": 1,
+    "failed": 1,
+    "failedFeatures": [
+      "misc-direct-result-value-position-lowering"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "misc-direct-result-value-position-lowering",
+      "severity": "blocking",
+      "description": "Annotated/ascribed direct `Result` let-bindings still route through `gen_result_let_binding`, so `let r: Result<...> = (Ok(...) as Result<...>);` lowers to `r, err := Result[...] { ... }` and fails Go build with an assignment-mismatch error."
+    },
+    {
+      "featureId": "misc-direct-result-value-position-lowering",
+      "severity": "blocking",
+      "description": "Annotated/ascribed direct `Result` match scrutinees still take the old multi-return branch in `gen_result_match`, so `match (Ok(42) as Result<i64, str>) { ... }` lowers to `if val, err := Result[...] { ... }; err == nil`, which produces invalid Go syntax."
+    }
+  ],
+  "nonBlockingIssues": [
+    {
+      "featureId": "misc-direct-result-value-position-lowering",
+      "severity": "non_blocking",
+      "description": "The added regressions cover naked `Ok`/`Err` constructor forms and variable matches, but they still miss the annotated/ascribed direct let-binding and direct match-scrutinee shapes from the original failure."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "compiler-worker skill",
+      "suggestion": "Clarify the \"Write tests first\" procedure so workers either add a minimal failing test before patching or explicitly record a deviation when they need to investigate and patch codegen first.",
+      "evidence": "The `misc-direct-result-value-position-lowering` review observed that session `26ef7288-20d3-4c3a-8eff-01f37f51a67e` edited `lib/codegen.ml` repeatedly before later adding regressions, while the handoff still marked `skillFeedback.followedProcedure: true` despite `.factory/skills/compiler-worker/SKILL.md` step 3 saying to write tests first.",
+      "isSystemic": false
+    }
+  ],
+  "rejectedObservations": [],
+  "previousRound": ".factory/validation/misc-ownership-followups/scrutiny/synthesis.round1.json"
+}

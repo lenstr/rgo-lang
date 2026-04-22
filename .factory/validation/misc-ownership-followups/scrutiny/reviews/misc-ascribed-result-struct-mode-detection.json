@@ -1,0 +1,21 @@
+{
+  "featureId": "misc-ascribed-result-struct-mode-detection",
+  "reviewedAt": "2026-04-22T22:04:01Z",
+  "commitId": "87e91eea998e59d4f801e8f013244af4623f54a9",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Reviewed the prior failed review at `/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/misc-ownership-followups/scrutiny/reviews/misc-direct-result-value-position-lowering.json`, both feature handoffs, both diffs (`e01ef5c90fe06e9003f5aad22204f68321a1b6a7` and `87e91eea998e59d4f801e8f013244af4623f54a9`), the fix transcript skeleton for session `caf40255-db70-497c-8a79-8726f9aa11e3`, the `compiler-worker` skill, and the mission shared-state docs. The prior blocking failure was that `ExprCast`-wrapped/ascribed `Ok(...)`/`Err(...)` constructors were still treated like Go multi-return results in direct let-bindings and direct match scrutinees. The fix addresses that exact gap by making `is_result_constructor_expr` recurse through `ExprCast` (`lib/codegen.ml:4046`), which now prevents `init_is_result` from sending ascribed direct constructors through `gen_result_let_binding`, and by teaching both result-match struct-mode checks to treat `ExprCast`-wrapped constructors as struct results (`lib/codegen.ml:3173`, `lib/codegen.ml:3313`). The new regressions at `test/test_codegen.ml:1083`, `:1103`, `:1122`, and `:1141`, together with the tracked fixture `.factory/runtime/ascribed-result-struct-mode.rg`, exercise the targeted ascribed let/match shapes. I did not find any remaining correctness issue in the scoped failure path.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The worker left the generated validation artifact `.factory/runtime/ascribed-result-struct-mode.go` untracked in the repository after finishing verification, even though the `compiler-worker` skill says disposable runtime artifacts should be cleaned up unless they are intentionally tracked fixtures.",
+      "evidence": "Skill: `.factory/skills/compiler-worker/SKILL.md` step 10. Transcript skeleton and handoff show the worker generated `.factory/runtime/ascribed-result-struct-mode.go` with `nix develop -c dune exec rgoc -- .factory/runtime/ascribed-result-struct-mode.rg -o .factory/runtime/ascribed-result-struct-mode.go`, and `git status --porcelain` now reports `?? .factory/runtime/ascribed-result-struct-mode.go`."
+    }
+  ],
+  "addressesFailureFrom": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/misc-ownership-followups/scrutiny/reviews/misc-direct-result-value-position-lowering.json",
+  "summary": "Pass. The fix closes the prior blocking gap by recognizing `ExprCast`-wrapped direct `Result` constructors in both let-binding and match struct-mode detection, and the added tests cover the targeted ascribed shapes. No blocking or non-blocking code issues found in scope; one shared-state note is that the generated `.go` runtime artifact was left untracked."
+}
