@@ -911,6 +911,78 @@ fn main() {
   (* But it should still have the (int64, error) return signature *)
   Alcotest.(check bool) "has error return" true (contains go "error")
 
+(* Regression: matching on a Result variable reuses decomposition *)
+let test_result_variable_match_stmt () =
+  let src =
+    {|
+fn get_result(x: i64) -> Result<i64, str> {
+    if x > 0 {
+        Ok(x)
+    } else {
+        Err("negative")
+    }
+}
+
+fn main() {
+    let r = get_result(42);
+    match r {
+        Result::Ok(v) => println(v),
+        Result::Err(e) => println(e),
+    }
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"42\n" src in
+  (* Must not re-destructure the variable with := in the if condition *)
+  Alcotest.(check bool) "no re-destructure" false (contains go ":= r;")
+
+let test_result_variable_match_err_stmt () =
+  let src =
+    {|
+fn get_result(x: i64) -> Result<i64, str> {
+    if x > 0 {
+        Ok(x)
+    } else {
+        Err("negative")
+    }
+}
+
+fn main() {
+    let r = get_result(-1);
+    match r {
+        Result::Ok(v) => println(v),
+        Result::Err(e) => println(e),
+    }
+}
+|}
+  in
+  let _go = compile_and_check ~expected_output:"negative\n" src in
+  ()
+
+let test_result_variable_match_expr () =
+  let src =
+    {|
+fn get_result(x: i64) -> Result<i64, str> {
+    if x > 0 {
+        Ok(x)
+    } else {
+        Err("negative")
+    }
+}
+
+fn main() {
+    let r = get_result(7);
+    let msg = match r {
+        Result::Ok(_) => "ok",
+        Result::Err(_) => "err",
+    };
+    println(msg);
+}
+|}
+  in
+  let _go = compile_and_check ~expected_output:"ok\n" src in
+  ()
+
 (* ---------- Array literal tests ---------- *)
 
 let test_array_literal () =
@@ -3121,6 +3193,12 @@ let () =
           Alcotest.test_case "let _ = result fn" `Quick test_let_wildcard_result;
           Alcotest.test_case "result sig without Err" `Quick
             test_result_sig_no_err_construction;
+          Alcotest.test_case "result variable match stmt Ok" `Quick
+            test_result_variable_match_stmt;
+          Alcotest.test_case "result variable match stmt Err" `Quick
+            test_result_variable_match_err_stmt;
+          Alcotest.test_case "result variable match expr" `Quick
+            test_result_variable_match_expr;
         ] );
       ( "question-mark",
         [

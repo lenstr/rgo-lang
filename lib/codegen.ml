@@ -116,6 +116,8 @@ type cg_env = {
   scope_drops : string list list;
   (* Loop body depths: stack of scope depths for enclosing loop bodies *)
   loop_body_depths : int list;
+  (* Result variable decompositions: variable name -> error variable name *)
+  result_decomps : string SMap.t;
   (* Shared mutable state *)
   shared : cg_shared;
 }
@@ -740,6 +742,7 @@ let collect_env (prog : Ast.program) : cg_env =
       drop_guards = SMap.empty;
       scope_drops = [];
       loop_body_depths = [];
+      result_decomps = SMap.empty;
       shared;
     }
   in
@@ -3066,12 +3069,33 @@ and gen_match_return_branch env buf indent arm default_arm bind_pattern =
           Printf.bprintf buf "%spanic(\"unreachable: non-exhaustive match\")\n"
             indent)
 
+(* If [scrutinee] is an identifier bound to a Result type with a known
+   decomposition, return the associated error variable name. *)
+and result_var_decomp env scrutinee =
+  match scrutinee with
+  | ExprIdent { node = name; _ } -> (
+      match infer_expr_type env scrutinee with
+      | Some (TyGeneric ({ node = "Result"; _ }, _)) ->
+          SMap.find_opt name env.result_decomps
+      | _ -> None)
+  | _ -> None
+
 and gen_result_match env buf indent ctx scrutinee arms _ok_ty _err_ty =
   let ok_arm = find_builtin_variant_arm "Ok" arms in
   let err_arm = find_builtin_variant_arm "Err" arms in
   let default_arm = find_builtin_default_arm arms in
-  let value_name = fresh_tmp env "match_val" in
-  let err_name = fresh_tmp env "match_err" in
+  let is_result_var = result_var_decomp env scrutinee in
+  let value_name, err_name =
+    match is_result_var with
+    | Some err_name ->
+        ( escape_ident
+            (match scrutinee with ExprIdent { node = n; _ } -> n | _ -> ""),
+          err_name )
+    | None ->
+        let v = fresh_tmp env "match_val" in
+        let e = fresh_tmp env "match_err" in
+        (v, e)
+  in
   (* Detect nested built-in patterns inside Ok/Err arms *)
   let has_nested_ok =
     match ok_arm with
@@ -3095,9 +3119,12 @@ and gen_result_match env buf indent ctx scrutinee arms _ok_ty _err_ty =
   in
   match ctx with
   | CtxStmt ->
-      Printf.bprintf buf "if %s, %s := " value_name err_name;
-      gen_expr env buf indent CtxExpr scrutinee;
-      Printf.bprintf buf "; %s == nil {\n" err_name;
+      (match is_result_var with
+      | Some _ -> Printf.bprintf buf "if %s == nil {\n" err_name
+      | None ->
+          Printf.bprintf buf "if %s, %s := " value_name err_name;
+          gen_expr env buf indent CtxExpr scrutinee;
+          Printf.bprintf buf "; %s == nil {\n" err_name);
       if has_nested_ok then
         let ok_arms = find_all_builtin_variant_arms "Ok" arms in
         gen_nested_result_inner_match_stmt env buf (indent ^ "\t") value_name
@@ -3126,9 +3153,12 @@ and gen_result_match env buf indent ctx scrutinee arms _ok_ty _err_ty =
       let gt = match ret_ty with Some t -> go_type env t | None -> "any" in
       Printf.bprintf buf "func() %s {\n" gt;
       let ni = indent ^ "\t" in
-      Printf.bprintf buf "%sif %s, %s := " ni value_name err_name;
-      gen_expr env buf ni CtxExpr scrutinee;
-      Printf.bprintf buf "; %s == nil {\n" err_name;
+      (match is_result_var with
+      | Some _ -> Printf.bprintf buf "%sif %s == nil {\n" ni err_name
+      | None ->
+          Printf.bprintf buf "%sif %s, %s := " ni value_name err_name;
+          gen_expr env buf ni CtxExpr scrutinee;
+          Printf.bprintf buf "; %s == nil {\n" err_name);
       if has_nested_ok then
         let ok_arms = find_all_builtin_variant_arms "Ok" arms in
         gen_nested_result_inner_match_expr env buf (ni ^ "\t") value_name
@@ -3152,8 +3182,18 @@ and gen_result_match_as_return env buf indent scrutinee arms _ok_ty _err_ty =
   let ok_arm = find_builtin_variant_arm "Ok" arms in
   let err_arm = find_builtin_variant_arm "Err" arms in
   let default_arm = find_builtin_default_arm arms in
-  let value_name = fresh_tmp env "match_val" in
-  let err_name = fresh_tmp env "match_err" in
+  let is_result_var = result_var_decomp env scrutinee in
+  let value_name, err_name =
+    match is_result_var with
+    | Some err_name ->
+        ( escape_ident
+            (match scrutinee with ExprIdent { node = n; _ } -> n | _ -> ""),
+          err_name )
+    | None ->
+        let v = fresh_tmp env "match_val" in
+        let e = fresh_tmp env "match_err" in
+        (v, e)
+  in
   let has_nested_ok =
     match ok_arm with
     | Some arm -> (
@@ -3164,9 +3204,12 @@ and gen_result_match_as_return env buf indent scrutinee arms _ok_ty _err_ty =
         | _ -> false)
     | None -> false
   in
-  Printf.bprintf buf "%sif %s, %s := " indent value_name err_name;
-  gen_expr env buf indent CtxExpr scrutinee;
-  Printf.bprintf buf "; %s == nil {\n" err_name;
+  (match is_result_var with
+  | Some _ -> Printf.bprintf buf "%sif %s == nil {\n" indent err_name
+  | None ->
+      Printf.bprintf buf "%sif %s, %s := " indent value_name err_name;
+      gen_expr env buf indent CtxExpr scrutinee;
+      Printf.bprintf buf "; %s == nil {\n" err_name);
   if has_nested_ok then
     let ok_arms = find_all_builtin_variant_arms "Ok" arms in
     gen_nested_result_inner_match_expr env buf (indent ^ "\t") value_name
@@ -3619,42 +3662,58 @@ and gen_stmt env buf indent (s : Ast.stmt) : cg_env =
         match ty with Some t -> Some t | None -> infer_expr_type env init
       in
       let esc_name = escape_ident name.node in
-      (match (ty, init) with
-      | Some t, ExprArray [] ->
-          Printf.bprintf buf "var %s %s" esc_name (go_type env t)
-      | ( Some (TyGeneric ({ node = "HashMap"; _ }, _) as t),
-          ExprCall (ExprPath ({ node = "HashMap"; _ }, { node = "new"; _ }), [])
-        ) ->
-          Printf.bprintf buf "%s := make(%s)" esc_name (go_type env t)
-      | ( Some (TyGeneric ({ node = "Vec"; _ }, _) as t),
-          ExprCall (ExprPath ({ node = "Vec"; _ }, { node = "new"; _ }), []) )
-        ->
-          Printf.bprintf buf "%s := make(%s, 0)" esc_name (go_type env t)
-      | Some t, _ when needs_explicit_type t init ->
-          Buffer.add_string buf "var ";
-          Buffer.add_string buf esc_name;
-          Buffer.add_char buf ' ';
-          Buffer.add_string buf (go_type env t);
-          Buffer.add_string buf " = ";
-          gen_expr env buf indent CtxExpr init
-      | _, _ when init_is_enum env init ->
-          let enum_name = infer_enum_name env init in
-          Printf.bprintf buf "var %s %s = " esc_name enum_name;
-          gen_expr env buf indent CtxExpr init
-      | _, _ when init_is_result env init ->
-          gen_result_let_binding env buf indent esc_name init
-      | _, ExprQuestion inner_e ->
-          gen_question_let env buf indent esc_name inner_e
-      | _ when contains_question init ->
-          let init' = hoist_question_exprs env buf indent init in
-          Buffer.add_string buf indent;
-          Buffer.add_string buf esc_name;
-          Buffer.add_string buf " := ";
-          gen_let_init env buf indent ty init'
-      | _ ->
-          Buffer.add_string buf esc_name;
-          Buffer.add_string buf " := ";
-          gen_let_init env buf indent ty init);
+      let env =
+        match (ty, init) with
+        | Some t, ExprArray [] ->
+            Printf.bprintf buf "var %s %s" esc_name (go_type env t);
+            env
+        | ( Some (TyGeneric ({ node = "HashMap"; _ }, _) as t),
+            ExprCall
+              (ExprPath ({ node = "HashMap"; _ }, { node = "new"; _ }), []) ) ->
+            Printf.bprintf buf "%s := make(%s)" esc_name (go_type env t);
+            env
+        | ( Some (TyGeneric ({ node = "Vec"; _ }, _) as t),
+            ExprCall (ExprPath ({ node = "Vec"; _ }, { node = "new"; _ }), []) )
+          ->
+            Printf.bprintf buf "%s := make(%s, 0)" esc_name (go_type env t);
+            env
+        | Some t, _ when needs_explicit_type t init ->
+            Buffer.add_string buf "var ";
+            Buffer.add_string buf esc_name;
+            Buffer.add_char buf ' ';
+            Buffer.add_string buf (go_type env t);
+            Buffer.add_string buf " = ";
+            gen_expr env buf indent CtxExpr init;
+            env
+        | _, _ when init_is_enum env init ->
+            let enum_name = infer_enum_name env init in
+            Printf.bprintf buf "var %s %s = " esc_name enum_name;
+            gen_expr env buf indent CtxExpr init;
+            env
+        | _, _ when init_is_result env init ->
+            let err_name =
+              gen_result_let_binding env buf indent esc_name init
+            in
+            {
+              env with
+              result_decomps = SMap.add esc_name err_name env.result_decomps;
+            }
+        | _, ExprQuestion inner_e ->
+            gen_question_let env buf indent esc_name inner_e;
+            env
+        | _ when contains_question init ->
+            let init' = hoist_question_exprs env buf indent init in
+            Buffer.add_string buf indent;
+            Buffer.add_string buf esc_name;
+            Buffer.add_string buf " := ";
+            gen_let_init env buf indent ty init';
+            env
+        | _ ->
+            Buffer.add_string buf esc_name;
+            Buffer.add_string buf " := ";
+            gen_let_init env buf indent ty init;
+            env
+      in
       Printf.bprintf buf "\n%s_ = %s\n" indent esc_name;
       (* Ownership: suppress guard for source binding if assignment moves a Drop value *)
       (match init with
@@ -3827,7 +3886,8 @@ and gen_result_let_binding env buf indent name init =
   let err_name = fresh_tmp env "err" in
   Printf.bprintf buf "%s, %s := " name err_name;
   gen_expr env buf indent CtxExpr init;
-  Printf.bprintf buf "\n%s_ = %s" indent err_name
+  Printf.bprintf buf "\n%s_ = %s" indent err_name;
+  err_name
 
 and gen_question_let env buf indent name inner_e =
   let expr_ty = infer_expr_type env inner_e in
