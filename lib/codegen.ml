@@ -503,7 +503,14 @@ let rec infer_expr_type env (e : Ast.expr) : Ast.ty option =
           Some
             (TyGeneric (dummy_loc "Result", [ ok_ty; TyName (dummy_loc "str") ]))
       | _ -> env.ret_ty)
-  | ExprCall (ExprIdent { node = "Err"; _ }, _) -> env.ret_ty
+  | ExprCall (ExprIdent { node = "Err"; _ }, [ arg ]) -> (
+      match (infer_expr_type env arg, env.ret_ty) with
+      | Some err_ty, Some (TyGeneric ({ node = "Result"; _ }, [ ok_ty; _ ])) ->
+          Some (TyGeneric (dummy_loc "Result", [ ok_ty; err_ty ]))
+      | Some err_ty, _ ->
+          Some
+            (TyGeneric (dummy_loc "Result", [ TyName (dummy_loc "i64"); err_ty ]))
+      | _ -> env.ret_ty)
   | ExprCall (ExprIdent fn_name, _) -> (
       match SMap.find_opt fn_name.node env.fns with
       | Some fi -> fi.fi_ret
@@ -1026,18 +1033,51 @@ let rec gen_expr env buf indent (ctx : expr_ctx) (e : Ast.expr) : unit =
       Buffer.add_char buf ')'
   | ExprCall (ExprIdent { node = "Some"; _ }, [ arg ]) ->
       gen_some env buf indent arg
-  | ExprCall (ExprIdent { node = "Ok"; _ }, [ arg ]) ->
-      (* Ok(v) in expression context -> v, error(nil)  *)
-      gen_expr env buf indent CtxExpr arg
-  | ExprCall (ExprIdent { node = "Err"; _ }, [ arg ]) -> (
-      env.shared.needs_errors <- true;
-      (* Generate errors.New for string literals, otherwise just the expr *)
-      match arg with
-      | ExprLit (LitString _) ->
-          Buffer.add_string buf "errors.New(";
+  | ExprCall (ExprIdent { node = "Ok"; _ }, [ arg ]) -> (
+      let ok_ty = infer_expr_type env arg in
+      let result_ty =
+        match (ok_ty, env.ret_ty) with
+        | Some ok_ty, Some (TyGeneric ({ node = "Result"; _ }, [ _; err_ty ]))
+          ->
+            Some (TyGeneric (dummy_loc "Result", [ ok_ty; err_ty ]))
+        | Some ok_ty, _ ->
+            Some
+              (TyGeneric
+                 (dummy_loc "Result", [ ok_ty; TyName (dummy_loc "str") ]))
+        | _ -> env.ret_ty
+      in
+      match result_ty with
+      | Some (TyGeneric ({ node = "Result"; _ }, [ ok_ty; err_ty ])) ->
+          env.shared.needs_result_struct <- true;
+          Printf.bprintf buf "Result[%s, %s]{ok: true, value: "
+            (go_type env ok_ty) (go_type env err_ty);
           gen_expr env buf indent CtxExpr arg;
-          Buffer.add_char buf ')'
+          Buffer.add_string buf "}"
       | _ ->
+          (* Fallback for cases where type inference fails *)
+          gen_expr env buf indent CtxExpr arg)
+  | ExprCall (ExprIdent { node = "Err"; _ }, [ arg ]) -> (
+      let err_ty = infer_expr_type env arg in
+      let result_ty =
+        match (err_ty, env.ret_ty) with
+        | Some err_ty, Some (TyGeneric ({ node = "Result"; _ }, [ ok_ty; _ ]))
+          ->
+            Some (TyGeneric (dummy_loc "Result", [ ok_ty; err_ty ]))
+        | Some err_ty, _ ->
+            Some
+              (TyGeneric
+                 (dummy_loc "Result", [ TyName (dummy_loc "i64"); err_ty ]))
+        | _ -> env.ret_ty
+      in
+      match result_ty with
+      | Some (TyGeneric ({ node = "Result"; _ }, [ ok_ty; err_ty ])) ->
+          env.shared.needs_result_struct <- true;
+          Printf.bprintf buf "Result[%s, %s]{err: " (go_type env ok_ty)
+            (go_type env err_ty);
+          gen_expr env buf indent CtxExpr arg;
+          Buffer.add_string buf "}"
+      | _ ->
+          env.shared.needs_errors <- true;
           Buffer.add_string buf "errors.New(";
           gen_expr env buf indent CtxExpr arg;
           Buffer.add_char buf ')')
@@ -3124,16 +3164,41 @@ and gen_result_match env buf indent ctx scrutinee arms _ok_ty _err_ty =
   let err_arm = find_builtin_variant_arm "Err" arms in
   let default_arm = find_builtin_default_arm arms in
   let is_result_var = result_var_decomp env scrutinee in
+  let is_struct_result =
+    match is_result_var with
+    | Some _ -> false
+    | None -> (
+        match scrutinee with
+        | ExprCall (ExprIdent { node = "Ok" | "Err"; _ }, _) -> true
+        | ExprIdent _ -> (
+            match infer_expr_type env scrutinee with
+            | Some (TyGeneric ({ node = "Result"; _ }, _)) -> true
+            | _ -> false)
+        | _ -> false)
+  in
+  let res_name =
+    match (is_result_var, is_struct_result) with
+    | Some _, _ -> None
+    | None, true ->
+        Some
+          (match scrutinee with
+          | ExprIdent { node = n; _ } -> escape_ident n
+          | _ -> fresh_tmp env "match_res")
+    | None, false -> None
+  in
   let value_name, err_name =
     match is_result_var with
     | Some err_name ->
         ( escape_ident
             (match scrutinee with ExprIdent { node = n; _ } -> n | _ -> ""),
           err_name )
-    | None ->
-        let v = fresh_tmp env "match_val" in
-        let e = fresh_tmp env "match_err" in
-        (v, e)
+    | None -> (
+        match res_name with
+        | Some r -> (r ^ ".value", r ^ ".err")
+        | None ->
+            let v = fresh_tmp env "match_val" in
+            let e = fresh_tmp env "match_err" in
+            (v, e))
   in
   (* Detect nested built-in patterns inside Ok/Err arms *)
   let has_nested_ok =
@@ -3158,9 +3223,17 @@ and gen_result_match env buf indent ctx scrutinee arms _ok_ty _err_ty =
   in
   match ctx with
   | CtxStmt ->
-      (match is_result_var with
-      | Some _ -> Printf.bprintf buf "if %s == nil {\n" err_name
-      | None ->
+      (match (is_result_var, res_name) with
+      | Some _, _ -> Printf.bprintf buf "if %s == nil {\n" err_name
+      | None, Some r ->
+          (match scrutinee with
+          | ExprIdent _ -> ()
+          | _ ->
+              Printf.bprintf buf "%s := " r;
+              gen_expr env buf indent CtxExpr scrutinee;
+              Printf.bprintf buf "\n%s" indent);
+          Printf.bprintf buf "if %s.ok {\n" r
+      | None, None ->
           Printf.bprintf buf "if %s, %s := " value_name err_name;
           gen_expr env buf indent CtxExpr scrutinee;
           Printf.bprintf buf "; %s == nil {\n" err_name);
@@ -3192,9 +3265,17 @@ and gen_result_match env buf indent ctx scrutinee arms _ok_ty _err_ty =
       let gt = match ret_ty with Some t -> go_type env t | None -> "any" in
       Printf.bprintf buf "func() %s {\n" gt;
       let ni = indent ^ "\t" in
-      (match is_result_var with
-      | Some _ -> Printf.bprintf buf "%sif %s == nil {\n" ni err_name
-      | None ->
+      (match (is_result_var, res_name) with
+      | Some _, _ -> Printf.bprintf buf "%sif %s == nil {\n" ni err_name
+      | None, Some r ->
+          (match scrutinee with
+          | ExprIdent _ -> ()
+          | _ ->
+              Printf.bprintf buf "%s%s := " ni r;
+              gen_expr env buf ni CtxExpr scrutinee;
+              Printf.bprintf buf "\n%s" ni);
+          Printf.bprintf buf "%sif %s.ok {\n" ni r
+      | None, None ->
           Printf.bprintf buf "%sif %s, %s := " ni value_name err_name;
           gen_expr env buf ni CtxExpr scrutinee;
           Printf.bprintf buf "; %s == nil {\n" err_name);
@@ -3222,16 +3303,41 @@ and gen_result_match_as_return env buf indent scrutinee arms _ok_ty _err_ty =
   let err_arm = find_builtin_variant_arm "Err" arms in
   let default_arm = find_builtin_default_arm arms in
   let is_result_var = result_var_decomp env scrutinee in
+  let is_struct_result =
+    match is_result_var with
+    | Some _ -> false
+    | None -> (
+        match scrutinee with
+        | ExprCall (ExprIdent { node = "Ok" | "Err"; _ }, _) -> true
+        | ExprIdent _ -> (
+            match infer_expr_type env scrutinee with
+            | Some (TyGeneric ({ node = "Result"; _ }, _)) -> true
+            | _ -> false)
+        | _ -> false)
+  in
+  let res_name =
+    match (is_result_var, is_struct_result) with
+    | Some _, _ -> None
+    | None, true ->
+        Some
+          (match scrutinee with
+          | ExprIdent { node = n; _ } -> escape_ident n
+          | _ -> fresh_tmp env "match_res")
+    | None, false -> None
+  in
   let value_name, err_name =
     match is_result_var with
     | Some err_name ->
         ( escape_ident
             (match scrutinee with ExprIdent { node = n; _ } -> n | _ -> ""),
           err_name )
-    | None ->
-        let v = fresh_tmp env "match_val" in
-        let e = fresh_tmp env "match_err" in
-        (v, e)
+    | None -> (
+        match res_name with
+        | Some r -> (r ^ ".value", r ^ ".err")
+        | None ->
+            let v = fresh_tmp env "match_val" in
+            let e = fresh_tmp env "match_err" in
+            (v, e))
   in
   let has_nested_ok =
     match ok_arm with
@@ -3243,9 +3349,17 @@ and gen_result_match_as_return env buf indent scrutinee arms _ok_ty _err_ty =
         | _ -> false)
     | None -> false
   in
-  (match is_result_var with
-  | Some _ -> Printf.bprintf buf "%sif %s == nil {\n" indent err_name
-  | None ->
+  (match (is_result_var, res_name) with
+  | Some _, _ -> Printf.bprintf buf "%sif %s == nil {\n" indent err_name
+  | None, Some r ->
+      (match scrutinee with
+      | ExprIdent _ -> ()
+      | _ ->
+          Printf.bprintf buf "%s%s := " indent r;
+          gen_expr env buf indent CtxExpr scrutinee;
+          Printf.bprintf buf "\n%s" indent);
+      Printf.bprintf buf "if %s.ok {\n" r
+  | None, None ->
       Printf.bprintf buf "%sif %s, %s := " indent value_name err_name;
       gen_expr env buf indent CtxExpr scrutinee;
       Printf.bprintf buf "; %s == nil {\n" err_name);
@@ -3927,9 +4041,15 @@ and infer_enum_name env (init : Ast.expr) : string =
       | ExprCall (ExprPath (type_name, _), _) -> type_name.node
       | _ -> "any")
 
+and is_result_constructor_expr (e : Ast.expr) : bool =
+  match e with
+  | ExprCall (ExprIdent { node = "Ok" | "Err"; _ }, _) -> true
+  | _ -> false
+
 and init_is_result env (init : Ast.expr) : bool =
   match infer_expr_type env init with
-  | Some (TyGeneric ({ node = "Result"; _ }, _)) -> true
+  | Some (TyGeneric ({ node = "Result"; _ }, _)) ->
+      not (is_result_constructor_expr init)
   | _ -> false
 
 and gen_result_let_binding env buf indent name init =

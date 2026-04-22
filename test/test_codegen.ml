@@ -1015,6 +1015,71 @@ fn main() {
   let _go = compile_and_check ~expected_output:"negative\n42\n" src in
   ()
 
+(* Direct Result constructor let binding and match *)
+let test_direct_result_constructor_let () =
+  let src =
+    {|
+fn main() {
+    let r: Result<i64, str> = Ok(42);
+    match r {
+        Result::Ok(v) => println(v),
+        Result::Err(e) => println(e),
+    }
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"42\n" src in
+  (* Must emit Result struct, not multi-return decomposition *)
+  Alcotest.(check bool)
+    "emits Result struct" true
+    (contains go "Result[int64, string]{ok: true, value: 42}");
+  Alcotest.(check bool) "no err decomposition" false (contains go "__err_")
+
+let test_direct_result_constructor_match () =
+  let src =
+    {|
+fn main() {
+    match Err("hello") {
+        Result::Ok(v) => println(v),
+        Result::Err(e) => println(e),
+    }
+}
+|}
+  in
+  let _go = compile_and_check ~expected_output:"hello\n" src in
+  ()
+
+let test_direct_result_nested_constructor () =
+  let src =
+    {|
+fn main() {
+    let nested: Result<Result<i64, str>, str> = Ok(Ok(7));
+    match nested {
+        Result::Ok(Result::Ok(v)) => println(v),
+        Result::Ok(Result::Err(e)) => println(e),
+        Result::Err(e) => println(e),
+    }
+}
+|}
+  in
+  let _go = compile_and_check ~expected_output:"7\n" src in
+  ()
+
+let test_direct_result_var_match_struct () =
+  let src =
+    {|
+fn main() {
+    let inner: Result<i64, str> = Ok(99);
+    match inner {
+        Result::Ok(v) => println(v),
+        Result::Err(e) => println(e),
+    }
+}
+|}
+  in
+  let _go = compile_and_check ~expected_output:"99\n" src in
+  ()
+
 let test_array_literal () =
   let src = {|
 fn main() {
@@ -3231,6 +3296,14 @@ let () =
             test_result_variable_match_expr;
           Alcotest.test_case "result variable match shadowing stmt" `Quick
             test_result_variable_match_shadowing_stmt;
+          Alcotest.test_case "direct result constructor let" `Quick
+            test_direct_result_constructor_let;
+          Alcotest.test_case "direct result constructor match" `Quick
+            test_direct_result_constructor_match;
+          Alcotest.test_case "direct result nested constructor" `Quick
+            test_direct_result_nested_constructor;
+          Alcotest.test_case "direct result var match struct" `Quick
+            test_direct_result_var_match_struct;
         ] );
       ( "question-mark",
         [
