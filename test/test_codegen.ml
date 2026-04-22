@@ -1080,6 +1080,84 @@ fn main() {
   let _go = compile_and_check ~expected_output:"99\n" src in
   ()
 
+let test_ascribed_result_constructor_let () =
+  let src =
+    {|
+fn main() {
+    let r = Ok(42) as Result<i64, str>;
+    match r {
+        Result::Ok(v) => println(v),
+        Result::Err(e) => println(e),
+    }
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"42\n" src in
+  (* Must emit Result struct, not multi-return decomposition *)
+  Alcotest.(check bool)
+    "emits Result struct for ascribed let" true
+    (contains go "Result[int64, string]{ok: true, value: 42}");
+  Alcotest.(check bool)
+    "no err decomposition for ascribed let" false (contains go "__err_")
+
+let test_ascribed_result_constructor_match () =
+  let src =
+    {|
+fn main() {
+    match Ok(42) as Result<i64, str> {
+        Result::Ok(v) => println(v),
+        Result::Err(e) => println(e),
+    }
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"42\n" src in
+  (* Must use struct-mode .ok check, not multi-return decomposition *)
+  Alcotest.(check bool)
+    "emits .ok check for ascribed match" true (contains go ".ok");
+  Alcotest.(check bool)
+    "no multi-return for ascribed match" false
+    (contains go "; __match_err_")
+
+let test_ascribed_err_constructor_match () =
+  let src =
+    {|
+fn main() {
+    match Err("hello") as Result<i64, str> {
+        Result::Ok(v) => println(v),
+        Result::Err(e) => println(e),
+    }
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"hello\n" src in
+  (* Must use struct-mode .ok check, not multi-return decomposition *)
+  Alcotest.(check bool)
+    "emits .ok check for ascribed Err match" true (contains go ".ok");
+  Alcotest.(check bool)
+    "no multi-return for ascribed Err match" false
+    (contains go "; __match_err_")
+
+let test_ascribed_result_let_and_match_combined () =
+  let src =
+    {|
+fn main() {
+    let r = Err("fail") as Result<i64, str>;
+    match r {
+        Result::Ok(v) => println(v),
+        Result::Err(e) => println(e),
+    }
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"fail\n" src in
+  (* Both let and match must use struct mode *)
+  Alcotest.(check bool)
+    "emits Result struct for ascribed Err let" true
+    (contains go "Result[int64, string]{err:");
+  Alcotest.(check bool)
+    "no err decomposition for ascribed Err let" false (contains go "__err_")
+
 let test_array_literal () =
   let src = {|
 fn main() {
@@ -3304,6 +3382,14 @@ let () =
             test_direct_result_nested_constructor;
           Alcotest.test_case "direct result var match struct" `Quick
             test_direct_result_var_match_struct;
+          Alcotest.test_case "ascribed result constructor let" `Quick
+            test_ascribed_result_constructor_let;
+          Alcotest.test_case "ascribed result constructor match" `Quick
+            test_ascribed_result_constructor_match;
+          Alcotest.test_case "ascribed err constructor match" `Quick
+            test_ascribed_err_constructor_match;
+          Alcotest.test_case "ascribed result let and match combined" `Quick
+            test_ascribed_result_let_and_match_combined;
         ] );
       ( "question-mark",
         [

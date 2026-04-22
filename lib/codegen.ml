@@ -3170,6 +3170,7 @@ and gen_result_match env buf indent ctx scrutinee arms _ok_ty _err_ty =
     | None -> (
         match scrutinee with
         | ExprCall (ExprIdent { node = "Ok" | "Err"; _ }, _) -> true
+        | ExprCast (e, _) when is_result_constructor_expr e -> true
         | ExprIdent _ -> (
             match infer_expr_type env scrutinee with
             | Some (TyGeneric ({ node = "Result"; _ }, _)) -> true
@@ -3309,6 +3310,7 @@ and gen_result_match_as_return env buf indent scrutinee arms _ok_ty _err_ty =
     | None -> (
         match scrutinee with
         | ExprCall (ExprIdent { node = "Ok" | "Err"; _ }, _) -> true
+        | ExprCast (e, _) when is_result_constructor_expr e -> true
         | ExprIdent _ -> (
             match infer_expr_type env scrutinee with
             | Some (TyGeneric ({ node = "Result"; _ }, _)) -> true
@@ -4044,6 +4046,7 @@ and infer_enum_name env (init : Ast.expr) : string =
 and is_result_constructor_expr (e : Ast.expr) : bool =
   match e with
   | ExprCall (ExprIdent { node = "Ok" | "Err"; _ }, _) -> true
+  | ExprCast (inner, _) -> is_result_constructor_expr inner
   | _ -> false
 
 and init_is_result env (init : Ast.expr) : bool =
