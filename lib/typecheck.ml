@@ -2181,7 +2181,9 @@ let check_fn_decl env (fd : fn_decl) =
 
 let check_item env (item : item) =
   match item with
-  | ItemFn fd -> check_fn_decl env fd; env
+  | ItemFn fd ->
+      check_fn_decl env fd;
+      env
   | ItemLet { is_mut; pat; ty; init } -> (
       match pat with
       | PatBind name ->

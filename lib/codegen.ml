@@ -4562,8 +4562,8 @@ let generate (prog : Ast.program) : string =
                      ExprCall
                        (ExprPath ({ node = "Vec"; _ }, { node = "new"; _ }), [])
                    ) ->
-                     Printf.bprintf body_buf "\nvar %s = make(%s, 0)\n"
-                       esc_name (go_type env t)
+                     Printf.bprintf body_buf "\nvar %s = make(%s, 0)\n" esc_name
+                       (go_type env t)
                  | ( Some (TyGeneric ({ node = "HashMap"; _ }, _) as t),
                      ExprCall
                        ( ExprPath ({ node = "HashMap"; _ }, { node = "new"; _ }),
@@ -4588,7 +4588,9 @@ let generate (prog : Ast.program) : string =
                      gen_expr env body_buf "" CtxExpr init;
                      Buffer.add_char body_buf '\n');
                  let binding_ty =
-                   match ty with Some t -> Some t | None -> infer_expr_type env init
+                   match ty with
+                   | Some t -> Some t
+                   | None -> infer_expr_type env init
                  in
                  add_value name.node binding_ty ~is_mut env
              | _ -> env)
@@ -4616,8 +4618,7 @@ let generate (prog : Ast.program) : string =
              let is_enum = SMap.mem type_name_str env.enums in
              let gd = go_generics_decl i_generics in
              let gu = go_generics_use i_generics in
-             gen_impl_methods env body_buf i_ty gd gu i_items is_enum
-               i_generics;
+             gen_impl_methods env body_buf i_ty gd gu i_items is_enum i_generics;
              env
          | ItemTraitImpl { ti_generics; ti_trait; ti_ty; ti_items } ->
              let type_name_str =
@@ -4641,8 +4642,7 @@ let generate (prog : Ast.program) : string =
                        (fun (ti_item : Ast.trait_item) ->
                          match ti_item with
                          | TraitFnDecl fd
-                           when not (List.mem fd.fn_name.node provided_names)
-                           ->
+                           when not (List.mem fd.fn_name.node provided_names) ->
                              Some fd
                          | _ -> None)
                        tic.tic_items

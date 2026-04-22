@@ -2737,18 +2737,20 @@ fn main() {
     (contains go "mux.HandleFunc(\"/other\",")
 
 let test_module_level_let () =
-  let src =
-    {|
+  let src = {|
 let counter: i64 = 0;
 
 fn main() {
     println(counter);
 }
-|}
-  in
+|} in
   let go = compile_and_check src in
-  Alcotest.(check bool) "has var counter" true (contains go "var counter int64 = 0");
-  Alcotest.(check bool) "has fmt.Println" true (contains go "fmt.Println(counter)")
+  Alcotest.(check bool)
+    "has var counter" true
+    (contains go "var counter int64 = 0");
+  Alcotest.(check bool)
+    "has fmt.Println" true
+    (contains go "fmt.Println(counter)")
 
 let test_module_level_let_mut () =
   let src =
@@ -2762,8 +2764,12 @@ fn main() {
 |}
   in
   let go = compile_and_check src in
-  Alcotest.(check bool) "has var items" true (contains go "var items = make([]string, 0)");
-  Alcotest.(check bool) "has append" true (contains go "items = append(items, \"hello\")");
+  Alcotest.(check bool)
+    "has var items" true
+    (contains go "var items = make([]string, 0)");
+  Alcotest.(check bool)
+    "has append" true
+    (contains go "items = append(items, \"hello\")");
   Alcotest.(check bool) "has len" true (contains go "len(items)")
 
 let test_http_crud_fixture () =
@@ -2812,12 +2818,38 @@ fn main() {
 |}
   in
   let go = compile_and_check src in
-  Alcotest.(check bool) "has var items" true (contains go "var items = make([]string, 0)");
+  Alcotest.(check bool)
+    "has var items" true
+    (contains go "var items = make([]string, 0)");
   Alcotest.(check bool) "has GET handler" true (contains go "r.Method");
-  Alcotest.(check bool) "has POST handler" true (contains go "r.FormValue(\"name\")");
-  Alcotest.(check bool) "has ListenAndServe panic" true
+  Alcotest.(check bool)
+    "has POST handler" true
+    (contains go "r.FormValue(\"name\")");
+  Alcotest.(check bool)
+    "has ListenAndServe panic" true
     (contains go "if err := http.ListenAndServe(");
-  Alcotest.(check bool) "has panic err" true (contains go "panic(err)")
+  Alcotest.(check bool) "has panic err" true (contains go "panic(err)");
+  (* Error-path coverage: malformed POST returns 400 without mutating state *)
+  Alcotest.(check bool)
+    "has 400 for missing name" true
+    (contains go "WriteHeader(400)");
+  Alcotest.(check bool)
+    "has missing name body" true
+    (contains go "missing name");
+  (* Error-path coverage: unsupported methods return 405 *)
+  Alcotest.(check bool)
+    "has 405 for unsupported method" true
+    (contains go "WriteHeader(405)");
+  Alcotest.(check bool)
+    "has method not allowed body" true
+    (contains go "method not allowed");
+  (* State mutation only happens in the success branch *)
+  Alcotest.(check bool)
+    "has append in success branch" true
+    (contains go "append(items, name)");
+  Alcotest.(check bool)
+    "has 201 for success" true
+    (contains go "WriteHeader(201)")
 
 let () =
   Alcotest.run "codegen"
