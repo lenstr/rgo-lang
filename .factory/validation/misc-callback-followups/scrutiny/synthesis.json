@@ -1,6 +1,6 @@
 {
   "milestone": "misc-callback-followups",
-  "round": 2,
+  "round": 3,
   "status": "fail",
   "validatorsRun": {
     "test": {
@@ -24,30 +24,19 @@
     "passed": 0,
     "failed": 1,
     "failedFeatures": [
-      "misc-typed-nonvoid-lambda-void-body-rejection"
+      "misc-typed-nonvoid-lambda-semantic-value-check"
     ]
   },
   "blockingIssues": [
     {
-      "featureId": "misc-typed-nonvoid-lambda-void-body-rejection",
+      "featureId": "misc-typed-nonvoid-lambda-semantic-value-check",
       "severity": "blocking",
-      "description": "The fix still accepts typed non-void lambdas whose last statement is syntactically block-like but not value-guaranteeing, such as `if` without `else` or a trailing void block expression. `rgoc` still emits Go for those forms, and the generated Go then fails to build with `missing return`, so the original typecheck/codegen mismatch remains."
+      "description": "The rerun fixes the previous unsupported no-value tails, but the new semantic-value check is too narrow and now rejects a semantically value-producing trailing `if` where one branch returns and the other ends with an ordinary value expression, so the feature still does not fully satisfy its expected behavior."
     }
   ],
-  "nonBlockingIssues": [
-    {
-      "featureId": "misc-typed-nonvoid-lambda-void-body-rejection",
-      "severity": "non_blocking",
-      "description": "Negative regression coverage now covers empty-body and statement-only typed non-void lambdas, but it still does not lock down other unsupported no-value trailing forms such as `if` without `else` or a trailing void block expression."
-    }
-  ],
+  "nonBlockingIssues": [],
   "appliedUpdates": [],
   "suggestedGuidanceUpdates": [],
-  "rejectedObservations": [
-    {
-      "observation": "The fix worker edited implementation files before adding tests while the handoff still reported `skillFeedback.followedProcedure: true`.",
-      "reason": "already-documented: the existing compiler-worker skill already requires tests-first behavior and accurate deviation reporting, so no skill update is needed from this single-instance compliance mismatch."
-    }
-  ],
-  "previousRound": ".factory/validation/misc-callback-followups/scrutiny/synthesis.round1.json"
+  "rejectedObservations": [],
+  "previousRound": ".factory/validation/misc-callback-followups/scrutiny/synthesis.round2.json"
 }

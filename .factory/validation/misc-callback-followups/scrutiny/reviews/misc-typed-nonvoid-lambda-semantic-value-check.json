@@ -1,0 +1,22 @@
+{
+  "featureId": "misc-typed-nonvoid-lambda-semantic-value-check",
+  "reviewedAt": "2026-04-23T02:26:05+03:00",
+  "commitId": "892286b431827fc6a3b9afd9e7c35e5946ddcdf5",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "Reviewed the prior failed review and synthesis, the original failed feature commit `81ebb9244a4e5918c1d30a691ecd7e1e5447351b`, the fix commit `892286b431827fc6a3b9afd9e7c35e5946ddcdf5`, the fix handoff/transcript skeleton for session `8da6f3e7-50d1-4494-9a0d-c79fb25d3963`, and the current typecheck/codegen/tests. The rerun closes the original acceptance bug for `if`-without-`else` and trailing void blocks, but the new semantic-value predicate is still too narrow and rejects at least one semantically value-producing trailing `if` form that codegen can lower correctly.",
+    "issues": [
+      {
+        "file": "lib/typecheck.ml",
+        "line": 451,
+        "severity": "blocking",
+        "description": "The new `block_guarantees_value`/`expr_guarantees_value` logic still rejects some semantically value-producing trailing `if` expressions. `block_guarantees_value` only treats a block with `final_expr` as value-guaranteeing when that final expression itself is return-like (`lib/typecheck.ml:451-466`), so in a lambda such as `let f = |a: i32| -> i32 { if a > 0 { return a; } else { 0 } };` the `else` block is marked non-guaranteeing even though it does produce the lambda's value. Because `check_if` returns `TVoid` whenever only one branch has a direct value type (`lib/typecheck.ml:1470-1480`), `has_guaranteed_value` falls back to this helper and rejects the lambda (`lib/typecheck.ml:592-606`). That contradicts the feature requirement that semantically value-producing trailing block-like forms remain supported, and codegen is already able to lower this shape by routing both branches through `gen_block_with_return` (`lib/codegen.ml:2266-2283`, `lib/codegen.ml:3538-3552`)."
+      }
+    ]
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/misc-callback-followups/scrutiny/reviews/misc-typed-nonvoid-lambda-void-body-rejection.json",
+  "summary": "Fail. The rerun fixes the previously-reported no-value-tail acceptance bug, but it now rejects a still-supported semantically value-producing mixed return/value trailing `if`, so the feature does not yet fully meet its expected behavior."
+}
