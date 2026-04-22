@@ -1,7 +1,7 @@
 {
   "milestone": "net-http-runtime",
-  "round": 1,
-  "status": "fail",
+  "round": 2,
+  "status": "pass",
   "validatorsRun": {
     "test": {
       "passed": true,
@@ -20,35 +20,14 @@
     }
   },
   "reviewsSummary": {
-    "total": 2,
+    "total": 1,
     "passed": 1,
-    "failed": 1,
-    "failedFeatures": [
-      "http-crud-server-startup-and-request-surface"
-    ]
+    "failed": 0,
+    "failedFeatures": []
   },
-  "blockingIssues": [
-    {
-      "featureId": "http-crud-server-startup-and-request-surface",
-      "severity": "blocking",
-      "description": "Module-level `let` bindings are still order-dependent during typechecking because resolver collects top-level lets as globals, but typecheck only makes an `ItemLet` visible after it reaches that item in source order. Functions declared before a global shared-state binding can therefore resolve but then fail typechecking, leaving the advertised module-level CRUD state support incomplete."
-    }
-  ],
+  "blockingIssues": [],
   "appliedUpdates": [],
-  "suggestedGuidanceUpdates": [
-    {
-      "target": "AGENTS.md",
-      "suggestion": "When splitting a milestone into multiple implementation features, keep each feature's description and expected behavior aligned with the code it actually lands rather than moving the user-visible behavior into an earlier commit and leaving a later feature as mostly test-only follow-up.",
-      "evidence": "The `http-crud-state-observability-and-error-paths` review found that commit `ae916b4` mostly extends tests while the runtime behavior described by the feature was already present in `ec0c4cb`, which made review and milestone accounting harder.",
-      "isSystemic": false
-    },
-    {
-      "target": "compiler-worker skill",
-      "suggestion": "Clarify whether step 8 requires running every command listed in `.factory/services.yaml` or only the relevant validator/build commands for a feature, and explicitly call out whether informational commands like `cli_version` and `go_version` are mandatory.",
-      "evidence": "The `http-crud-state-observability-and-error-paths` review noted that `.factory/skills/compiler-worker/SKILL.md` says to run the mission-level commands from `.factory/services.yaml`, but the reviewed handoff omitted `cli_version` and `go_version` while still marking the procedure as followed.",
-      "isSystemic": true
-    }
-  ],
+  "suggestedGuidanceUpdates": [],
   "rejectedObservations": [],
-  "previousRound": null
+  "previousRound": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/net-http-runtime/scrutiny/synthesis.round1.json"
 }
