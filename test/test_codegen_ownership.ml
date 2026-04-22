@@ -1464,6 +1464,406 @@ fn main() {
     src
   |> ignore
 
+(* ======== Final-expression specialized return cleanup tests ======== *)
+
+(* VAL-OWN-006: final-expression Ok(...) cleans up nested Drop bindings exactly once *)
+let test_own_final_ok_nested_cleanup () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+struct Resource {
+  pub name: str,
+}
+
+impl Drop for Resource {
+  fn drop(&mut self) {
+    println("drop:" + self.name);
+  }
+}
+
+fn final_ok() -> Result<i64, str> {
+  let outer = Resource { name: "outer" };
+  let inner = Resource { name: "inner" };
+  println("before-ok");
+  Ok(42)
+}
+
+fn main() {
+  let result = final_ok();
+  println("done");
+}
+|}
+  in
+  compile_and_check ~expected_output:"before-ok\ndrop:inner\ndrop:outer\ndone\n"
+    src
+  |> ignore
+
+(* VAL-OWN-006: final-expression Err(...) cleans up nested Drop bindings exactly once *)
+let test_own_final_err_nested_cleanup () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+struct Resource {
+  pub name: str,
+}
+
+impl Drop for Resource {
+  fn drop(&mut self) {
+    println("drop:" + self.name);
+  }
+}
+
+fn final_err() -> Result<i64, str> {
+  let outer = Resource { name: "outer" };
+  let inner = Resource { name: "inner" };
+  println("before-err");
+  Err("fail")
+}
+
+fn main() {
+  let result = final_err();
+  println("done");
+}
+|}
+  in
+  compile_and_check
+    ~expected_output:"before-err\ndrop:inner\ndrop:outer\ndone\n" src
+  |> ignore
+
+(* VAL-OWN-006: final-expression Some(...) cleans up nested Drop bindings exactly once *)
+let test_own_final_some_nested_cleanup () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+struct Resource {
+  pub name: str,
+}
+
+impl Drop for Resource {
+  fn drop(&mut self) {
+    println("drop:" + self.name);
+  }
+}
+
+fn final_some() -> Option<i64> {
+  let outer = Resource { name: "outer" };
+  let inner = Resource { name: "inner" };
+  println("before-some");
+  Some(42)
+}
+
+fn main() {
+  let r = final_some();
+  println("done");
+}
+|}
+  in
+  compile_and_check
+    ~expected_output:"before-some\ndrop:inner\ndrop:outer\ndone\n" src
+  |> ignore
+
+(* VAL-OWN-006: final-expression None cleans up nested Drop bindings exactly once *)
+let test_own_final_none_nested_cleanup () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+struct Resource {
+  pub name: str,
+}
+
+impl Drop for Resource {
+  fn drop(&mut self) {
+    println("drop:" + self.name);
+  }
+}
+
+fn final_none() -> Option<i64> {
+  let outer = Resource { name: "outer" };
+  let inner = Resource { name: "inner" };
+  println("before-none");
+  None
+}
+
+fn main() {
+  let r = final_none();
+  println("done");
+}
+|}
+  in
+  compile_and_check
+    ~expected_output:"before-none\ndrop:inner\ndrop:outer\ndone\n" src
+  |> ignore
+
+(* ======== Final-expression specialized return fast-path cleanup tests ======== *)
+
+(* VAL-OWN-006: final-expression Ok(x) suppresses Drop guard for returned
+   Drop-type binding so the callee does not double-clean *)
+let test_own_final_ok_returned_drop_suppresses_guard () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+struct Resource {
+  pub name: str,
+}
+
+impl Drop for Resource {
+  fn drop(&mut self) {
+    println("drop:" + self.name);
+  }
+}
+
+fn wrap() -> Result<Resource, str> {
+  let other = Resource { name: "other" };
+  let r = Resource { name: "transferred" };
+  println("before-ok");
+  Ok(r)
+}
+
+fn main() {
+  let result = wrap();
+  println("done");
+}
+|}
+  in
+  (* other is cleaned up, r's guard is suppressed so it is not dropped in
+     wrap(). The output proves exactly-once cleanup for other and no
+     premature drop for r. *)
+  compile_and_check ~expected_output:"before-ok\ndrop:other\ndone\n" src
+  |> ignore
+
+(* VAL-OWN-006: final-expression Err(x) suppresses Drop guard for other bindings
+   when the Err value is a string *)
+let test_own_final_err_returned_drop_suppresses_guard () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+struct Resource {
+  pub name: str,
+}
+
+impl Drop for Resource {
+  fn drop(&mut self) {
+    println("drop:" + self.name);
+  }
+}
+
+fn fail() -> Result<i64, str> {
+  let other = Resource { name: "other" };
+  println("before-err");
+  Err("fail")
+}
+
+fn main() {
+  let result = fail();
+  println("done");
+}
+|}
+  in
+  compile_and_check ~expected_output:"before-err\ndrop:other\ndone\n" src
+  |> ignore
+
+(* VAL-OWN-006: final-expression Some(x) suppresses Drop guard for returned
+   Drop-type binding *)
+let test_own_final_some_returned_drop_suppresses_guard () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+struct Resource {
+  pub name: str,
+}
+
+impl Drop for Resource {
+  fn drop(&mut self) {
+    println("drop:" + self.name);
+  }
+}
+
+fn wrap() -> Option<Resource> {
+  let other = Resource { name: "other" };
+  let r = Resource { name: "transferred" };
+  println("before-some");
+  Some(r)
+}
+
+fn main() {
+  let result = wrap();
+  println("done");
+}
+|}
+  in
+  compile_and_check ~expected_output:"before-some\ndrop:other\ndone\n" src
+  |> ignore
+
+(* VAL-OWN-006: final-expression ident suppresses Drop guard for returned value
+   with nested scope cleanup *)
+let test_own_final_ident_nested_cleanup () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+struct Resource {
+  pub name: str,
+}
+
+impl Drop for Resource {
+  fn drop(&mut self) {
+    println("drop:" + self.name);
+  }
+}
+
+fn make() -> Resource {
+  let outer = Resource { name: "outer" };
+  {
+    let inner = Resource { name: "inner" };
+    let r = Resource { name: "transferred" };
+    r
+  }
+}
+
+fn main() {
+  let owned = make();
+  println("caller:" + owned.name);
+}
+|}
+  in
+  compile_and_check
+    ~expected_output:
+      "drop:inner\ndrop:outer\ncaller:transferred\ndrop:transferred\n"
+    src
+  |> ignore
+
+(* VAL-OWN-006: final-expression Ok(take(x)) suppresses consumed guard and
+   nested cleanup correctly *)
+let test_own_final_ok_consume_nested_cleanup () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+struct Resource {
+  pub name: str,
+}
+
+impl Drop for Resource {
+  fn drop(&mut self) {
+    println("drop:" + self.name);
+  }
+}
+
+fn take(r: Resource) -> Resource {
+  r
+}
+
+fn final_ok_nested_consume() -> Result<Resource, str> {
+  let outer = Resource { name: "outer" };
+  {
+    let inner = Resource { name: "inner" };
+    Ok(take(inner))
+  }
+}
+
+fn main() {
+  let result = final_ok_nested_consume();
+  println("done");
+}
+|}
+  in
+  compile_and_check ~expected_output:"drop:outer\ndone\n" src |> ignore
+
+(* VAL-OWN-006: explicit return Ok with Drop-type value suppresses guard *)
+let test_own_explicit_ok_returned_drop_suppresses_guard () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+struct Resource {
+  pub name: str,
+}
+
+impl Drop for Resource {
+  fn drop(&mut self) {
+    println("drop:" + self.name);
+  }
+}
+
+fn wrap() -> Result<Resource, str> {
+  let other = Resource { name: "other" };
+  let r = Resource { name: "transferred" };
+  println("before-return");
+  return Ok(r);
+}
+
+fn main() {
+  let result = wrap();
+  println("done");
+}
+|}
+  in
+  compile_and_check ~expected_output:"before-return\ndrop:other\ndone\n" src
+  |> ignore
+
+(* VAL-OWN-006: wildcard final expression with consuming call suppresses
+   consumed guards and cleans nested drops *)
+let test_own_final_wildcard_consume_nested_cleanup () =
+  let src =
+    {|
+trait Drop {
+  fn drop(&mut self);
+}
+
+struct Resource {
+  pub name: str,
+}
+
+impl Drop for Resource {
+  fn drop(&mut self) {
+    println("drop:" + self.name);
+  }
+}
+
+fn take(r: Resource) -> Resource {
+  r
+}
+
+fn consume_and_return() -> Resource {
+  let other = Resource { name: "other" };
+  take(other)
+}
+
+fn main() {
+  let result = consume_and_return();
+  println("done");
+}
+|}
+  in
+  compile_and_check ~expected_output:"done\ndrop:other\n" src |> ignore
+
 (* ======== Test registration ======== *)
 
 let () =
@@ -1531,6 +1931,28 @@ let () =
             test_own_return_consume_suppresses;
           Alcotest.test_case "stdlib call does not suppress cleanup" `Quick
             test_own_stdlib_call_no_suppress;
+          Alcotest.test_case "final Ok cleans nested Drop" `Quick
+            test_own_final_ok_nested_cleanup;
+          Alcotest.test_case "final Err cleans nested Drop" `Quick
+            test_own_final_err_nested_cleanup;
+          Alcotest.test_case "final Some cleans nested Drop" `Quick
+            test_own_final_some_nested_cleanup;
+          Alcotest.test_case "final None cleans nested Drop" `Quick
+            test_own_final_none_nested_cleanup;
+          Alcotest.test_case "final Ok suppresses returned Drop guard" `Quick
+            test_own_final_ok_returned_drop_suppresses_guard;
+          Alcotest.test_case "final Err suppresses returned Drop guard" `Quick
+            test_own_final_err_returned_drop_suppresses_guard;
+          Alcotest.test_case "final Some suppresses returned Drop guard" `Quick
+            test_own_final_some_returned_drop_suppresses_guard;
+          Alcotest.test_case "final ident nested cleanup and guard" `Quick
+            test_own_final_ident_nested_cleanup;
+          Alcotest.test_case "final Ok(take(x)) nested cleanup" `Quick
+            test_own_final_ok_consume_nested_cleanup;
+          Alcotest.test_case "explicit Ok returned Drop guard" `Quick
+            test_own_explicit_ok_returned_drop_suppresses_guard;
+          Alcotest.test_case "final wildcard consume nested cleanup" `Quick
+            test_own_final_wildcard_consume_nested_cleanup;
         ] );
       ( "non-consuming-call-guards",
         [

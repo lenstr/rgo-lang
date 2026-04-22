@@ -397,8 +397,9 @@ let emit_return_cleanup env buf indent (return_expr : Ast.expr) =
   in
   if (not (has_nested_drops env)) && not has_consumed then false
   else begin
-    Buffer.add_char buf '\n';
-    emit_all_nested_cleanup env buf indent;
+    (* Suppress consumed guards BEFORE nested cleanup so bindings whose
+       ownership is being transferred are not cleaned up by
+       emit_all_nested_cleanup. *)
     Codegen_ownership.suppress_consumed_guards_inline
       ~lookup_guard:(fun n -> SMap.find_opt n env.drop_guards)
       ~is_user_fn:(fun n -> SMap.mem n env.fns)
@@ -410,6 +411,7 @@ let emit_return_cleanup env buf indent (return_expr : Ast.expr) =
         is_imported_package pkg env || SMap.mem pkg env.enums)
       ~lookup_value_ty:(fun n -> lookup_value_ty n env)
       buf indent return_expr;
+    emit_all_nested_cleanup env buf indent;
     true
   end
 
@@ -1096,6 +1098,14 @@ let rec gen_expr env buf indent (ctx : expr_ctx) (e : Ast.expr) : unit =
   | ExprMatch (scrutinee, arms) -> gen_match env buf indent ctx scrutinee arms
   | ExprBlock blk -> gen_block_expr env buf indent ctx blk
   | ExprReturn (Some (ExprCall (ExprIdent { node = "Ok"; _ }, [ arg ]))) -> (
+      (* Ownership: if the Ok argument is a Drop-type binding, suppress its
+         guard BEFORE emit_return_cleanup so ownership transfers to the caller. *)
+      (match arg with
+      | ExprIdent { node = n; _ } -> (
+          match SMap.find_opt n env.drop_guards with
+          | Some guard -> Printf.bprintf buf "%s%s = false\n" indent guard
+          | None -> ())
+      | _ -> ());
       let _cleaned = emit_return_cleanup env buf indent arg in
       Buffer.add_string buf indent;
       match env.ret_ty with
@@ -1107,6 +1117,14 @@ let rec gen_expr env buf indent (ctx : expr_ctx) (e : Ast.expr) : unit =
           Buffer.add_string buf "return ";
           gen_expr env buf indent CtxExpr arg)
   | ExprReturn (Some (ExprCall (ExprIdent { node = "Err"; _ }, [ arg ]))) -> (
+      (* Ownership: if the Err argument is a Drop-type binding, suppress its
+         guard BEFORE emit_return_cleanup so ownership transfers to the caller. *)
+      (match arg with
+      | ExprIdent { node = n; _ } -> (
+          match SMap.find_opt n env.drop_guards with
+          | Some guard -> Printf.bprintf buf "%s%s = false\n" indent guard
+          | None -> ())
+      | _ -> ());
       let _cleaned = emit_return_cleanup env buf indent arg in
       Buffer.add_string buf indent;
       match env.ret_ty with
@@ -1131,6 +1149,14 @@ let rec gen_expr env buf indent (ctx : expr_ctx) (e : Ast.expr) : unit =
                ( ExprIdent { node = "Err"; span = (dummy_loc "Err").span },
                  [ arg ] )))
   | ExprReturn (Some (ExprCall (ExprIdent { node = "Some"; _ }, [ arg ]))) -> (
+      (* Ownership: if the Some argument is a Drop-type binding, suppress its
+         guard BEFORE emit_return_cleanup so ownership transfers to the caller. *)
+      (match arg with
+      | ExprIdent { node = n; _ } -> (
+          match SMap.find_opt n env.drop_guards with
+          | Some guard -> Printf.bprintf buf "%s%s = false\n" indent guard
+          | None -> ())
+      | _ -> ());
       let _cleaned = emit_return_cleanup env buf indent arg in
       Buffer.add_string buf indent;
       match env.ret_ty with
@@ -1149,16 +1175,17 @@ let rec gen_expr env buf indent (ctx : expr_ctx) (e : Ast.expr) : unit =
       Buffer.add_string buf indent;
       gen_return_none env buf
   | ExprReturn (Some (ExprIdent { node = name; _ } as e)) ->
-      (* Ownership: emit cleanup for nested scope drops before returning,
-         and suppress the returned binding's guard. *)
+      (* Ownership: suppress the returned binding's guard BEFORE nested cleanup
+         so the returned value is not cleaned up by emit_all_nested_cleanup,
+         then clean up remaining nested scope drops. *)
+      (match SMap.find_opt name env.drop_guards with
+      | Some guard -> Printf.bprintf buf "%s%s = false\n" indent guard
+      | None -> ());
       let cleaned = has_nested_drops env in
       if cleaned then begin
         Buffer.add_char buf '\n';
         emit_all_nested_cleanup env buf indent
       end;
-      (match SMap.find_opt name env.drop_guards with
-      | Some guard -> Printf.bprintf buf "%s%s = false\n" indent guard
-      | None -> ());
       Buffer.add_string buf indent;
       Buffer.add_string buf "return ";
       gen_expr env buf indent CtxExpr e
@@ -2079,6 +2106,15 @@ and gen_arm_body_stmts env buf indent expr =
       gen_expr env buf indent CtxStmt expr;
       Buffer.add_char buf '\n'
 
+(* Check whether a final expression will emit a Go `return` statement,
+   i.e. whether it counts as an early exit for scope-cleanup purposes. *)
+and is_return_like_expr (e : Ast.expr) : bool =
+  match e with
+  | ExprReturn _ | ExprBreak | ExprContinue -> true
+  | ExprCall (ExprIdent { node = "Ok" | "Err" | "Some"; _ }, _) -> true
+  | ExprIdent { node = "None"; _ } -> true
+  | _ -> false
+
 and gen_final_expr_as_return env buf indent e =
   match e with
   | ExprReturn _ ->
@@ -2110,20 +2146,41 @@ and gen_final_expr_as_return env buf indent e =
       gen_match_as_return env buf indent scrutinee arms
   | ExprBlock blk -> gen_block_with_return env buf indent blk
   | ExprCall (ExprIdent { node = "Ok"; _ }, [ arg ]) -> (
+      (* Ownership: if the Ok argument is a Drop-type binding, suppress its
+         guard BEFORE emit_return_cleanup so it is not cleaned up by
+         emit_all_nested_cleanup and ownership transfers to the caller. *)
+      (match arg with
+      | ExprIdent { node = n; _ } -> (
+          match SMap.find_opt n env.drop_guards with
+          | Some guard -> Printf.bprintf buf "%s%s = false\n" indent guard
+          | None -> ())
+      | _ -> ());
+      let _cleaned = emit_return_cleanup env buf indent arg in
+      Buffer.add_string buf indent;
       match env.ret_ty with
       | Some (TyGeneric ({ node = "Result"; _ }, _)) ->
-          Printf.bprintf buf "%sreturn " indent;
+          Buffer.add_string buf "return ";
           gen_expr env buf indent CtxExpr arg;
           Buffer.add_string buf ", nil\n"
       | _ ->
-          Printf.bprintf buf "%sreturn " indent;
+          Buffer.add_string buf "return ";
           gen_expr env buf indent CtxExpr arg;
           Buffer.add_char buf '\n')
   | ExprCall (ExprIdent { node = "Err"; _ }, [ arg ]) -> (
+      (* Ownership: if the Err argument is a Drop-type binding, suppress its
+         guard BEFORE emit_return_cleanup so ownership transfers to the caller. *)
+      (match arg with
+      | ExprIdent { node = n; _ } -> (
+          match SMap.find_opt n env.drop_guards with
+          | Some guard -> Printf.bprintf buf "%s%s = false\n" indent guard
+          | None -> ())
+      | _ -> ());
+      let _cleaned = emit_return_cleanup env buf indent arg in
+      Buffer.add_string buf indent;
       match env.ret_ty with
       | Some (TyGeneric ({ node = "Result"; _ }, [ ok_ty; _ ])) ->
           env.shared.needs_errors <- true;
-          Printf.bprintf buf "%sreturn %s, " indent (go_zero_value env ok_ty);
+          Printf.bprintf buf "return %s, " (go_zero_value env ok_ty);
           (match arg with
           | ExprLit (LitString _) ->
               Buffer.add_string buf "errors.New(";
@@ -2135,29 +2192,50 @@ and gen_final_expr_as_return env buf indent e =
               Buffer.add_char buf ')');
           Buffer.add_char buf '\n'
       | _ ->
-          Printf.bprintf buf "%sreturn " indent;
+          Buffer.add_string buf "return ";
           gen_expr env buf indent CtxExpr arg;
           Buffer.add_char buf '\n')
   | ExprCall (ExprIdent { node = "Some"; _ }, [ arg ]) -> (
+      (* Ownership: if the Some argument is a Drop-type binding, suppress its
+         guard BEFORE emit_return_cleanup so ownership transfers to the caller. *)
+      (match arg with
+      | ExprIdent { node = n; _ } -> (
+          match SMap.find_opt n env.drop_guards with
+          | Some guard -> Printf.bprintf buf "%s%s = false\n" indent guard
+          | None -> ())
+      | _ -> ());
+      let _cleaned = emit_return_cleanup env buf indent arg in
+      Buffer.add_string buf indent;
       match env.ret_ty with
       | Some (TyGeneric ({ node = "Option"; _ }, [ inner ])) ->
-          Printf.bprintf buf "%sreturn " indent;
+          Buffer.add_string buf "return ";
           gen_some_for_type env buf indent inner arg;
           Buffer.add_char buf '\n'
       | _ ->
-          Printf.bprintf buf "%sreturn " indent;
+          Buffer.add_string buf "return ";
           gen_some env buf indent arg;
           Buffer.add_char buf '\n')
   | ExprIdent { node = "None"; _ } ->
-      Printf.bprintf buf "%s" indent;
+      let cleaned = has_nested_drops env in
+      if cleaned then begin
+        Buffer.add_char buf '\n';
+        emit_all_nested_cleanup env buf indent
+      end;
+      Buffer.add_string buf indent;
       gen_return_none env buf;
       Buffer.add_char buf '\n'
   | ExprIdent { node = name; _ } -> (
-      (* Ownership: if returning a Drop-type binding by value, suppress its
-         deferred cleanup so ownership transfers to the caller. *)
+      (* Ownership: suppress the returned binding's guard BEFORE nested cleanup
+         so the returned value is not cleaned up by emit_all_nested_cleanup,
+         then clean up remaining nested scope drops. *)
       (match SMap.find_opt name env.drop_guards with
       | Some guard -> Printf.bprintf buf "%s%s = false\n" indent guard
       | None -> ());
+      let cleaned = has_nested_drops env in
+      if cleaned then begin
+        Buffer.add_char buf '\n';
+        emit_all_nested_cleanup env buf indent
+      end;
       match env.ret_ty with
       | None | Some (TyName { node = "void"; _ }) ->
           Buffer.add_string buf indent;
@@ -2167,73 +2245,37 @@ and gen_final_expr_as_return env buf indent e =
           Printf.bprintf buf "%sreturn " indent;
           gen_expr env buf indent CtxExpr e;
           Buffer.add_char buf '\n')
-  | _ -> (
-      if contains_question e then begin
+  | _ ->
+      if
+        (* Ownership: suppress consumed guards and clean up nested Drop scopes
+         before returning, routing through emit_return_cleanup for correct
+         guard suppression / cleanup ordering. *)
+        contains_question e
+      then begin
         let e' = hoist_question_exprs env buf indent e in
+        let _cleaned = emit_return_cleanup env buf indent e' in
         match env.ret_ty with
         | None | Some (TyName { node = "void"; _ }) ->
-            Codegen_ownership.suppress_consumed_guards_inline
-              ~lookup_guard:(fun n -> SMap.find_opt n env.drop_guards)
-              ~is_user_fn:(fun n -> SMap.mem n env.fns)
-              ~is_user_method:(fun tn mn ->
-                match SMap.find_opt tn env.impls with
-                | Some ii -> SMap.mem mn ii.ii_methods
-                | None -> false)
-              ~is_stdlib_call:(fun pkg _member ->
-                is_imported_package pkg env || SMap.mem pkg env.enums)
-              ~lookup_value_ty:(fun n -> lookup_value_ty n env)
-              buf indent e';
             Buffer.add_string buf indent;
             gen_expr env buf indent CtxStmt e';
             Buffer.add_char buf '\n'
         | _ ->
-            Codegen_ownership.suppress_consumed_guards_inline
-              ~lookup_guard:(fun n -> SMap.find_opt n env.drop_guards)
-              ~is_user_fn:(fun n -> SMap.mem n env.fns)
-              ~is_user_method:(fun tn mn ->
-                match SMap.find_opt tn env.impls with
-                | Some ii -> SMap.mem mn ii.ii_methods
-                | None -> false)
-              ~is_stdlib_call:(fun pkg _member ->
-                is_imported_package pkg env || SMap.mem pkg env.enums)
-              ~lookup_value_ty:(fun n -> lookup_value_ty n env)
-              buf indent e';
             Printf.bprintf buf "%sreturn " indent;
             gen_expr env buf indent CtxExpr e';
             Buffer.add_char buf '\n'
       end
-      else
+      else begin
+        let _cleaned = emit_return_cleanup env buf indent e in
         match env.ret_ty with
         | None | Some (TyName { node = "void"; _ }) ->
-            Codegen_ownership.suppress_consumed_guards_inline
-              ~lookup_guard:(fun n -> SMap.find_opt n env.drop_guards)
-              ~is_user_fn:(fun n -> SMap.mem n env.fns)
-              ~is_user_method:(fun tn mn ->
-                match SMap.find_opt tn env.impls with
-                | Some ii -> SMap.mem mn ii.ii_methods
-                | None -> false)
-              ~is_stdlib_call:(fun pkg _member ->
-                is_imported_package pkg env || SMap.mem pkg env.enums)
-              ~lookup_value_ty:(fun n -> lookup_value_ty n env)
-              buf indent e;
             Buffer.add_string buf indent;
             gen_expr env buf indent CtxStmt e;
             Buffer.add_char buf '\n'
         | _ ->
-            Codegen_ownership.suppress_consumed_guards_inline
-              ~lookup_guard:(fun n -> SMap.find_opt n env.drop_guards)
-              ~is_user_fn:(fun n -> SMap.mem n env.fns)
-              ~is_user_method:(fun tn mn ->
-                match SMap.find_opt tn env.impls with
-                | Some ii -> SMap.mem mn ii.ii_methods
-                | None -> false)
-              ~is_stdlib_call:(fun pkg _member ->
-                is_imported_package pkg env || SMap.mem pkg env.enums)
-              ~lookup_value_ty:(fun n -> lookup_value_ty n env)
-              buf indent e;
             Printf.bprintf buf "%sreturn " indent;
             gen_expr env buf indent CtxExpr e;
-            Buffer.add_char buf '\n')
+            Buffer.add_char buf '\n'
+      end
 
 and gen_match_as_return env buf indent scrutinee arms =
   match infer_expr_type env scrutinee with
@@ -2511,8 +2553,12 @@ and gen_block_with_return env buf indent blk =
   | None -> ());
   let ends_with_early_exit =
     match blk.final_expr with
-    | Some (ExprReturn _ | ExprBreak | ExprContinue) -> true
-    | _ -> (
+    | Some e when is_return_like_expr e -> true
+    (* gen_final_expr_as_return handles nested cleanup for all final
+       expressions that generate a return statement, so scope cleanup
+       after the final expression is not needed. *)
+    | Some _ -> true
+    | None -> (
         match List.rev blk.stmts with
         | StmtExpr (ExprReturn _ | ExprBreak | ExprContinue) :: _ -> true
         | _ -> false)
@@ -2537,7 +2583,7 @@ and gen_block_stmts env buf indent blk =
   in
   let ends_with_early_exit =
     match blk.final_expr with
-    | Some (ExprReturn _ | ExprBreak | ExprContinue) -> true
+    | Some e when is_return_like_expr e -> true
     | _ -> (
         match List.rev blk.stmts with
         | StmtExpr (ExprReturn _ | ExprBreak | ExprContinue) :: _ -> true
@@ -2917,7 +2963,7 @@ and gen_stmt env buf indent (s : Ast.stmt) : cg_env =
       in
       let ends_with_early_exit =
         match blk.final_expr with
-        | Some (ExprReturn _ | ExprBreak | ExprContinue) -> true
+        | Some e when is_return_like_expr e -> true
         | _ -> (
             match List.rev blk.stmts with
             | StmtExpr (ExprReturn _ | ExprBreak | ExprContinue) :: _ -> true
