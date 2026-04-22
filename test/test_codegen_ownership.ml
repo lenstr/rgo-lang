@@ -2044,9 +2044,11 @@ let () =
             test_own_generic_enum_repeated_conflict;
           Alcotest.test_case "nested generic enum move transfers cleanup" `Quick
             test_own_generic_enum_nested_move;
-          Alcotest.test_case "nested Option Copy-payload pattern compiles and runs"
-            `Quick test_own_nested_option_copy_runtime;
-          Alcotest.test_case "nested Result(Option) Copy-payload pattern compiles and runs"
+          Alcotest.test_case
+            "nested Option Copy-payload pattern compiles and runs" `Quick
+            test_own_nested_option_copy_runtime;
+          Alcotest.test_case
+            "nested Result(Option) Copy-payload pattern compiles and runs"
             `Quick test_own_nested_result_option_copy_runtime;
         ] );
       ( "example-fixtures",

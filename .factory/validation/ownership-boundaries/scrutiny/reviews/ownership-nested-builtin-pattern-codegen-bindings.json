@@ -1,0 +1,22 @@
+{
+  "featureId": "ownership-nested-builtin-pattern-codegen-bindings",
+  "reviewedAt": "2026-04-22T14:06:26+03:00",
+  "commitId": "d8704f6",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "I reviewed the prior failed report, both feature handoffs, both feature diffs (`2b33da7` and `d8704f6`), the fix transcript skeleton, and the current typecheck/codegen paths. The fix does address the original undefined-binding bug for the specific one-level nested Copy-payload cases it tests (`Option<Option<_>>` and `Result<Option<_>>`). But the combined original+fix implementation is still not correct for all accepted nested built-in patterns: the new codegen path is only one layer deep and ignores wildcard/default fallback handling inside the nested branch, so legal nested Copy-payload matches can still lower to generated `panic("unsupported nested pattern")` or `panic("unreachable")` instead of the correct arm body.",
+    "issues": [
+      {
+        "file": "lib/codegen.ml",
+        "line": 2383,
+        "severity": "blocking",
+        "description": "The fix is not actually recursive over all accepted nested built-in patterns. `extract_inner_builtin_pat` only unwraps a single inner built-in layer (`lib/codegen.ml:2383-2388`), and every nested binding site only accepts the exact shape `PatTuple (_, _, [ PatTuple (_, _, [ PatBind name ]) ])` (`lib/codegen.ml:2434`, `2486`, `2566`, `2613`, `2629`, `2670`, `2721`, `2739`). Deeper accepted Copy-payload patterns such as `Option::Some(Option::Some(Option::Some(v)))` therefore still generate `panic("unsupported nested pattern")` instead of recursively binding `v`. Separately, the nested helpers only look for explicit inner `Some`/`None` or `Ok`/`Err` arms and otherwise emit `panic("unreachable")` (`lib/codegen.ml:2415-2451`, `2547-2638`), so valid matches like `Option::Some(Option::Some(v)) => ...; _ => ...` or `Result::Ok(Option::Some(v)) => ...; _ => ...` still miscompile even though `bind_pattern` remains recursively permissive for built-in patterns (`lib/typecheck.ml:1451-1475`). That leaves remaining accepted nested Copy-payload matches semantically broken after the fix."
+      }
+    ]
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/ownership-boundaries/scrutiny/reviews/ownership-nested-builtin-pattern-boundaries.json",
+  "summary": "Fail. `d8704f6` fixes the original flat-only binding bug for the tested one-level nested Copy-payload cases, but the new helpers still do not cover all accepted nested built-in matches: deeper nesting and nested-branch fallback-to-default cases can still lower to generated panic paths instead of the correct Go arm logic."
+}

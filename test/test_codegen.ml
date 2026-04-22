@@ -394,9 +394,7 @@ fn main() {
 |}
   in
   let go = compile_and_check ~expected_output:"42\n" src in
-  Alcotest.(check bool)
-    "inner binding is emitted" true
-    (contains go "v :=")
+  Alcotest.(check bool) "inner binding is emitted" true (contains go "v :=")
 
 (* Nested inline Result(Option) pattern with Copy payload *)
 let test_result_nested_option_pattern () =
@@ -422,9 +420,7 @@ fn main() {
 |}
   in
   let go = compile_and_check ~expected_output:"42\n" src in
-  Alcotest.(check bool)
-    "inner binding is emitted" true
-    (contains go "v :=")
+  Alcotest.(check bool) "inner binding is emitted" true (contains go "v :=")
 
 (* Nested inline Option(Result) pattern with Copy payload *)
 let test_option_nested_result_pattern () =
@@ -450,9 +446,7 @@ fn main() {
 |}
   in
   let go = compile_and_check ~expected_output:"42\n" src in
-  Alcotest.(check bool)
-    "inner binding is emitted" true
-    (contains go "v :=")
+  Alcotest.(check bool) "inner binding is emitted" true (contains go "v :=")
 
 (* ---------- Result tests ---------- *)
 
