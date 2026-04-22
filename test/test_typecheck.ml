@@ -3077,6 +3077,26 @@ fn main() {
 }
 |}
 
+(* Typed non-void lambda with empty body is rejected *)
+let typed_nonvoid_lambda_empty_body_negative =
+  {|
+fn main() {
+    let f = |a: i32| -> i32 { };
+    println(f(1));
+}
+|}
+
+(* Typed non-void lambda with statement-only body is rejected *)
+let typed_nonvoid_lambda_statement_only_negative =
+  {|
+fn main() {
+    let f = |a: i32| -> i32 {
+        println("x");
+    };
+    println(f(1));
+}
+|}
+
 (* VAL-CROSS-002: Mixed named handler + anonymous handler *)
 let callback_mixed_handlers_positive =
   {|
@@ -3174,6 +3194,12 @@ let callback_negative_tests =
     ( "capturing anonymous handler rejected (VAL-CALLBACK-003)",
       `Quick,
       fail ~expect:"undefined" callback_capturing_lambda_negative );
+    ( "typed non-void lambda empty body rejected",
+      `Quick,
+      fail ~expect:"must produce a value" typed_nonvoid_lambda_empty_body_negative );
+    ( "typed non-void lambda statement-only body rejected",
+      `Quick,
+      fail ~expect:"must produce a value" typed_nonvoid_lambda_statement_only_negative );
   ]
 
 let () =

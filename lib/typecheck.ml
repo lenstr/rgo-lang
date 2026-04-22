@@ -570,10 +570,25 @@ let rec check_expr env (e : expr) : ty =
           lambda_env params
       in
       let body_ty = check_block lambda_env body in
-      if ret_type <> TVoid && body_ty <> TVoid then
-        expect_type ~env:lambda_env
-          ~span:(expr_span (ExprLambda (params, ret_ty, body)))
-          ~expected:ret_type ~actual:body_ty;
+      if ret_type <> TVoid then begin
+        let has_guaranteed_value =
+          match body.final_expr with
+          | Some _ -> body_ty <> TVoid
+          | None -> (
+              match List.rev body.stmts with
+              | (StmtExpr (ExprReturn _ | ExprIf _ | ExprMatch _ | ExprBlock _)
+                :: _) ->
+                  true
+              | _ -> body_ty <> TVoid)
+        in
+        if not has_guaranteed_value then
+          error_at (expr_span (ExprLambda (params, ret_ty, body)))
+            "typed non-void lambda body must produce a value";
+        if body_ty <> TVoid then
+          expect_type ~env:lambda_env
+            ~span:(expr_span (ExprLambda (params, ret_ty, body)))
+            ~expected:ret_type ~actual:body_ty
+      end;
       TFn (param_types, ret_type)
 
 and check_binop env op l r =
@@ -1622,10 +1637,17 @@ and bind_pattern env scrutinee_ty (p : pat) : env =
 
 and check_block env blk =
   let inner = push_scope env in
-  let inner = List.fold_left (fun e s -> check_stmt e s) inner blk.stmts in
-  match blk.final_expr with Some e -> check_expr inner e | None -> TVoid
+  let rec go stmts env last_ty =
+    match stmts with
+    | [] -> (env, last_ty)
+    | s :: rest ->
+        let env, t = check_stmt env s in
+        go rest env t
+  in
+  let inner, last_ty = go blk.stmts inner TVoid in
+  match blk.final_expr with Some e -> check_expr inner e | None -> last_ty
 
-and check_stmt env (s : stmt) : env =
+and check_stmt env (s : stmt) : env * ty =
   match s with
   | StmtLet { is_mut; pat; ty; init } ->
       let declared_ty =
@@ -1659,10 +1681,10 @@ and check_stmt env (s : stmt) : env =
             "cannot move out of field '%s' -- partial moves are not supported"
             field.node
       | _ -> ());
-      bind_let_pattern env declared_ty is_mut pat
+      (bind_let_pattern env declared_ty is_mut pat, TVoid)
   | StmtExpr e ->
-      let _ = check_expr env e in
-      env
+      let t = check_expr env e in
+      (env, t)
 
 and bind_let_pattern env ty is_mut (p : pat) : env =
   match p with

@@ -3018,6 +3018,30 @@ fn main() {
   let go = compile_and_check ~expected_output:"5\n7\n" src in
   Alcotest.(check bool) "has return in if arm" true (contains go "return a")
 
+(* Negative: typed non-void lambda with empty body is rejected before Go generation *)
+let test_typed_nonvoid_lambda_empty_body_rejected () =
+  compile_expect_error ~expect:"must produce a value"
+    {|
+fn main() {
+    let f = |a: i32| -> i32 { };
+    println(f(1));
+}
+|}
+    ()
+
+(* Negative: typed non-void lambda with statement-only body is rejected before Go generation *)
+let test_typed_nonvoid_lambda_statement_only_rejected () =
+  compile_expect_error ~expect:"must produce a value"
+    {|
+fn main() {
+    let f = |a: i32| -> i32 {
+        println("x");
+    };
+    println(f(1));
+}
+|}
+    ()
+
 let test_module_level_let () =
   let src = {|
 let counter: i64 = 0;
@@ -3648,6 +3672,10 @@ let () =
             test_typed_nonvoid_lambda_positive;
           Alcotest.test_case "typed non-void lambda if final arm returns" `Quick
             test_typed_nonvoid_lambda_if_final;
+          Alcotest.test_case "typed non-void lambda empty body rejected" `Quick
+            test_typed_nonvoid_lambda_empty_body_rejected;
+          Alcotest.test_case "typed non-void lambda statement-only body rejected"
+            `Quick test_typed_nonvoid_lambda_statement_only_rejected;
         ] );
       ( "module-level-let",
         [
