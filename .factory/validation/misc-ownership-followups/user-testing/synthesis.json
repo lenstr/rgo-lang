@@ -1,0 +1,30 @@
+{
+  "milestone": "misc-ownership-followups",
+  "round": 1,
+  "status": "pass",
+  "assertionsSummary": {
+    "total": 0,
+    "passed": 0,
+    "failed": 0,
+    "blocked": 0
+  },
+  "passedAssertions": [],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "appliedUpdates": [],
+  "previousRound": null,
+  "selectionSummary": {
+    "mode": "first_run",
+    "evaluatedAt": "2026-04-23T01:07:55+03:00",
+    "completedImplementationFeatures": [
+      "misc-result-variable-match-codegen",
+      "misc-deep-nested-result-constructor-inference",
+      "misc-result-variable-match-scope-restoration",
+      "misc-direct-result-value-position-lowering",
+      "misc-ascribed-result-struct-mode-detection"
+    ],
+    "assertionsFromFulfills": [],
+    "pendingAssertions": [],
+    "note": "No completed implementation features in this milestone map to validation-contract assertions via `fulfills`, so there were no user-facing assertions to retest or delegate to flow validators."
+  }
+}
