@@ -2947,6 +2947,113 @@ fn main() {
     "has 201 for success" true
     (contains go "WriteHeader(201)")
 
+(* VAL-CROSS-003: Interop-heavy CRUD fixture is deterministic and downstream-tool clean *)
+let test_interop_crud_determinism () =
+  let src =
+    {|
+use net::http;
+
+let mut items: Vec<String> = Vec::new();
+
+fn handle_items(w: http::ResponseWriter, r: http::Request) {
+    let m = r.method;
+    if m == "GET" {
+        let mut response = "[";
+        let mut first = true;
+        for item in items {
+            if !first {
+                response = response + ", ";
+            }
+            response = response + "\"" + item + "\"";
+            first = false;
+        }
+        response = response + "]";
+        w.write_header(200);
+        w.write(response);
+    } else if m == "POST" {
+        let name = r.form_value("name");
+        if name == "" {
+            w.write_header(400);
+            w.write("missing name");
+        } else {
+            items.push(name);
+            w.write_header(201);
+            w.write("created: " + name);
+        }
+    } else {
+        w.write_header(405);
+        w.write("method not allowed");
+    }
+}
+
+fn main() {
+    let mux = http::new_serve_mux();
+    mux.handle_func("/items", handle_items);
+    mux.handle_func("/health", |w: http::ResponseWriter, r: http::Request| {
+        w.write_header(200);
+        w.write("ok");
+    });
+    http::listen_and_serve("127.0.0.1:3111", mux);
+}
+|}
+  in
+  let go1 = compile_snapshot src in
+  let go2 = compile_snapshot src in
+  Alcotest.(check string) "interop crud deterministic" go1 go2
+
+let test_interop_crud_go_cleanliness () =
+  let src =
+    {|
+use net::http;
+
+let mut items: Vec<String> = Vec::new();
+
+fn handle_items(w: http::ResponseWriter, r: http::Request) {
+    let m = r.method;
+    if m == "GET" {
+        let mut response = "[";
+        let mut first = true;
+        for item in items {
+            if !first {
+                response = response + ", ";
+            }
+            response = response + "\"" + item + "\"";
+            first = false;
+        }
+        response = response + "]";
+        w.write_header(200);
+        w.write(response);
+    } else if m == "POST" {
+        let name = r.form_value("name");
+        if name == "" {
+            w.write_header(400);
+            w.write("missing name");
+        } else {
+            items.push(name);
+            w.write_header(201);
+            w.write("created: " + name);
+        }
+    } else {
+        w.write_header(405);
+        w.write("method not allowed");
+    }
+}
+
+fn main() {
+    let mux = http::new_serve_mux();
+    mux.handle_func("/items", handle_items);
+    mux.handle_func("/health", |w: http::ResponseWriter, r: http::Request| {
+        w.write_header(200);
+        w.write("ok");
+    });
+    http::listen_and_serve("127.0.0.1:3111", mux);
+}
+|}
+  in
+  (* compile_and_check without expected_output validates gofmt, go build, go vet *)
+  let _go = compile_and_check src in
+  ()
+
 let () =
   Alcotest.run "codegen"
     [
@@ -3245,5 +3352,12 @@ let () =
           Alcotest.test_case
             "http crud fixture reordered compiles and is gofmt clean" `Quick
             test_http_crud_fixture_reordered;
+        ] );
+      ( "interop-determinism",
+        [
+          Alcotest.test_case "interop crud fixture compiles deterministically"
+            `Quick test_interop_crud_determinism;
+          Alcotest.test_case "interop crud fixture is gofmt build and vet clean"
+            `Quick test_interop_crud_go_cleanliness;
         ] );
     ]
