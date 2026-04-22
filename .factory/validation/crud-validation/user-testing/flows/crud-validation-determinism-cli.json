@@ -1,0 +1,117 @@
+{
+  "groupId": "crud-validation-determinism-cli",
+  "testedAt": "2026-04-22T22:11:24+03:00",
+  "isolation": {
+    "repoRoot": "/home/lenstr/workspace/personal/hack/rgo-lang",
+    "missionDir": "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7",
+    "fixturePath": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/runtime/interop-crud.rg",
+    "surface": "rgoc CLI + generated Go artifacts",
+    "evidenceDir": "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/crud-validation/crud-validation-determinism-cli",
+    "reportPath": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/crud-validation/user-testing/flows/crud-validation-determinism-cli.json",
+    "duneBuildDirs": [
+      "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/crud-validation/crud-validation-determinism-cli/dune-build/run1",
+      "/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/evidence/crud-validation/crud-validation-determinism-cli/dune-build/run2"
+    ]
+  },
+  "toolsUsed": [
+    "nix develop -c dune exec rgoc",
+    "cmp",
+    "sha256sum",
+    "nix develop -c gofmt -d",
+    "nix develop -c go build",
+    "nix develop -c go vet"
+  ],
+  "assertions": [
+    {
+      "id": "VAL-CROSS-003",
+      "title": "Interop-heavy programs emit deterministic, formatter-stable, buildable Go",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Compile the tracked fixture once with DUNE_BUILD_DIR=.../dune-build/run1",
+          "expected": "rgoc exits 0 and writes the first generated Go file under the evidence directory",
+          "observed": "`nix develop ... -c dune exec rgoc -- interop-crud.rg -o interop-crud-run1.go` exited 0 and wrote `crud-validation/crud-validation-determinism-cli/interop-crud-run1.go`; stdout contained only the Nix shell banner and stderr contained repeatable parser warnings from dune/menhir setup."
+        },
+        {
+          "action": "Compile the same fixture again with DUNE_BUILD_DIR=.../dune-build/run2",
+          "expected": "Second rgoc run exits 0 and writes a second generated Go file under the evidence directory",
+          "observed": "`nix develop ... -c dune exec rgoc -- interop-crud.rg -o interop-crud-run2.go` exited 0 and wrote `crud-validation/crud-validation-determinism-cli/interop-crud-run2.go`; stdout/stderr shape matched the first run."
+        },
+        {
+          "action": "Compare the two generated Go outputs byte-for-byte",
+          "expected": "Outputs are identical with stable helper naming/import ordering",
+          "observed": "`cmp -s` succeeded and `sha256sum` reported the same digest for both files: `6dc6bc2434a4ca82ef4236b209ff837b276e2ff6f681994c085d2924659b3f4a`."
+        },
+        {
+          "action": "Run `nix develop -c gofmt -d` on the first generated Go file",
+          "expected": "Formatter emits no diff",
+          "observed": "After filtering the fixed 5-line Nix shell banner from stdout, the assertion-focused diff log was empty (`logs/gofmt-diff.cleaned.log` contains `empty`)."
+        },
+        {
+          "action": "Run `nix develop -c go build` on the first generated Go file",
+          "expected": "Go compiler accepts the emitted file and produces a binary",
+          "observed": "`go build` exited 0, produced `crud-validation/crud-validation-determinism-cli/interop-crud-run1.bin`, and wrote no stderr output."
+        },
+        {
+          "action": "Run `nix develop -c go vet` on the first generated Go file",
+          "expected": "Vet exits 0 with no findings",
+          "observed": "`go vet` exited 0 with an empty stderr log."
+        },
+        {
+          "action": "Inspect the generated Go to confirm it is the CRUD interop fixture",
+          "expected": "Generated Go imports `net/http` and lowers CRUD handler/server operations from the fixture",
+          "observed": "The generated file imports `net/http`; lowers `r.method` to `r.Method`, `r.form_value(\"name\")` to `r.FormValue(\"name\")`, `w.write_header`/`w.write` to `w.WriteHeader`/`w.Write`, registers `/items` with `mux.HandleFunc(\"/items\", handle_items)`, registers `/health` with an inline func literal, and starts the server with `http.ListenAndServe(\"127.0.0.1:3111\", mux)`."
+        }
+      ],
+      "evidence": {
+        "terminalSnapshots": [
+          "crud-validation/crud-validation-determinism-cli/logs/compile-run1.stdout.log",
+          "crud-validation/crud-validation-determinism-cli/logs/compile-run1.stderr.log",
+          "crud-validation/crud-validation-determinism-cli/logs/compile-run2.stdout.log",
+          "crud-validation/crud-validation-determinism-cli/logs/compile-run2.stderr.log",
+          "crud-validation/crud-validation-determinism-cli/logs/determinism-check.log",
+          "crud-validation/crud-validation-determinism-cli/logs/gofmt-diff.log",
+          "crud-validation/crud-validation-determinism-cli/logs/gofmt-diff.cleaned.log",
+          "crud-validation/crud-validation-determinism-cli/logs/go-build.stdout.log",
+          "crud-validation/crud-validation-determinism-cli/logs/go-build.stderr.log",
+          "crud-validation/crud-validation-determinism-cli/logs/go-vet.stdout.log",
+          "crud-validation/crud-validation-determinism-cli/logs/go-vet.stderr.log"
+        ],
+        "artifacts": [
+          "crud-validation/crud-validation-determinism-cli/interop-crud-run1.go",
+          "crud-validation/crud-validation-determinism-cli/interop-crud-run2.go",
+          "crud-validation/crud-validation-determinism-cli/interop-crud-run1.bin"
+        ],
+        "determinism": "`cmp -s` passed; both outputs hashed to `6dc6bc2434a4ca82ef4236b209ff837b276e2ff6f681994c085d2924659b3f4a`.",
+        "formatter": "`gofmt -d` produced no diff after removing the fixed Nix shell banner from stdout.",
+        "build": "`go build` exited 0.",
+        "vet": "`go vet` exited 0.",
+        "codeInspection": {
+          "importNetHttp": true,
+          "itemsRouteLowering": "`mux.HandleFunc(\"/items\", handle_items)`",
+          "healthRouteLowering": "`mux.HandleFunc(\"/health\", func(w http.ResponseWriter, r *http.Request) { ... })`",
+          "serverLowering": "`http.ListenAndServe(\"127.0.0.1:3111\", mux)`",
+          "requestResponseLowering": [
+            "`r.Method`",
+            "`r.FormValue(\"name\")`",
+            "`w.WriteHeader(...)`",
+            "`w.Write([]byte(...))`"
+          ]
+        }
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [
+    {
+      "description": "`nix develop -c ...` prepended a fixed 5-line dev-shell banner to stdout, so the raw `gofmt -d` log was noisy even though the formatter produced no actual diff.",
+      "resolved": true,
+      "resolution": "Captured `crud-validation/crud-validation-determinism-cli/logs/gofmt-diff.cleaned.log` by stripping the banner and verified the remaining content was empty.",
+      "affectedAssertions": [
+        "VAL-CROSS-003"
+      ]
+    }
+  ],
+  "blockers": [],
+  "summary": "VAL-CROSS-003 passed. The tracked `interop-crud.rg` fixture compiled twice with isolated DUNE_BUILD_DIR values to byte-identical Go outputs, the emitted Go stayed formatter-stable, and downstream `go build`/`go vet` both exited 0. Generated Go inspection confirmed the expected `net/http` CRUD handler/server lowering."
+}
