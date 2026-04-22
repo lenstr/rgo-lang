@@ -2533,6 +2533,57 @@ fn main() {
 }
 |}
 
+(* VAL-OWN-010: Nested Option with non-Copy payload partial move rejected *)
+let own_nested_option_pattern_partial_move_negative =
+  {|
+struct Inner {
+  pub name: str,
+}
+
+fn main() {
+  let opt: Option<Option<Inner>> = Some(Some(Inner { name: "hi" }));
+  match opt {
+    Option::Some(Option::Some(inner)) => println(inner.name),
+    Option::Some(Option::None) => println("none"),
+    Option::None => println("none"),
+  }
+}
+|}
+
+(* VAL-OWN-010: Nested Result with non-Copy payload partial move rejected *)
+let own_nested_result_pattern_partial_move_negative =
+  {|
+struct Inner {
+  pub name: str,
+}
+
+fn main() {
+  let res: Result<Option<Inner>, str> = Ok(Some(Inner { name: "hi" }));
+  match res {
+    Result::Ok(Option::Some(inner)) => println(inner.name),
+    Result::Ok(Option::None) => println("none"),
+    Result::Err(e) => println(e),
+  }
+}
+|}
+
+(* VAL-OWN-010: Nested Option in Result with non-Copy payload rejected *)
+let own_option_in_result_pattern_partial_move_negative =
+  {|
+struct Inner {
+  pub name: str,
+}
+
+fn main() {
+  let res: Result<Result<Inner, str>, str> = Ok(Ok(Inner { name: "hi" }));
+  match res {
+    Result::Ok(Result::Ok(inner)) => println(inner.name),
+    Result::Ok(Result::Err(e)) => println(e),
+    Result::Err(e) => println(e),
+  }
+}
+|}
+
 (* VAL-OWN-010: Consuming self match with enum payload partial move rejected *)
 let own_self_match_enum_payload_negative =
   {|
@@ -2681,6 +2732,18 @@ let ownership_negative_tests =
       `Quick,
       fail ~expect:"partial moves are not supported"
         own_result_pattern_partial_move_negative );
+    ( "nested Option non-Copy payload pattern rejected",
+      `Quick,
+      fail ~expect:"partial moves are not supported"
+        own_nested_option_pattern_partial_move_negative );
+    ( "nested Result non-Copy payload pattern rejected",
+      `Quick,
+      fail ~expect:"partial moves are not supported"
+        own_nested_result_pattern_partial_move_negative );
+    ( "nested Option in Result non-Copy payload pattern rejected",
+      `Quick,
+      fail ~expect:"partial moves are not supported"
+        own_option_in_result_pattern_partial_move_negative );
     ( "consuming self match enum payload rejected",
       `Quick,
       fail ~expect:"partial moves are not supported"

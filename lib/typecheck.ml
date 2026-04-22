@@ -227,9 +227,10 @@ let is_partial_move_type (env : env) (t : ty) : bool =
 
 (* Whether a payload type extracted via pattern destructuring would
    constitute a disallowed partial move.  For built-in Option/Result
-   pattern bindings we only reject non-Copy user-defined nominal types,
-   not nested built-in containers. *)
-let is_destructure_move_type (env : env) (t : ty) : bool =
+   pattern bindings we reject non-Copy user-defined nominal types and
+   recursively reject nested built-in containers that wrap non-Copy
+   payloads. *)
+let rec is_destructure_move_type (env : env) (t : ty) : bool =
   match t with
   | TStruct (name, _) | TEnum (name, _) -> (
       match SMap.find_opt name env.trait_impls with
@@ -240,6 +241,9 @@ let is_destructure_move_type (env : env) (t : ty) : bool =
       | Some bounds -> not (List.mem "Copy" bounds)
       | None -> true)
   | TVec _ | THashMap _ | TImported _ -> true
+  | TOption t -> is_destructure_move_type env t
+  | TResult (t1, t2) ->
+      is_destructure_move_type env t1 || is_destructure_move_type env t2
   | _ -> false
 
 (* ---------- AST type -> internal type ---------- *)
