@@ -48,7 +48,8 @@
  (modules test_codegen)
  (libraries rgo alcotest codegen_test_helpers)
  (deps
-  (glob_files ../examples/*.rg)))
+  (glob_files ../examples/*.rg)
+  ../.factory/runtime/interop-crud.rg))
 
 (test
  (name test_codegen_ownership)
