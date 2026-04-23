@@ -1,0 +1,60 @@
+{
+  "milestone": "misc-http-followups",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "nix develop -c dune runtest -j 16",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "nix develop -c dune build -j 16",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "nix develop -c dune build @fmt",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 2,
+    "passed": 1,
+    "failed": 1,
+    "failedFeatures": [
+      "misc-http-crud-runtime-regression-coverage"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "misc-http-crud-runtime-regression-coverage",
+      "severity": "blocking",
+      "description": "The live HTTP regression test in `test/e2e/test_e2e.ml` compiles a duplicated inline CRUD program instead of the tracked representative fixture `.factory/runtime/interop-crud.rg`, so automated coverage can pass while the real validation fixture drifts."
+    }
+  ],
+  "nonBlockingIssues": [],
+  "appliedUpdates": [
+    {
+      "target": "library",
+      "description": "Documented `.factory/runtime/interop-crud.rg` as the canonical representative CRUD validation fixture in `.factory/library/environment.md` so future automation reuses the tracked live-validation source.",
+      "sourceFeature": "misc-http-crud-runtime-regression-coverage"
+    },
+    {
+      "target": "library",
+      "description": "Documented the dune hidden-directory requirement in `.factory/library/environment.md`: tracked fixtures under `.factory/` require root opt-in via `(dirs :standard .factory)` plus explicit test `deps`.",
+      "sourceFeature": "misc-crud-validation-fixture-drift-coverage"
+    }
+  ],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "skill:.factory/skills/compiler-worker/SKILL.md",
+      "suggestion": "Clarify whether pure regression-test features are exempt from the compiler-worker manual HTTP exercise requirement, or require workers to report a deviation when they skip the compile/build/run/curl command capture mandated for HTTP-facing work.",
+      "evidence": "The reviewer for `misc-http-crud-runtime-regression-coverage` found that `.factory/skills/compiler-worker/SKILL.md` still requires manual `127.0.0.1:3111` exercise and exact command capture for HTTP-facing work, but worker session `300a0c87-428f-48ef-a3ab-dbd9a059cb1e` recorded only repo validator commands while marking `skillFeedback.followedProcedure: true`.",
+      "isSystemic": false
+    }
+  ],
+  "rejectedObservations": [],
+  "previousRound": null
+}

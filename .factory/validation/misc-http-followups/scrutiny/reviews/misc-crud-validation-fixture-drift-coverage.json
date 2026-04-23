@@ -1,0 +1,21 @@
+{
+  "featureId": "misc-crud-validation-fixture-drift-coverage",
+  "reviewedAt": "2026-04-23T00:41:55Z",
+  "commitId": "2ab4ea92480051101f5ccc5220d9bd74a38aa62f",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Reviewed feature metadata, the worker handoff, transcript skeleton for session `65be3a0b-6de8-4e91-9587-0c62e98ef052`, the `compiler-worker` skill, shared-state docs, and commit `2ab4ea92480051101f5ccc5220d9bd74a38aa62f`. The implementation does what the feature asks: the VAL-CROSS-003 determinism and downstream-tool cleanliness tests now load the tracked `.factory/runtime/interop-crud.rg` fixture directly (`test/test_codegen.ml:3439-3448`), `test/dune:50-52` declares the fixture as an explicit dependency so dune copies it into the build tree, and `dune:1` opts the hidden `.factory` directory into dune traversal. I did not find any blocking or non-blocking correctness defects in the feature diff.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "Mission shared-state docs do not currently mention that dune ignores hidden top-level directories like `.factory` unless the repo opts them in explicitly. This worker first added the fixture path to `test/dune`, hit a failing `dune runtest`, then had to discover and add the root `dune:1` stanza `(dirs :standard .factory)`. That hidden-directory requirement is actionable repo knowledge for any future work that depends on tracked fixtures under `.factory/`.",
+      "evidence": "The transcript skeleton for session `65be3a0b-6de8-4e91-9587-0c62e98ef052` shows an edit to `test/dune`, a failing `nix develop -c dune runtest -j 16`, then a `Glob` over repo `dune` files before creating the new root `dune` file. The final fix is visible in `dune:1` and `test/dune:50-52`, while neither mission `AGENTS.md` nor `.factory/library/*.md` mentions the hidden-directory dune requirement."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Pass. The feature correctly repoints VAL-CROSS-003 determinism/cleanliness coverage at the tracked `.factory/runtime/interop-crud.rg` fixture and includes the dune wiring needed for that fixture to be available under test."
+}

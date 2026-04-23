@@ -32,6 +32,8 @@ The only runtime dependency added by the mission is the Go stdlib surface exerci
 ## Mission-specific setup notes
 
 - The interop-first mission remains repo-local and stdlib-first.
+- The canonical representative CRUD validation fixture is `.factory/runtime/interop-crud.rg`; automated coverage for the live HTTP validation flow should reuse that tracked source instead of duplicating inline CRUD programs.
 - Validators and workers should compile the representative HTTP fixture into `./.factory/runtime/http-validation-server` for live HTTP checks.
 - The HTTP validation server should bind `127.0.0.1:3111` only.
+- Dune ignores hidden top-level directories by default. If tracked test fixtures under `.factory/` must be available during `dune` runs, the repo needs a root `dune` file that opts `.factory` in with `(dirs :standard .factory)`, and affected test stanzas still need explicit fixture `deps`.
 - Temporary generated Go files should be written under `.factory/runtime/` or another disposable path and cleaned up unless promoted to tracked fixtures.

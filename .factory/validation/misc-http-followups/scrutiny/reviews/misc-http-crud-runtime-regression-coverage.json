@@ -1,0 +1,33 @@
+{
+  "featureId": "misc-http-crud-runtime-regression-coverage",
+  "reviewedAt": "2026-04-23T00:43:28.545294Z",
+  "commitId": "f9876c8",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "Reviewed the feature metadata, handoff, transcript skeleton for session `300a0c87-428f-48ef-a3ab-dbd9a059cb1e`, the `compiler-worker` skill, and commit `f9876c8`. The new e2e coverage is directionally valuable because it compiles generated Go, starts a real `net/http` server, and probes the target CRUD request sequences with `curl`. However, the test does not exercise the mission's tracked representative CRUD fixture; it compiles and runs a second inline copy instead. That means the new automation can stay green while the actual validation fixture used elsewhere in the mission drifts, so the feature does not fully satisfy the requirement that automated expectations remain consistent with the existing manual/live validation flow.",
+    "issues": [
+      {
+        "file": "test/e2e/test_e2e.ml",
+        "line": 247,
+        "severity": "blocking",
+        "description": "The runtime regression test hardcodes a separate inline CRUD program in `crud_source` and compiles that shadow copy instead of the tracked representative fixture. Mission guidance says to compile the representative HTTP validation fixture (`/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/AGENTS.md:51-53`), and existing determinism/go-cleanliness coverage already points at `../.factory/runtime/interop-crud.rg` (`test/test_codegen.ml:3439-3447`). The divergence is already visible: the tracked fixture registers both `/items` and `/health` (`.factory/runtime/interop-crud.rg:38-43`), while the new test fixture only registers `/items` (`test/e2e/test_e2e.ml:284-287`). Because the automated probes are not tied to the real validation fixture, they can miss regressions or fixture drift in the live/manual path this feature is supposed to lock down."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `compiler-worker` skill still requires manual runtime exercise plus exact compile/build/run/curl command capture for HTTP-facing work, but this worker only recorded `dune` test/build commands and still marked `skillFeedback.followedProcedure: true`. Either the skill should explicitly exempt pure regression-test features, or the expected handoff/procedure reporting needs to be tightened.",
+      "evidence": "`/home/lenstr/workspace/personal/hack/rgo-lang/.factory/skills/compiler-worker/SKILL.md:26-28` requires manual exercise on `127.0.0.1:3111` and exact compile/build/run/curl capture. The transcript skeleton entry for session `300a0c87-428f-48ef-a3ab-dbd9a059cb1e` shows only `dune runtest` / `dune build` Execute calls, and the handoff JSON records only repo validator commands while `skillFeedback.followedProcedure` is `true`."
+    },
+    {
+      "area": "knowledge",
+      "observation": "Mission shared state identifies that validators should use a representative HTTP validation fixture, but it does not name the canonical source file. That leaves the canonical CRUD fixture path implicit even though existing coverage already treats `.factory/runtime/interop-crud.rg` as the tracked artifact.",
+      "evidence": "`/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/AGENTS.md:51-53` says to compile the representative HTTP validation fixture without naming its source path, while `test/test_codegen.ml:3439-3447` already reads `../.factory/runtime/interop-crud.rg` directly and this feature introduced a second inline copy in `test/e2e/test_e2e.ml:247-289`."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Fail. The added live HTTP probes are useful, but they run against a duplicated inline CRUD program rather than the mission's tracked validation fixture, so the feature does not fully lock the existing CRUD validation flow against drift."
+}
