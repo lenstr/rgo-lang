@@ -709,6 +709,39 @@ fn main() {
     "no panic in generated code" true
     (not (contains go "panic"))
 
+(* Non-identifier Option scrutinees in expression context *)
+let test_option_non_identifier_scrutinee_expr () =
+  let src =
+    {|
+fn main() {
+    let a = match Some(42) {
+        Option::Some(v) => v,
+        Option::None => 0,
+    };
+    println(a);
+
+    let b = match (None as Option<i64>) {
+        Option::Some(v) => v,
+        Option::None => -1,
+    };
+    println(b);
+
+    let c = match Some(1 + 2) {
+        Option::Some(v) => v * 10,
+        Option::None => 0,
+    };
+    println(c);
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"42\n-1\n30\n" src in
+  Alcotest.(check bool)
+    "no panic in generated code" true
+    (not (contains go "panic"));
+  Alcotest.(check bool)
+    "typed nil for None scrutinee" false
+    (contains go "__match_opt_0 := nil")
+
 (* ---------- Result tests ---------- *)
 
 let test_result_basic () =
@@ -3696,6 +3729,8 @@ let () =
             test_option_deep_nested_3_levels_default_fallback;
           Alcotest.test_case "deep nested 3 levels outer None arm" `Quick
             test_option_deep_nested_3_levels_outer_none;
+          Alcotest.test_case "non-identifier Option scrutinee expr" `Quick
+            test_option_non_identifier_scrutinee_expr;
         ] );
       ( "result",
         [

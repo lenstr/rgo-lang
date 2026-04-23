@@ -1361,11 +1361,7 @@ let rec gen_expr env buf indent (ctx : expr_ctx) (e : Ast.expr) : unit =
           else gen_new_expr env buf indent (Some inner_ty) arg
       | ( ExprIdent { node = "None"; _ },
           TyGeneric ({ node = "Option"; _ }, [ inner_ty ]) ) ->
-          if is_nullable_ty env inner_ty then begin
-            env.shared.needs_option_struct <- true;
-            Printf.bprintf buf "rgo_none[%s]()" (go_type env inner_ty)
-          end
-          else Buffer.add_string buf "nil"
+          gen_none_for_type env buf inner_ty
       | _ ->
           Buffer.add_string buf (go_type env ty);
           Buffer.add_char buf '(';
@@ -1486,24 +1482,24 @@ and gen_args env buf indent args =
       gen_expr env buf indent CtxExpr a)
     args
 
+and gen_none_for_type env buf (inner_ty : Ast.ty) =
+  if is_nullable_ty env inner_ty then begin
+    env.shared.needs_option_struct <- true;
+    Printf.bprintf buf "rgo_none[%s]()" (go_type env inner_ty)
+  end
+  else Printf.bprintf buf "(*%s)(nil)" (go_type env inner_ty)
+
 and gen_none env buf =
   match env.ret_ty with
   | Some (TyGeneric ({ node = "Option"; _ }, [ inner ])) ->
-      if is_nullable_ty env inner then begin
-        env.shared.needs_option_struct <- true;
-        Buffer.add_string buf ("rgo_none[" ^ go_type env inner ^ "]()")
-      end
-      else Buffer.add_string buf "nil"
+      gen_none_for_type env buf inner
   | _ -> Buffer.add_string buf "nil"
 
 and gen_return_none env buf =
   match env.ret_ty with
   | Some (TyGeneric ({ node = "Option"; _ }, [ inner ])) ->
-      if is_nullable_ty env inner then begin
-        env.shared.needs_option_struct <- true;
-        Buffer.add_string buf ("return rgo_none[" ^ go_type env inner ^ "]()")
-      end
-      else Buffer.add_string buf "return nil"
+      Buffer.add_string buf "return ";
+      gen_none_for_type env buf inner
   | _ -> Buffer.add_string buf "return nil"
 
 and gen_new_expr env buf indent (inner_ty : Ast.ty option) arg =
