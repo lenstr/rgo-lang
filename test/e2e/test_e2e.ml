@@ -242,6 +242,186 @@ let test_import_unknown_member_no_output () =
         "member-aware diagnostic" true
         (contains msg "undefined member" || contains msg "unknown")
 
+(* ---- HTTP CRUD runtime regression tests ---- *)
+
+let crud_source =
+  {|
+use net::http;
+
+let mut items: Vec<String> = Vec::new();
+
+fn handle_items(w: http::ResponseWriter, r: http::Request) {
+    let m = r.method;
+    if m == "GET" {
+        let mut response = "[";
+        let mut first = true;
+        for item in items {
+            if !first {
+                response = response + ", ";
+            }
+            response = response + "\"" + item + "\"";
+            first = false;
+        }
+        response = response + "]";
+        w.write_header(200);
+        w.write(response);
+    } else if m == "POST" {
+        let name = r.form_value("name");
+        if name == "" {
+            w.write_header(400);
+            w.write("missing name");
+        } else {
+            items.push(name);
+            w.write_header(201);
+            w.write("created: " + name);
+        }
+    } else {
+        w.write_header(405);
+        w.write("method not allowed");
+    }
+}
+
+fn main() {
+    let mux = http::new_serve_mux();
+    mux.handle_func("/items", handle_items);
+    http::listen_and_serve("127.0.0.1:3111", mux);
+}
+|}
+
+let http_get url =
+  let body_file = Filename.temp_file "rgo_http_" ".body" in
+  let code, status, _ =
+    run_cmd
+      (Printf.sprintf "curl -s -o %s -w '%%{http_code}' %s"
+         (Filename.quote body_file) url)
+  in
+  if code <> 0 then Alcotest.fail ("curl GET failed for " ^ url);
+  let body = read_file body_file in
+  Sys.remove body_file;
+  (int_of_string (String.trim status), body)
+
+let http_post url data =
+  let body_file = Filename.temp_file "rgo_http_" ".body" in
+  let code, status, _ =
+    run_cmd
+      (Printf.sprintf "curl -s -o %s -w '%%{http_code}' -X POST -d %s %s"
+         (Filename.quote body_file) (Filename.quote data) url)
+  in
+  if code <> 0 then Alcotest.fail ("curl POST failed for " ^ url);
+  let body = read_file body_file in
+  Sys.remove body_file;
+  (int_of_string (String.trim status), body)
+
+let http_delete url =
+  let code, status, _ =
+    run_cmd
+      (Printf.sprintf "curl -s -o /dev/null -w '%%{http_code}' -X DELETE %s" url)
+  in
+  if code <> 0 then Alcotest.fail ("curl DELETE failed for " ^ url);
+  int_of_string (String.trim status)
+
+let test_http_crud_runtime_regression () =
+  match Rgo.Driver.compile_string ~filename:"crud.rg" crud_source with
+  | Error _ -> Alcotest.fail "compilation should succeed"
+  | Ok go_src ->
+      let go_file = Filename.temp_file "rgo_crud_" ".go" in
+      let bin = Filename.temp_file "rgo_crud_" "" in
+      write_file go_file go_src;
+      let build_code, _, build_stderr =
+        run_cmd
+          (Printf.sprintf "go build -o %s %s" (Filename.quote bin)
+             (Filename.quote go_file))
+      in
+      if build_code <> 0 then Alcotest.fail ("go build failed:\n" ^ build_stderr);
+
+      (* Ensure port is free before starting the server *)
+      let port_check, _, _ = run_cmd "lsof -ti tcp:3111 >/dev/null 2>&1" in
+      if port_check = 0 then
+        Alcotest.fail "port 3111 is already in use; cannot start test server";
+
+      (* Start server in background and capture its PID *)
+      let start_cmd =
+        Printf.sprintf "%s > /dev/null 2>&1 & echo $!" (Filename.quote bin)
+      in
+      let _, pid_str, start_stderr = run_cmd start_cmd in
+      let pid = String.trim pid_str in
+      if pid = "" then Alcotest.fail ("failed to start server:\n" ^ start_stderr);
+
+      let cleanup () =
+        ignore
+          (run_cmd
+             (Printf.sprintf "kill %s 2>/dev/null || true" (Filename.quote pid)));
+        Sys.remove go_file;
+        try Sys.remove bin with Sys_error _ -> ()
+      in
+
+      Fun.protect ~finally:cleanup (fun () ->
+          (* Wait for server to become ready *)
+          let max_wait = 20 in
+          let rec wait_for_server n =
+            if n > max_wait then
+              Alcotest.fail "server did not start within timeout"
+            else
+              let ready_code, _, _ =
+                run_cmd "curl -sf http://127.0.0.1:3111/items >/dev/null 2>&1"
+              in
+              if ready_code = 0 then ()
+              else (
+                ignore (Sys.command "sleep 0.5");
+                wait_for_server (n + 1))
+          in
+          wait_for_server 0;
+
+          (* 1. Initial GET returns empty collection *)
+          let status, body = http_get "http://127.0.0.1:3111/items" in
+          Alcotest.(check int) "initial GET status" 200 status;
+          Alcotest.(check string) "initial GET body" "[]" body;
+
+          (* 2. POST creates an item *)
+          let post_status, post_body =
+            http_post "http://127.0.0.1:3111/items" "name=alice"
+          in
+          Alcotest.(check int) "POST status" 201 post_status;
+          Alcotest.(check string) "POST body" "created: alice" post_body;
+
+          (* 3. GET after POST shows the created item (read-after-create) *)
+          let get_status, get_body = http_get "http://127.0.0.1:3111/items" in
+          Alcotest.(check int) "GET after POST status" 200 get_status;
+          Alcotest.(check string) "GET after POST body" "[\"alice\"]" get_body;
+
+          (* 4. Malformed POST returns 400 *)
+          let bad_status, _ = http_post "http://127.0.0.1:3111/items" "" in
+          Alcotest.(check int) "malformed POST status" 400 bad_status;
+
+          (* 5. GET after malformed POST still shows previous state
+                (malformed-create state preservation) *)
+          let get2_status, get2_body = http_get "http://127.0.0.1:3111/items" in
+          Alcotest.(check int) "GET after malformed POST status" 200 get2_status;
+          Alcotest.(check string)
+            "GET after malformed POST body" "[\"alice\"]" get2_body;
+
+          (* 6. Unsupported method returns 405 *)
+          let del_status = http_delete "http://127.0.0.1:3111/items" in
+          Alcotest.(check int) "DELETE status" 405 del_status;
+
+          (* 7. GET still works after error traffic (post-error service health) *)
+          let get3_status, get3_body = http_get "http://127.0.0.1:3111/items" in
+          Alcotest.(check int) "GET after DELETE status" 200 get3_status;
+          Alcotest.(check string)
+            "GET after DELETE body" "[\"alice\"]" get3_body;
+
+          (* 8. Another POST works after error traffic *)
+          let post2_status, post2_body =
+            http_post "http://127.0.0.1:3111/items" "name=bob"
+          in
+          Alcotest.(check int) "second POST status" 201 post2_status;
+          Alcotest.(check string) "second POST body" "created: bob" post2_body;
+
+          (* 9. GET shows both items *)
+          let _, get4_body = http_get "http://127.0.0.1:3111/items" in
+          Alcotest.(check string)
+            "GET with two items body" "[\"alice\", \"bob\"]" get4_body)
+
 let () =
   Alcotest.run "e2e"
     [
@@ -278,5 +458,11 @@ let () =
             test_import_trait_collision_no_output;
           Alcotest.test_case "unknown stdlib member no output" `Quick
             test_import_unknown_member_no_output;
+        ] );
+      ( "http-crud-runtime",
+        [
+          Alcotest.test_case
+            "read-after-create, malformed-create, post-error health" `Quick
+            test_http_crud_runtime_regression;
         ] );
     ]
