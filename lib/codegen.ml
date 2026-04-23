@@ -813,6 +813,30 @@ and infer_method_ret_type env recv method_name =
       | None -> None)
   | _ -> None
 
+(* Returns true when an expression evaluates to a flat Result type. *)
+let is_flat_result_expr env (e : Ast.expr) : bool =
+  match infer_expr_type env e with
+  | Some ty -> is_flat_result_ty ty
+  | None -> false
+
+(* Emit a destructuring return for a prebuilt flat Result struct binding,
+   converting it to the correct Go (T, error) tuple. *)
+let gen_flat_result_ident_return env buf indent name =
+  let esc = escape_ident name in
+  match env.ret_ty with
+  | Some (TyGeneric ({ node = "Result"; _ }, [ ok_ty; _err_ty ])) ->
+      env.shared.needs_errors <- true;
+      Buffer.add_string buf indent;
+      Printf.bprintf buf "if %s.ok {\n" esc;
+      Buffer.add_string buf (indent ^ "\t");
+      Printf.bprintf buf "return %s.value, nil\n" esc;
+      Buffer.add_string buf indent;
+      Printf.bprintf buf "}\n";
+      Buffer.add_string buf indent;
+      Printf.bprintf buf "return %s, errors.New(%s.err)\n"
+        (go_zero_value env ok_ty) esc
+  | _ -> Printf.bprintf buf "%sreturn %s\n" indent esc
+
 (* Check whether a trait uses Self in any method signature *)
 let trait_uses_self (items : Ast.trait_item list) : bool =
   let rec ty_has_self (t : Ast.ty) : bool =
@@ -1394,9 +1418,13 @@ let rec gen_expr env buf indent (ctx : expr_ctx) (e : Ast.expr) : unit =
         Buffer.add_char buf '\n';
         emit_all_nested_cleanup env buf indent
       end;
-      Buffer.add_string buf indent;
-      Buffer.add_string buf "return ";
-      gen_expr env buf indent CtxExpr e
+      if should_flatten_result_return env && is_flat_result_expr env e then
+        gen_flat_result_ident_return env buf indent name
+      else begin
+        Buffer.add_string buf indent;
+        Buffer.add_string buf "return ";
+        gen_expr env buf indent CtxExpr e
+      end
   | ExprReturn (Some e) ->
       (* Ownership: emit cleanup for nested scope drops before returning,
          and suppress guards for consumed identifiers in the return expr. *)
@@ -2517,9 +2545,13 @@ and gen_final_expr_as_return env buf indent e =
           gen_expr env buf indent CtxStmt e;
           Buffer.add_char buf '\n'
       | _ ->
-          Printf.bprintf buf "%sreturn " indent;
-          gen_expr env buf indent CtxExpr e;
-          Buffer.add_char buf '\n')
+          if should_flatten_result_return env && is_flat_result_expr env e then
+            gen_flat_result_ident_return env buf indent name
+          else begin
+            Printf.bprintf buf "%sreturn " indent;
+            gen_expr env buf indent CtxExpr e;
+            Buffer.add_char buf '\n'
+          end)
   | _ ->
       if
         (* Ownership: suppress consumed guards and clean up nested Drop scopes
@@ -3308,6 +3340,9 @@ and gen_return_expr env buf indent (e : Ast.expr) =
           gen_expr env buf indent CtxExpr arg;
           Buffer.add_string buf ")\n"
       | _ -> go ())
+  | ExprIdent { node = name; _ }
+    when should_flatten_result_return env && is_flat_result_expr env e ->
+      gen_flat_result_ident_return env buf indent name
   | _ -> go ()
 
 and gen_match_return_branch env buf indent arm default_arm bind_pattern =
@@ -3621,12 +3656,18 @@ and gen_result_match_return_branch env buf indent arm default_arm value_name
             gen_expr env buf indent CtxExpr arm.arm_expr;
             Buffer.add_char buf '\n'
           end
-      | _ ->
+      | _ -> (
           let _cleaned = emit_return_cleanup env buf indent arm.arm_expr in
-          Buffer.add_string buf indent;
-          Buffer.add_string buf "return ";
-          gen_expr env buf indent CtxExpr arm.arm_expr;
-          Buffer.add_char buf '\n')
+          match arm.arm_expr with
+          | ExprIdent { node = name; _ }
+            when should_flatten_result_return env
+                 && is_flat_result_expr env arm.arm_expr ->
+              gen_flat_result_ident_return env buf indent name
+          | _ ->
+              Buffer.add_string buf indent;
+              Buffer.add_string buf "return ";
+              gen_expr env buf indent CtxExpr arm.arm_expr;
+              Buffer.add_char buf '\n'))
   | None ->
       Printf.bprintf buf "%spanic(\"unreachable: non-exhaustive match\")\n"
         indent

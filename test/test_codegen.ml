@@ -1743,6 +1743,109 @@ fn main() {
     "nested Result ? stmt discards .value" true
     (contains go "_ = __res_0.value")
 
+let test_flat_result_binding_final_expr () =
+  let src =
+    {|
+fn wrap(x: i64) -> Result<i64, str> {
+    let r = Ok(x);
+    r
+}
+
+fn main() {
+    let a = wrap(5);
+    match a {
+        Result::Ok(v) => println(v),
+        Result::Err(e) => println(e),
+    }
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"5\n" src in
+  Alcotest.(check bool)
+    "final expr Result ident destructures to tuple" true
+    (contains go "if r.ok {");
+  Alcotest.(check bool)
+    "final expr Ok path returns value, nil" true
+    (contains go "return r.value, nil");
+  Alcotest.(check bool)
+    "final expr Err path returns zero, errors.New" true
+    (contains go "return 0, errors.New(r.err)")
+
+let test_flat_result_binding_explicit_return () =
+  let src =
+    {|
+fn wrap_ok(x: i64) -> Result<i64, str> {
+    let r = Ok(x);
+    return r;
+}
+
+fn wrap_err() -> Result<i64, str> {
+    let r = Err("bad");
+    return r;
+}
+
+fn main() {
+    let a = wrap_ok(7);
+    let b = wrap_err();
+    match a {
+        Result::Ok(v) => println(v),
+        Result::Err(e) => println(e),
+    };
+    match b {
+        Result::Ok(v) => println(v),
+        Result::Err(e) => println(e),
+    };
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"7\nbad\n" src in
+  Alcotest.(check bool)
+    "explicit return Result ident destructures Ok" true
+    (contains go "if r.ok {");
+  Alcotest.(check bool)
+    "explicit return Ok path returns value, nil" true
+    (contains go "return r.value, nil");
+  Alcotest.(check bool)
+    "explicit return Err path returns zero, errors.New" true
+    (contains go "return 0, errors.New(r.err)")
+
+let test_flat_result_binding_match_arm () =
+  let src =
+    {|
+fn choose(src: Result<i64, str>) -> Result<i64, str> {
+    let good = Ok(99);
+    let bad = Err("fail");
+    match src {
+        Result::Ok(_) => good,
+        Result::Err(_) => bad,
+    }
+}
+
+fn main() {
+    let a = choose(Ok(1));
+    let b = choose(Err("x"));
+    match a {
+        Result::Ok(v) => println(v),
+        Result::Err(e) => println(e),
+    };
+    match b {
+        Result::Ok(v) => println(v),
+        Result::Err(e) => println(e),
+    };
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"99\nfail\n" src in
+  Alcotest.(check bool)
+    "match arm Result ident destructures to tuple" true
+    (contains go "if good.ok {");
+  Alcotest.(check bool)
+    "match arm Ok path returns value, nil" true
+    (contains go "return good.value, nil");
+  Alcotest.(check bool)
+    "match arm Err path returns zero, errors.New" true
+    (contains go "return 0, errors.New(good.err)")
+
 let test_array_literal () =
   let src = {|
 fn main() {
@@ -4175,6 +4278,12 @@ let () =
             test_nested_result_question_let;
           Alcotest.test_case "nested Result ? in stmt" `Quick
             test_nested_result_question_stmt;
+          Alcotest.test_case "flat Result binding final expr" `Quick
+            test_flat_result_binding_final_expr;
+          Alcotest.test_case "flat Result binding explicit return" `Quick
+            test_flat_result_binding_explicit_return;
+          Alcotest.test_case "flat Result binding match arm" `Quick
+            test_flat_result_binding_match_arm;
         ] );
       ( "array",
         [
