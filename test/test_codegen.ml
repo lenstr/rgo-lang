@@ -1298,6 +1298,54 @@ fn main() {
     (contains go "return 0, errors.New(\"var: \" + e)");
   Alcotest.(check bool) "var match uses .ok check" true (contains go ".ok")
 
+let test_nested_result_return_signature () =
+  let src =
+    {|
+fn nested_result(x: i64) -> Result<Result<i64, str>, str> {
+    if x > 0 {
+        Ok(Ok(x) as Result<i64, str>)
+    } else if x == 0 {
+        Ok(Err("zero") as Result<i64, str>)
+    } else {
+        Err("negative")
+    }
+}
+
+fn main() {
+    match nested_result(42) {
+        Result::Ok(Result::Ok(v)) => println(v),
+        Result::Ok(Result::Err(e)) => println(e),
+        Result::Err(e) => println(e),
+    };
+    match nested_result(0) {
+        Result::Ok(Result::Ok(v)) => println(v),
+        Result::Ok(Result::Err(e)) => println(e),
+        Result::Err(e) => println(e),
+    };
+    match nested_result(-1) {
+        Result::Ok(Result::Ok(v)) => println(v),
+        Result::Ok(Result::Err(e)) => println(e),
+        Result::Err(e) => println(e),
+    };
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"42\nzero\nnegative\n" src in
+  Alcotest.(check bool)
+    "nested Result return signature preserves outer Result" true
+    (contains go "Result[Result[int64, string], string]");
+  Alcotest.(check bool)
+    "nested Result Ok return preserves outer structure" true
+    (contains go
+       "Result[Result[int64, string], string]{ok: true, value: Result[int64, \
+        string]{ok: true, value: x}}");
+  Alcotest.(check bool)
+    "nested Result Err return preserves outer structure" true
+    (contains go "Result[Result[int64, string], string]{err: \"negative\"}");
+  Alcotest.(check bool)
+    "nested Result match uses struct pattern" true
+    (contains go "__match_res_0.ok")
+
 let test_array_literal () =
   let src = {|
 fn main() {
@@ -3691,6 +3739,8 @@ let () =
             test_result_match_as_return_err;
           Alcotest.test_case "result match as return var" `Quick
             test_result_match_as_return_var;
+          Alcotest.test_case "nested Result return signature" `Quick
+            test_nested_result_return_signature;
         ] );
       ( "question-mark",
         [
