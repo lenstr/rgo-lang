@@ -1,21 +1,28 @@
 {
   "featureId": "misc-crud-validation-fixture-drift-coverage",
-  "reviewedAt": "2026-04-23T00:41:55Z",
+  "reviewedAt": "2026-04-23T00:51:09Z",
   "commitId": "2ab4ea92480051101f5ccc5220d9bd74a38aa62f",
   "transcriptSkeletonReviewed": true,
   "diffReviewed": true,
-  "status": "pass",
+  "status": "fail",
   "codeReview": {
-    "summary": "Reviewed feature metadata, the worker handoff, transcript skeleton for session `65be3a0b-6de8-4e91-9587-0c62e98ef052`, the `compiler-worker` skill, shared-state docs, and commit `2ab4ea92480051101f5ccc5220d9bd74a38aa62f`. The implementation does what the feature asks: the VAL-CROSS-003 determinism and downstream-tool cleanliness tests now load the tracked `.factory/runtime/interop-crud.rg` fixture directly (`test/test_codegen.ml:3439-3448`), `test/dune:50-52` declares the fixture as an explicit dependency so dune copies it into the build tree, and `dune:1` opts the hidden `.factory` directory into dune traversal. I did not find any blocking or non-blocking correctness defects in the feature diff.",
-    "issues": []
+    "summary": "Reviewed the feature metadata, the prior failed review at `/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/misc-http-followups/scrutiny/reviews/misc-http-crud-runtime-regression-coverage.json`, both worker handoffs, the transcript skeletons for sessions `300a0c87-428f-48ef-a3ab-dbd9a059cb1e` and `65be3a0b-6de8-4e91-9587-0c62e98ef052`, the `compiler-worker` skill, shared-state docs, and commits `f9876c8` and `2ab4ea92480051101f5ccc5220d9bd74a38aa62f`. The fix commit correctly repoints VAL-CROSS-003 determinism/cleanliness coverage at the tracked `.factory/runtime/interop-crud.rg` fixture and adds the dune wiring needed for that test to read a hidden `.factory` fixture. However, the original scrutiny failure was about the live HTTP regression test still compiling a shadow CRUD program instead of the tracked validation fixture, and commit `2ab4ea9` does not change that test surface. At commit `2ab4ea9`, `test/e2e/test_e2e.ml` still defines `crud_source` as an inline heredoc and still compiles that duplicate program, so the fix does not actually address the prior failure.",
+    "issues": [
+      {
+        "file": "test/e2e/test_e2e.ml",
+        "line": 247,
+        "severity": "blocking",
+        "description": "This rerun fix does not repair the original scrutiny failure. In the `2ab4ea9` tree, `crud_source` is still an inline duplicate heredoc rather than a read of `.factory/runtime/interop-crud.rg`, so the live HTTP regression test remains decoupled from the tracked representative fixture. The duplicate is observably different from the tracked fixture: it only registers `/items` (`test/e2e/test_e2e.ml:284-287` in commit `f9876c8` / `2ab4ea9`), while `.factory/runtime/interop-crud.rg:32-37` also registers `/health`. Because the reviewed fix only updates VAL-CROSS-003 in `test/test_codegen.ml`, the prior failure recorded in `/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/misc-http-followups/scrutiny/reviews/misc-http-crud-runtime-regression-coverage.json` remains unresolved."
+      }
+    ]
   },
   "sharedStateObservations": [
     {
-      "area": "conventions",
-      "observation": "Mission shared-state docs do not currently mention that dune ignores hidden top-level directories like `.factory` unless the repo opts them in explicitly. This worker first added the fixture path to `test/dune`, hit a failing `dune runtest`, then had to discover and add the root `dune:1` stanza `(dirs :standard .factory)`. That hidden-directory requirement is actionable repo knowledge for any future work that depends on tracked fixtures under `.factory/`.",
-      "evidence": "The transcript skeleton for session `65be3a0b-6de8-4e91-9587-0c62e98ef052` shows an edit to `test/dune`, a failing `nix develop -c dune runtest -j 16`, then a `Glob` over repo `dune` files before creating the new root `dune` file. The final fix is visible in `dune:1` and `test/dune:50-52`, while neither mission `AGENTS.md` nor `.factory/library/*.md` mentions the hidden-directory dune requirement."
+      "area": "knowledge",
+      "observation": "Mission shared state does not mention that dune ignores hidden top-level directories like `.factory` unless the repo opts them in explicitly. This worker first added the tracked fixture as a test dependency, hit a failing `dune runtest`, then had to discover and add the root `(dirs :standard .factory)` stanza before the fixture-based test wiring worked.",
+      "evidence": "The transcript skeleton for session `65be3a0b-6de8-4e91-9587-0c62e98ef052` shows an edit to `test/dune`, a failing `nix develop -c dune runtest -j 16`, then a `Glob` over repo `dune` files before creating `dune:1`. Neither `/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/AGENTS.md` nor `/home/lenstr/workspace/personal/hack/rgo-lang/.factory/library/architecture.md` documents that hidden-directory dune requirement."
     }
   ],
-  "addressesFailureFrom": null,
-  "summary": "Pass. The feature correctly repoints VAL-CROSS-003 determinism/cleanliness coverage at the tracked `.factory/runtime/interop-crud.rg` fixture and includes the dune wiring needed for that fixture to be available under test."
+  "addressesFailureFrom": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/misc-http-followups/scrutiny/reviews/misc-http-crud-runtime-regression-coverage.json",
+  "summary": "Fail. The reviewed commit fixes determinism coverage drift, but it does not address the prior scrutiny failure because the live HTTP regression test still compiles an inline CRUD duplicate instead of the tracked `.factory/runtime/interop-crud.rg` fixture."
 }

@@ -20,8 +20,8 @@ Representative validation flows:
 - verify failed compilations do not leave misleading output files behind
 - compile `.rg` input to `.go` via `rgoc input.rg -o output.go`
 - run `gofmt -d`, `go build`, `go vet`, and `go run` on generated output when appropriate
-- compile `.factory/runtime/http-server.rg` to `./.factory/runtime/http-validation-server` for live HTTP validation
-- use `.factory/runtime/interop-crud.rg` as the tracked interop-heavy compile/determinism fixture for repeated `rgoc` output comparisons
+- compile `.factory/runtime/interop-crud.rg` to `./.factory/runtime/http-validation-server` for live HTTP validation
+- use `.factory/runtime/interop-crud.rg` as the tracked interop-heavy fixture for both live HTTP validation and repeated `rgoc` output comparisons
 - start the fixture on `127.0.0.1:3111`
 - validate `GET /items`, `POST /items` with form field `name`, malformed `POST /items`, and unsupported-method traffic
 - use exact stdout ordering/counts to validate move/copy/clone/drop behavior
@@ -37,7 +37,7 @@ Representative validation flows:
 
 - Stay inside the repository root and use `nix develop -c ...` for all commands.
 - Use `.factory/services.yaml` as the source of truth for the reserved HTTP validation port and runtime binary path.
-- For live HTTP probes, compile `.factory/runtime/http-server.rg` to the shared `http-validation-server` binary path; reserve `.factory/runtime/interop-crud.rg` for compile/determinism validation unless mission guidance changes.
+- For live HTTP probes, compile `.factory/runtime/interop-crud.rg` to the shared `http-validation-server` binary path so automation and manual validation exercise the same tracked CRUD fixture.
 - Bind the generated HTTP fixture to `127.0.0.1:3111` only.
 - Prefer `curl` for HTTP assertions and capture full response status/body for create/read/error paths.
 - Treat `_build/`, `.factory/runtime/`, temporary generated Go files, and the localhost validation port as shared mutable state; run validations serially unless explicit isolated copies are provisioned.

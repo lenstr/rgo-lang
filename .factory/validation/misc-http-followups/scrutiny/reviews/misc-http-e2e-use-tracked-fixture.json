@@ -1,0 +1,28 @@
+{
+  "featureId": "misc-http-e2e-use-tracked-fixture",
+  "reviewedAt": "2026-04-23T00:52:03Z",
+  "commitId": "fd1f709",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "Reviewed the prior failed review at `/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/misc-http-followups/scrutiny/reviews/misc-http-crud-runtime-regression-coverage.json`, both feature handoffs, both transcript skeletons, the `compiler-worker` skill, the relevant shared-state docs, and commits `f9876c8` and `fd1f709`. The fix does remove the duplicated inline CRUD program and now loads the tracked fixture content from `.factory/runtime/interop-crud.rg` in `test/e2e/test_e2e.ml:247`, so it directly addresses the original source-divergence problem. However, the fix still leaves that tracked fixture undeclared in `test/e2e/dune`, so normal `dune runtest` invalidation does not know that the e2e executable depends on `.factory/runtime/interop-crud.rg`. Because the repo validator command is the non-forced `nix develop -c dune runtest -j 16`, future edits to the tracked fixture can still avoid re-running this regression test, which means the feature does not fully satisfy the goal that e2e automation cannot drift from the representative validation source.",
+    "issues": [
+      {
+        "file": "test/e2e/dune",
+        "line": 5,
+        "severity": "blocking",
+        "description": "The e2e test now reads `../../.factory/runtime/interop-crud.rg` at runtime (`test/e2e/test_e2e.ml:247`), but the dune stanza still declares only `../../examples/hello.rg` and `../../bin/main.exe` as deps (`test/e2e/dune:5`). Unlike `test/test_codegen`, which explicitly lists `../.factory/runtime/interop-crud.rg` as a dependency (`test/dune:52`), this test leaves the tracked fixture invisible to dune's invalidation graph. As a result, future edits to `.factory/runtime/interop-crud.rg` may not cause `test_e2e.exe` to re-run under the repo's standard `nix develop -c dune runtest -j 16` validator, so the drift-protection failure from the prior review is only partially fixed."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "knowledge",
+      "observation": "Mission shared-state docs now disagree about which tracked fixture should drive live HTTP automation. `environment.md` says automated live HTTP coverage should reuse `.factory/runtime/interop-crud.rg`, but `user-testing.md` still tells validators to compile `.factory/runtime/http-server.rg` for live probes and reserve `interop-crud.rg` for compile/determinism only.",
+      "evidence": "`.factory/library/environment.md:35-36` says live HTTP automation should reuse `.factory/runtime/interop-crud.rg`, while `.factory/library/user-testing.md:23-24,40` still directs live HTTP probes to `.factory/runtime/http-server.rg` and says to reserve `.factory/runtime/interop-crud.rg` for compile/determinism validation."
+    }
+  ],
+  "addressesFailureFrom": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/misc-http-followups/scrutiny/reviews/misc-http-crud-runtime-regression-coverage.json",
+  "summary": "Fail. The fix removes the inline CRUD copy and points the e2e test at the tracked `interop-crud.rg` fixture, but it does not add that fixture to `test/e2e/dune` deps, so ordinary `dune runtest` can still miss fixture changes and skip the regression."
+}

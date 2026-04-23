@@ -1,60 +1,58 @@
 {
   "milestone": "misc-http-followups",
-  "round": 1,
+  "round": 2,
   "status": "fail",
   "validatorsRun": {
     "test": {
       "passed": true,
-      "command": "nix develop -c dune runtest -j 16",
+      "command": "nix develop \"/home/lenstr/workspace/personal/hack/rgo-lang\" -c dune runtest -j 16",
       "exitCode": 0
     },
     "typecheck": {
       "passed": true,
-      "command": "nix develop -c dune build -j 16",
+      "command": "nix develop \"/home/lenstr/workspace/personal/hack/rgo-lang\" -c dune build -j 16",
       "exitCode": 0
     },
     "lint": {
       "passed": true,
-      "command": "nix develop -c dune build @fmt",
+      "command": "nix develop \"/home/lenstr/workspace/personal/hack/rgo-lang\" -c dune build @fmt",
       "exitCode": 0
     }
   },
   "reviewsSummary": {
     "total": 2,
-    "passed": 1,
-    "failed": 1,
+    "passed": 0,
+    "failed": 2,
     "failedFeatures": [
-      "misc-http-crud-runtime-regression-coverage"
+      "misc-crud-validation-fixture-drift-coverage",
+      "misc-http-e2e-use-tracked-fixture"
     ]
   },
   "blockingIssues": [
     {
-      "featureId": "misc-http-crud-runtime-regression-coverage",
+      "featureId": "misc-crud-validation-fixture-drift-coverage",
       "severity": "blocking",
-      "description": "The live HTTP regression test in `test/e2e/test_e2e.ml` compiles a duplicated inline CRUD program instead of the tracked representative fixture `.factory/runtime/interop-crud.rg`, so automated coverage can pass while the real validation fixture drifts."
+      "description": "This rerun fix only repoints VAL-CROSS-003 determinism coverage; it does not repair the original scrutiny failure because `test/e2e/test_e2e.ml` still compiles an inline duplicate CRUD program instead of the tracked `.factory/runtime/interop-crud.rg` fixture in the reviewed commit."
+    },
+    {
+      "featureId": "misc-http-e2e-use-tracked-fixture",
+      "severity": "blocking",
+      "description": "The e2e regression test now reads `.factory/runtime/interop-crud.rg`, but `test/e2e/dune` still does not declare that tracked fixture as a dependency, so ordinary `dune runtest -j 16` invalidation can skip re-running the regression when the fixture changes."
     }
   ],
-  "nonBlockingIssues": [],
   "appliedUpdates": [
     {
       "target": "library",
-      "description": "Documented `.factory/runtime/interop-crud.rg` as the canonical representative CRUD validation fixture in `.factory/library/environment.md` so future automation reuses the tracked live-validation source.",
-      "sourceFeature": "misc-http-crud-runtime-regression-coverage"
-    },
-    {
-      "target": "library",
-      "description": "Documented the dune hidden-directory requirement in `.factory/library/environment.md`: tracked fixtures under `.factory/` require root opt-in via `(dirs :standard .factory)` plus explicit test `deps`.",
-      "sourceFeature": "misc-crud-validation-fixture-drift-coverage"
+      "description": "Aligned `.factory/library/user-testing.md` so live HTTP validation and automation now both point at the tracked `.factory/runtime/interop-crud.rg` fixture instead of conflicting with `.factory/library/environment.md`.",
+      "sourceFeature": "misc-http-e2e-use-tracked-fixture"
     }
   ],
-  "suggestedGuidanceUpdates": [
+  "suggestedGuidanceUpdates": [],
+  "rejectedObservations": [
     {
-      "target": "skill:.factory/skills/compiler-worker/SKILL.md",
-      "suggestion": "Clarify whether pure regression-test features are exempt from the compiler-worker manual HTTP exercise requirement, or require workers to report a deviation when they skip the compile/build/run/curl command capture mandated for HTTP-facing work.",
-      "evidence": "The reviewer for `misc-http-crud-runtime-regression-coverage` found that `.factory/skills/compiler-worker/SKILL.md` still requires manual `127.0.0.1:3111` exercise and exact command capture for HTTP-facing work, but worker session `300a0c87-428f-48ef-a3ab-dbd9a059cb1e` recorded only repo validator commands while marking `skillFeedback.followedProcedure: true`.",
-      "isSystemic": false
+      "observation": "Document that dune ignores hidden top-level directories like `.factory` unless the repo opts them in with `(dirs :standard .factory)` and test stanzas add explicit fixture `deps`.",
+      "reason": "already-documented in `.factory/library/environment.md` during round 1"
     }
   ],
-  "rejectedObservations": [],
-  "previousRound": null
+  "previousRound": ".factory/validation/misc-http-followups/scrutiny/synthesis.round1.json"
 }
