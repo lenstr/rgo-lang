@@ -1344,6 +1344,103 @@ fn main() {
     "nested match IIFE does not use tuple return" false
     (contains go "return 99, nil")
 
+let test_nested_result_if_iife_local_binding () =
+  let src =
+    {|
+fn outer() -> Result<i64, str> {
+    let inner = if true {
+        let x = Ok(7);
+        x
+    } else {
+        let y = Err("fail");
+        y
+    };
+    match inner {
+        Result::Ok(v) => Ok(v),
+        Result::Err(e) => Err(e),
+    }
+}
+
+fn main() {
+    match outer() {
+        Result::Ok(v) => println(v),
+        Result::Err(e) => println(e),
+    }
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"7\n" src in
+  Alcotest.(check bool)
+    "nested if IIFE local binding returns Result struct" true
+    (contains go "func() Result[int64, string] {");
+  Alcotest.(check bool)
+    "nested if IIFE local binding does not use any" false
+    (contains go "func() any {")
+
+let test_nested_result_match_iife_local_binding () =
+  let src =
+    {|
+fn outer() -> Result<Result<i64, str>, str> {
+    let src: Result<Result<i64, str>, str> = Ok(Ok(1));
+    let inner = match src {
+        Result::Ok(v) => {
+            let x = Ok(v);
+            x
+        },
+        Result::Err(e) => {
+            let y = Err(e);
+            y
+        },
+    };
+    inner
+}
+
+fn main() {
+    match outer() {
+        Result::Ok(v) => println(v),
+        Result::Err(e) => println(e),
+    }
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"{true 1 }\n" src in
+  Alcotest.(check bool)
+    "nested match IIFE local binding returns Result struct" true
+    (contains go "func() Result[Result[int64, string], string] {");
+  Alcotest.(check bool)
+    "nested match IIFE local binding does not use any" false
+    (contains go "func() any {")
+
+let test_match_iife_pattern_binding () =
+  let src =
+    {|
+enum MyOpt {
+    Some(i64),
+    None,
+}
+
+fn outer() -> i64 {
+    let src: MyOpt = MyOpt::Some(42);
+    let inner = match src {
+        MyOpt::Some(v) => v,
+        MyOpt::None => 0,
+    };
+    inner
+}
+
+fn main() {
+    println(outer())
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"42\n" src in
+  Alcotest.(check bool)
+    "match IIFE pattern binding returns concrete type" true
+    (contains go "func() int64 {");
+  Alcotest.(check bool)
+    "match IIFE pattern binding does not use any" false
+    (contains go "func() any {")
+
 let test_result_match_as_return_ok () =
   let src =
     {|
@@ -4041,6 +4138,12 @@ let () =
             test_nested_result_if_iife;
           Alcotest.test_case "nested result match iife" `Quick
             test_nested_result_match_iife;
+          Alcotest.test_case "nested result if iife local binding" `Quick
+            test_nested_result_if_iife_local_binding;
+          Alcotest.test_case "nested result match iife local binding" `Quick
+            test_nested_result_match_iife_local_binding;
+          Alcotest.test_case "match iife pattern binding" `Quick
+            test_match_iife_pattern_binding;
           Alcotest.test_case "result match as return Ok" `Quick
             test_result_match_as_return_ok;
           Alcotest.test_case "result match as return Err" `Quick

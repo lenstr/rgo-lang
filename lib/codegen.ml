@@ -636,10 +636,10 @@ let rec infer_expr_type env (e : Ast.expr) : Ast.ty option =
       match SMap.find_opt type_name.node env.enums with
       | Some _ -> Some (TyName type_name)
       | None -> None)
-  | ExprIf (_, then_blk, _) -> infer_block_type env then_blk
-  | ExprMatch (_, arms) -> (
+  | ExprIf (_, then_blk, _) -> infer_block_type_with_local_fallback env then_blk
+  | ExprMatch (scrutinee, arms) -> (
       match arms with
-      | arm :: _ -> infer_expr_type env arm.arm_expr
+      | arm :: _ -> infer_arm_expr_type env scrutinee arm
       | [] -> None)
   | ExprBlock blk -> infer_block_type env blk
   | ExprReturn _ -> Some (TyName (dummy_loc "void"))
@@ -689,6 +689,97 @@ and infer_local_binding_ty env blk name =
     | _ :: rest -> scan rest
   in
   scan blk.stmts
+
+(* Infer block type, falling back to local let-binding type when the final
+   expression is an identifier bound inside the block. *)
+and infer_block_type_with_local_fallback env blk =
+  match infer_block_type env blk with
+  | Some t -> Some t
+  | None -> (
+      match blk.final_expr with
+      | Some (ExprIdent { node = name; _ }) ->
+          infer_local_binding_ty env blk name
+      | _ -> None)
+
+(* Try to infer the type of a variable bound by a match pattern. *)
+and infer_pat_binding_ty env scrutinee_ty pat name =
+  let rec find pat ty =
+    match pat with
+    | PatBind n when n.node = name -> Some ty
+    | PatBind _ -> None
+    | PatWild | PatLit _ -> None
+    | PatTuple (ename, vname, pats) -> (
+        let payload_tys =
+          match ty with
+          | TyGeneric ({ node = "Result"; _ }, [ ok_ty; err_ty ]) -> (
+              match vname.node with
+              | "Ok" when List.length pats = 1 -> Some [ ok_ty ]
+              | "Err" when List.length pats = 1 -> Some [ err_ty ]
+              | _ -> None)
+          | TyGeneric ({ node = "Option"; _ }, [ inner_ty ]) -> (
+              match vname.node with
+              | "Some" when List.length pats = 1 -> Some [ inner_ty ]
+              | _ -> None)
+          | _ -> (
+              match SMap.find_opt ename.node env.enums with
+              | Some ei -> (
+                  match List.assoc_opt vname.node ei.ei_variants with
+                  | Some (VTuple tys) -> Some tys
+                  | Some (VStruct fields) ->
+                      Some (List.map (fun f -> f.fd_ty) fields)
+                  | _ -> None)
+              | None -> None)
+        in
+        match payload_tys with
+        | Some tys -> find_in_list pats tys
+        | None -> None)
+    | PatStruct (ename, vname, field_pats) -> (
+        match SMap.find_opt ename.node env.enums with
+        | Some ei -> (
+            match List.assoc_opt vname.node ei.ei_variants with
+            | Some (VStruct fields) -> find_in_field_pats field_pats fields
+            | _ -> None)
+        | None -> None)
+  and find_in_list pats tys =
+    match (pats, tys) with
+    | p :: ps, t :: ts -> (
+        match find p t with Some r -> Some r | None -> find_in_list ps ts)
+    | _ -> None
+  and find_in_field_pats field_pats fields =
+    match field_pats with
+    | [] -> None
+    | fp :: rest -> (
+        let field_ty_opt =
+          List.find_opt (fun f -> f.fd_name.node = fp.fp_name.node) fields
+        in
+        match field_ty_opt with
+        | None -> find_in_field_pats rest fields
+        | Some f -> (
+            match fp.fp_pat with
+            | None -> (
+                match find (PatBind fp.fp_name) f.fd_ty with
+                | Some r -> Some r
+                | None -> find_in_field_pats rest fields)
+            | Some p -> (
+                match find p f.fd_ty with
+                | Some r -> Some r
+                | None -> find_in_field_pats rest fields)))
+  in
+  find pat scrutinee_ty
+
+(* Infer the type of a match arm expression, handling blocks with local
+   bindings and pattern-bound identifiers. *)
+and infer_arm_expr_type env scrutinee arm =
+  match infer_expr_type env arm.arm_expr with
+  | Some t -> Some t
+  | None -> (
+      match arm.arm_expr with
+      | ExprBlock blk -> infer_block_type_with_local_fallback env blk
+      | ExprIdent { node = name; _ } -> (
+          match infer_expr_type env scrutinee with
+          | Some ty -> infer_pat_binding_ty env ty arm.arm_pat name
+          | None -> None)
+      | _ -> None)
 
 and infer_method_ret_type env recv method_name =
   match infer_expr_type env recv with
@@ -2088,7 +2179,7 @@ and gen_if env buf indent ctx cond then_blk else_blk =
       | None -> ())
   | CtxExpr ->
       (* IIFE for if-expression *)
-      let ret_ty = infer_block_type env then_blk in
+      let ret_ty = infer_block_type_with_local_fallback env then_blk in
       let go_sig, inner_env = result_iife_sig_and_env env ret_ty in
       Printf.bprintf buf "func() %s {\n" go_sig;
       let ni = indent ^ "\t" in
@@ -2149,7 +2240,7 @@ and gen_match env buf indent ctx scrutinee arms =
       | CtxExpr ->
           let ret_ty =
             match arms with
-            | arm :: _ -> infer_expr_type env arm.arm_expr
+            | arm :: _ -> infer_arm_expr_type env scrutinee arm
             | [] -> None
           in
           let go_sig, inner_env = result_iife_sig_and_env env ret_ty in
@@ -3400,7 +3491,7 @@ and gen_result_match env buf indent ctx scrutinee arms _ok_ty _err_ty =
   | CtxExpr ->
       let ret_ty =
         match arms with
-        | arm :: _ -> infer_expr_type env arm.arm_expr
+        | arm :: _ -> infer_arm_expr_type env scrutinee arm
         | [] -> None
       in
       let go_sig, inner_env = result_iife_sig_and_env env ret_ty in
@@ -3682,7 +3773,7 @@ and gen_option_match env buf indent ctx scrutinee arms inner_ty =
   | CtxExpr ->
       let ret_ty =
         match arms with
-        | arm :: _ -> infer_expr_type env arm.arm_expr
+        | arm :: _ -> infer_arm_expr_type env scrutinee arm
         | [] -> None
       in
       let gt = match ret_ty with Some t -> go_type env t | None -> "any" in
@@ -3859,15 +3950,7 @@ and gen_block_expr env buf indent ctx blk =
   match ctx with
   | CtxStmt -> gen_block_stmts env buf indent blk
   | CtxExpr ->
-      let ret_ty =
-        match infer_block_type env blk with
-        | Some t -> Some t
-        | None -> (
-            match blk.final_expr with
-            | Some (ExprIdent { node = name; _ }) ->
-                infer_local_binding_ty env blk name
-            | _ -> None)
-      in
+      let ret_ty = infer_block_type_with_local_fallback env blk in
       let go_sig, inner_env = result_iife_sig_and_env env ret_ty in
       Printf.bprintf buf "func() %s {\n" go_sig;
       gen_block_with_return inner_env buf (indent ^ "\t") blk;
