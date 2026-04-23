@@ -1389,7 +1389,8 @@ fn main() {
   Alcotest.(check bool)
     "casted match-as-return var Err arm returns tuple" true
     (contains go "return 0, errors.New(\"var: \" + e)");
-  Alcotest.(check bool) "casted var match uses .ok check" true (contains go ".ok")
+  Alcotest.(check bool)
+    "casted var match uses .ok check" true (contains go ".ok")
 
 let test_nested_result_return_signature () =
   let src =
@@ -1438,6 +1439,112 @@ fn main() {
   Alcotest.(check bool)
     "nested Result match uses struct pattern" true
     (contains go "__match_res_0.ok")
+
+let test_nested_result_question_let () =
+  let src =
+    {|
+fn nested_ok() -> Result<Result<i64, str>, str> {
+    Ok(Ok(42) as Result<i64, str>)
+}
+
+fn nested_err() -> Result<Result<i64, str>, str> {
+    Err("outer error")
+}
+
+fn propagate() -> Result<Result<i64, str>, str> {
+    let x = nested_ok()?;
+    Ok(x)
+}
+
+fn propagate_err() -> Result<Result<i64, str>, str> {
+    let x = nested_err()?;
+    Ok(x)
+}
+
+fn main() {
+    match propagate() {
+        Result::Ok(Result::Ok(v)) => println(v),
+        Result::Ok(Result::Err(e)) => println(e),
+        Result::Err(e) => println(e),
+    };
+    match propagate_err() {
+        Result::Ok(Result::Ok(v)) => println(v),
+        Result::Ok(Result::Err(e)) => println(e),
+        Result::Err(e) => println(e),
+    };
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"42\nouter error\n" src in
+  Alcotest.(check bool)
+    "nested Result ? uses struct mode in let" true
+    (contains go "__res_0 := nested_ok()");
+  Alcotest.(check bool)
+    "nested Result ? checks .ok" true
+    (contains go "if !__res_0.ok {");
+  Alcotest.(check bool)
+    "nested Result ? returns struct on error" true
+    (contains go
+       "return Result[Result[int64, string], string]{err: __res_0.err}");
+  Alcotest.(check bool)
+    "nested Result ? extracts .value" true
+    (contains go "x := __res_0.value")
+
+let test_nested_result_constructor_let () =
+  let src =
+    {|
+fn main() {
+    let direct = Ok(Ok(7) as Result<i64, str>);
+    match direct {
+        Result::Ok(Result::Ok(v)) => println(v),
+        Result::Ok(Result::Err(e)) => println(e),
+        Result::Err(e) => println(e),
+    };
+    println("done");
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"7\ndone\n" src in
+  Alcotest.(check bool)
+    "nested Result constructor let binds struct" true
+    (contains go
+       "direct := Result[Result[int64, string], string]{ok: true, value: \
+        Result[int64, string]{ok: true, value: 7}}");
+  Alcotest.(check bool)
+    "nested Result constructor let match uses .ok" true
+    (contains go "if direct.ok {")
+
+let test_nested_result_question_stmt () =
+  let src =
+    {|
+fn nested_ok() -> Result<Result<i64, str>, str> {
+    Ok(Ok(99) as Result<i64, str>)
+}
+
+fn propagate() -> Result<Result<i64, str>, str> {
+    nested_ok()?;
+    Ok(Ok(99) as Result<i64, str>)
+}
+
+fn main() {
+    match propagate() {
+        Result::Ok(Result::Ok(v)) => println(v),
+        Result::Ok(Result::Err(e)) => println(e),
+        Result::Err(e) => println(e),
+    };
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"99\n" src in
+  Alcotest.(check bool)
+    "nested Result ? in stmt uses struct mode" true
+    (contains go "__res_0 := nested_ok()");
+  Alcotest.(check bool)
+    "nested Result ? stmt checks .ok" true
+    (contains go "if !__res_0.ok {");
+  Alcotest.(check bool)
+    "nested Result ? stmt discards .value" true
+    (contains go "_ = __res_0.value")
 
 let test_array_literal () =
   let src = {|
@@ -3840,6 +3947,8 @@ let () =
             test_casted_result_match_as_return_var;
           Alcotest.test_case "nested Result return signature" `Quick
             test_nested_result_return_signature;
+          Alcotest.test_case "nested Result constructor let" `Quick
+            test_nested_result_constructor_let;
         ] );
       ( "question-mark",
         [
@@ -3853,6 +3962,10 @@ let () =
             test_question_mark_result_in_binary_expr;
           Alcotest.test_case "? wildcard let nested" `Quick
             test_question_mark_wildcard_let_nested;
+          Alcotest.test_case "nested Result ? in let" `Quick
+            test_nested_result_question_let;
+          Alcotest.test_case "nested Result ? in stmt" `Quick
+            test_nested_result_question_stmt;
         ] );
       ( "array",
         [

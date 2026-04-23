@@ -4267,10 +4267,14 @@ and init_is_result env (init : Ast.expr) : bool =
   match infer_expr_type env init with
   | Some (TyGeneric ({ node = "Result"; _ }, _)) -> (
       match init with
+      | ExprQuestion _ -> false
       | ExprCall (ExprIdent { node = "Ok" | "Err"; _ }, _) -> false
       | ExprCast (inner, _) -> not (is_result_constructor_expr inner)
       | ExprIdent { node = name; _ } -> SMap.mem name env.result_decomps
-      | _ -> true)
+      | _ -> (
+          match infer_expr_type env init with
+          | Some t -> is_flat_result_ty t
+          | None -> false))
   | _ -> false
 
 and gen_result_let_binding env buf indent name init =
@@ -4283,25 +4287,52 @@ and gen_result_let_binding env buf indent name init =
 and gen_question_let env buf indent name inner_e =
   let expr_ty = infer_expr_type env inner_e in
   match expr_ty with
-  | Some (TyGeneric ({ node = "Result"; _ }, [ _ok_ty; _ ])) ->
-      let err_name = fresh_tmp env "err" in
-      Printf.bprintf buf "%s, %s := " name err_name;
-      gen_expr env buf indent CtxExpr inner_e;
-      Printf.bprintf buf "\n%sif %s != nil {\n" indent err_name;
-      (* Ownership: emit cleanup for nested scope drops before the
-         early return triggered by the ? propagation. *)
-      emit_all_nested_cleanup env buf (indent ^ "\t");
-      (match env.ret_ty with
-      | Some (TyGeneric ({ node = "Result"; _ }, [ ok_ty; _err_ty ]))
-        when ret_ty_is_flat_result env.ret_ty ->
-          Printf.bprintf buf "%s\treturn %s, %s\n" indent
-            (go_zero_value env ok_ty) err_name
-      | Some (TyGeneric ({ node = "Result"; _ }, [ ok_ty; err_ty ])) ->
-          env.shared.needs_result_struct <- true;
-          Printf.bprintf buf "%s\treturn Result[%s, %s]{err: %s}\n" indent
-            (go_type env ok_ty) (go_type env err_ty) err_name
-      | _ -> Printf.bprintf buf "%s\treturn %s\n" indent err_name);
-      Printf.bprintf buf "%s}" indent
+  | Some (TyGeneric ({ node = "Result"; _ }, [ _ok_ty; _err_ty ])) ->
+      if is_flat_result_ty (Option.get expr_ty) then begin
+        let err_name = fresh_tmp env "err" in
+        Printf.bprintf buf "%s, %s := " name err_name;
+        gen_expr env buf indent CtxExpr inner_e;
+        Printf.bprintf buf "\n%sif %s != nil {\n" indent err_name;
+        (* Ownership: emit cleanup for nested scope drops before the
+           early return triggered by the ? propagation. *)
+        emit_all_nested_cleanup env buf (indent ^ "\t");
+        (match env.ret_ty with
+        | Some (TyGeneric ({ node = "Result"; _ }, [ ret_ok_ty; _err_ty ]))
+          when ret_ty_is_flat_result env.ret_ty ->
+            Printf.bprintf buf "%s\treturn %s, %s\n" indent
+              (go_zero_value env ret_ok_ty)
+              err_name
+        | Some (TyGeneric ({ node = "Result"; _ }, [ ret_ok_ty; ret_err_ty ]))
+          ->
+            env.shared.needs_result_struct <- true;
+            Printf.bprintf buf "%s\treturn Result[%s, %s]{err: %s}\n" indent
+              (go_type env ret_ok_ty) (go_type env ret_err_ty) err_name
+        | _ -> Printf.bprintf buf "%s\treturn %s\n" indent err_name);
+        Printf.bprintf buf "%s}" indent
+      end
+      else begin
+        let tmp_res = fresh_tmp env "res" in
+        Printf.bprintf buf "%s := " tmp_res;
+        gen_expr env buf indent CtxExpr inner_e;
+        Printf.bprintf buf "\n%sif !%s.ok {\n" indent tmp_res;
+        (* Ownership: emit cleanup for nested scope drops before the
+           early return triggered by the ? propagation. *)
+        emit_all_nested_cleanup env buf (indent ^ "\t");
+        (match env.ret_ty with
+        | Some (TyGeneric ({ node = "Result"; _ }, [ ret_ok_ty; _err_ty ]))
+          when ret_ty_is_flat_result env.ret_ty ->
+            Printf.bprintf buf "%s\treturn %s, %s\n" indent
+              (go_zero_value env ret_ok_ty)
+              (tmp_res ^ ".err")
+        | Some (TyGeneric ({ node = "Result"; _ }, [ ret_ok_ty; ret_err_ty ]))
+          ->
+            env.shared.needs_result_struct <- true;
+            Printf.bprintf buf "%s\treturn Result[%s, %s]{err: %s}\n" indent
+              (go_type env ret_ok_ty) (go_type env ret_err_ty) (tmp_res ^ ".err")
+        | _ -> Printf.bprintf buf "%s\treturn %s\n" indent (tmp_res ^ ".err"));
+        Printf.bprintf buf "%s}\n" indent;
+        Printf.bprintf buf "%s%s := %s.value" indent name tmp_res
+      end
   | Some (TyGeneric ({ node = "Option"; _ }, [ inner ])) ->
       if is_nullable_ty env inner then begin
         env.shared.needs_option_struct <- true;
@@ -4375,27 +4406,51 @@ and gen_question_stmt env buf indent e =
   let expr_ty = infer_expr_type env e in
   match expr_ty with
   | Some (TyGeneric ({ node = "Result"; _ }, _)) ->
-      let tmp_val = fresh_tmp env "val" in
-      let tmp_err = fresh_tmp env "err" in
-      Printf.bprintf buf "%s, %s := " tmp_val tmp_err;
-      gen_expr env buf indent CtxExpr e;
-      Buffer.add_char buf '\n';
-      Printf.bprintf buf "%sif %s != nil {\n" indent tmp_err;
-      (* Ownership: emit cleanup for nested scope drops before the
-         early return triggered by the ? propagation. *)
-      emit_all_nested_cleanup env buf (indent ^ "\t");
-      (match env.ret_ty with
-      | Some (TyGeneric ({ node = "Result"; _ }, [ ok_ty; _err_ty ]))
-        when ret_ty_is_flat_result env.ret_ty ->
-          Printf.bprintf buf "%s\treturn %s, %s\n" indent
-            (go_zero_value env ok_ty) tmp_err
-      | Some (TyGeneric ({ node = "Result"; _ }, [ ok_ty; err_ty ])) ->
-          env.shared.needs_result_struct <- true;
-          Printf.bprintf buf "%s\treturn Result[%s, %s]{err: %s}\n" indent
-            (go_type env ok_ty) (go_type env err_ty) tmp_err
-      | _ -> Printf.bprintf buf "%s\treturn %s\n" indent tmp_err);
-      Printf.bprintf buf "%s}\n" indent;
-      Printf.bprintf buf "%s_ = %s" indent tmp_val
+      if is_flat_result_ty (Option.get expr_ty) then begin
+        let tmp_val = fresh_tmp env "val" in
+        let tmp_err = fresh_tmp env "err" in
+        Printf.bprintf buf "%s, %s := " tmp_val tmp_err;
+        gen_expr env buf indent CtxExpr e;
+        Buffer.add_char buf '\n';
+        Printf.bprintf buf "%sif %s != nil {\n" indent tmp_err;
+        (* Ownership: emit cleanup for nested scope drops before the
+           early return triggered by the ? propagation. *)
+        emit_all_nested_cleanup env buf (indent ^ "\t");
+        (match env.ret_ty with
+        | Some (TyGeneric ({ node = "Result"; _ }, [ ok_ty; _err_ty ]))
+          when ret_ty_is_flat_result env.ret_ty ->
+            Printf.bprintf buf "%s\treturn %s, %s\n" indent
+              (go_zero_value env ok_ty) tmp_err
+        | Some (TyGeneric ({ node = "Result"; _ }, [ ok_ty; err_ty ])) ->
+            env.shared.needs_result_struct <- true;
+            Printf.bprintf buf "%s\treturn Result[%s, %s]{err: %s}\n" indent
+              (go_type env ok_ty) (go_type env err_ty) tmp_err
+        | _ -> Printf.bprintf buf "%s\treturn %s\n" indent tmp_err);
+        Printf.bprintf buf "%s}\n" indent;
+        Printf.bprintf buf "%s_ = %s" indent tmp_val
+      end
+      else begin
+        let tmp_res = fresh_tmp env "res" in
+        Printf.bprintf buf "%s := " tmp_res;
+        gen_expr env buf indent CtxExpr e;
+        Buffer.add_char buf '\n';
+        Printf.bprintf buf "%sif !%s.ok {\n" indent tmp_res;
+        (* Ownership: emit cleanup for nested scope drops before the
+           early return triggered by the ? propagation. *)
+        emit_all_nested_cleanup env buf (indent ^ "\t");
+        (match env.ret_ty with
+        | Some (TyGeneric ({ node = "Result"; _ }, [ ok_ty; _err_ty ]))
+          when ret_ty_is_flat_result env.ret_ty ->
+            Printf.bprintf buf "%s\treturn %s, %s\n" indent
+              (go_zero_value env ok_ty) (tmp_res ^ ".err")
+        | Some (TyGeneric ({ node = "Result"; _ }, [ ok_ty; err_ty ])) ->
+            env.shared.needs_result_struct <- true;
+            Printf.bprintf buf "%s\treturn Result[%s, %s]{err: %s}\n" indent
+              (go_type env ok_ty) (go_type env err_ty) (tmp_res ^ ".err")
+        | _ -> Printf.bprintf buf "%s\treturn %s\n" indent (tmp_res ^ ".err"));
+        Printf.bprintf buf "%s}\n" indent;
+        Printf.bprintf buf "%s_ = %s.value" indent tmp_res
+      end
   | _ -> gen_expr env buf indent CtxStmt (ExprQuestion e)
 
 and gen_function_body env buf indent body _ret_ty =
