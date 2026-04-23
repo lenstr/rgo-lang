@@ -1,0 +1,30 @@
+{
+  "milestone": "misc-callback-followups",
+  "round": 1,
+  "status": "pass",
+  "assertionsSummary": {
+    "total": 0,
+    "passed": 0,
+    "failed": 0,
+    "blocked": 0
+  },
+  "passedAssertions": [],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "appliedUpdates": [],
+  "previousRound": null,
+  "selectionSummary": {
+    "mode": "first_run",
+    "evaluatedAt": "2026-04-23T03:19:29+03:00",
+    "completedImplementationFeatures": [
+      "misc-typed-nonvoid-lambda-return-lowering",
+      "misc-typed-nonvoid-lambda-void-body-rejection",
+      "misc-typed-nonvoid-lambda-semantic-value-check",
+      "misc-typed-lambda-mixed-return-value-if",
+      "misc-typed-lambda-value-check-without-rechecking"
+    ],
+    "assertionsFromFulfills": [],
+    "pendingAssertions": [],
+    "note": "No completed implementation features in this milestone map to validation-contract assertions via `fulfills`, so there were no pending user-facing assertions to retest, no services to start, and no flow-validator subagents to spawn."
+  }
+}
