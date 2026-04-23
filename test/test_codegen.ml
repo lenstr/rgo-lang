@@ -1331,6 +1331,66 @@ fn main() {
     (contains go "return 0, errors.New(\"var: \" + e)");
   Alcotest.(check bool) "var match uses .ok check" true (contains go ".ok")
 
+let test_casted_result_match_as_return_ok () =
+  let src =
+    {|
+fn wrap(x: i64) -> Result<i64, str> {
+    match Ok(x) as Result<i64, str> {
+        Result::Ok(v) => Ok(v + 1) as Result<i64, str>,
+        Result::Err(e) => Err(e) as Result<i64, str>,
+    }
+}
+
+fn main() {
+    let r = wrap(41);
+    match r {
+        Result::Ok(v) => println(v),
+        Result::Err(e) => println(e),
+    }
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"42\n" src in
+  Alcotest.(check bool)
+    "casted match-as-return Ok arm returns tuple" true
+    (contains go "return v + 1, nil");
+  Alcotest.(check bool)
+    "casted match-as-return Err arm returns tuple" true
+    (contains go "return 0, errors.New(e)")
+
+let test_casted_result_match_as_return_var () =
+  let src =
+    {|
+fn double(r: Result<i64, str>) -> Result<i64, str> {
+    match r {
+        Result::Ok(v) => Ok(v * 2) as Result<i64, str>,
+        Result::Err(e) => Err("var: " + e) as Result<i64, str>,
+    }
+}
+
+fn main() {
+    let a = double(Ok(5));
+    let b = double(Err("fail"));
+    match a {
+        Result::Ok(v) => println(v),
+        Result::Err(e) => println(e),
+    }
+    match b {
+        Result::Ok(v) => println(v),
+        Result::Err(e) => println(e),
+    }
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"10\nvar: fail\n" src in
+  Alcotest.(check bool)
+    "casted match-as-return var Ok arm returns tuple" true
+    (contains go "return v * 2, nil");
+  Alcotest.(check bool)
+    "casted match-as-return var Err arm returns tuple" true
+    (contains go "return 0, errors.New(\"var: \" + e)");
+  Alcotest.(check bool) "casted var match uses .ok check" true (contains go ".ok")
+
 let test_nested_result_return_signature () =
   let src =
     {|
@@ -3774,6 +3834,10 @@ let () =
             test_result_match_as_return_err;
           Alcotest.test_case "result match as return var" `Quick
             test_result_match_as_return_var;
+          Alcotest.test_case "casted result match as return Ok" `Quick
+            test_casted_result_match_as_return_ok;
+          Alcotest.test_case "casted result match as return var" `Quick
+            test_casted_result_match_as_return_var;
           Alcotest.test_case "nested Result return signature" `Quick
             test_nested_result_return_signature;
         ] );

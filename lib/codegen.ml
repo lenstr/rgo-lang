@@ -3435,7 +3435,49 @@ and gen_result_match_return_branch env buf indent arm default_arm value_name
             gen_expr env buf indent CtxExpr arm.arm_expr;
             Buffer.add_char buf '\n'
           end
+      | ExprCast (ExprCall (ExprIdent { node = "Ok"; _ }, [ arg ]), _) ->
+          (* Ownership: suppress consumed Drop guards before cleanup *)
+          (match arg with
+          | ExprIdent { node = n; _ } -> (
+              match SMap.find_opt n env.drop_guards with
+              | Some guard -> Printf.bprintf buf "%s%s = false\n" indent guard
+              | None -> ())
+          | _ -> ());
+          let _cleaned = emit_return_cleanup env buf indent arg in
+          Buffer.add_string buf indent;
+          if ret_ty_is_flat_result env.ret_ty then begin
+            Buffer.add_string buf "return ";
+            gen_expr env buf indent CtxExpr arg;
+            Buffer.add_string buf ", nil\n"
+          end
+          else begin
+            Buffer.add_string buf "return ";
+            gen_expr env buf indent CtxExpr arm.arm_expr;
+            Buffer.add_char buf '\n'
+          end
       | ExprCall (ExprIdent { node = "Err"; _ }, [ arg ]) ->
+          (* Ownership: suppress consumed Drop guards before cleanup *)
+          (match arg with
+          | ExprIdent { node = n; _ } -> (
+              match SMap.find_opt n env.drop_guards with
+              | Some guard -> Printf.bprintf buf "%s%s = false\n" indent guard
+              | None -> ())
+          | _ -> ());
+          let _cleaned = emit_return_cleanup env buf indent arg in
+          Buffer.add_string buf indent;
+          if ret_ty_is_flat_result env.ret_ty then begin
+            env.shared.needs_errors <- true;
+            Printf.bprintf buf "return %s, errors.New("
+              (go_zero_value env ok_ty);
+            gen_expr env buf indent CtxExpr arg;
+            Buffer.add_string buf ")\n"
+          end
+          else begin
+            Buffer.add_string buf "return ";
+            gen_expr env buf indent CtxExpr arm.arm_expr;
+            Buffer.add_char buf '\n'
+          end
+      | ExprCast (ExprCall (ExprIdent { node = "Err"; _ }, [ arg ]), _) ->
           (* Ownership: suppress consumed Drop guards before cleanup *)
           (match arg with
           | ExprIdent { node = n; _ } -> (
