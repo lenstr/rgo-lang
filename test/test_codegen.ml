@@ -1158,6 +1158,59 @@ fn main() {
   Alcotest.(check bool)
     "no err decomposition for ascribed Err let" false (contains go "__err_")
 
+let test_result_constructor_block_let () =
+  let src =
+    {|
+fn main() {
+    let r = { Ok(42) };
+    match r {
+        Result::Ok(v) => println(v),
+        Result::Err(e) => println(e),
+    }
+}
+|}
+  in
+  let _go = compile_and_check ~expected_output:"42\n" src in
+  ()
+
+let test_result_constructor_if_let () =
+  let src =
+    {|
+fn main() {
+    let r = if true { Ok(7) } else { Err("fail") };
+    match r {
+        Result::Ok(v) => println(v),
+        Result::Err(e) => println(e),
+    }
+}
+|}
+  in
+  let _go = compile_and_check ~expected_output:"7\n" src in
+  ()
+
+let test_result_constructor_match_let () =
+  let src =
+    {|
+fn helper() -> Result<i64, str> {
+    Ok(1)
+}
+
+fn main() {
+    let src = helper();
+    let r = match src {
+        Result::Ok(_) => Ok(99),
+        Result::Err(_) => Err("nope"),
+    };
+    match r {
+        Result::Ok(v) => println(v),
+        Result::Err(e) => println(e),
+    }
+}
+|}
+  in
+  let _go = compile_and_check ~expected_output:"99\n" src in
+  ()
+
 let test_result_match_as_return_ok () =
   let src =
     {|
@@ -3626,6 +3679,12 @@ let () =
             test_ascribed_err_constructor_match;
           Alcotest.test_case "ascribed result let and match combined" `Quick
             test_ascribed_result_let_and_match_combined;
+          Alcotest.test_case "result constructor block let" `Quick
+            test_result_constructor_block_let;
+          Alcotest.test_case "result constructor if let" `Quick
+            test_result_constructor_if_let;
+          Alcotest.test_case "result constructor match let" `Quick
+            test_result_constructor_match_let;
           Alcotest.test_case "result match as return Ok" `Quick
             test_result_match_as_return_ok;
           Alcotest.test_case "result match as return Err" `Quick

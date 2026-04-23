@@ -353,6 +353,20 @@ let rec go_zero_value env (t : Ast.ty) : string =
   | TyPath (pkg, member) ->
       if Interop.type_is_pointer pkg.node member.node then "nil" else "nil"
 
+(* For a Result-typed expression used in CtxExpr (IIFE) context, return the
+   Go function signature and an environment with ret_ty set so that
+   gen_final_expr_as_return / gen_result_match_return_branch emit tuple
+   returns compatible with a multi-value IIFE. *)
+let result_iife_sig_and_env env ret_ty : string * cg_env =
+  match ret_ty with
+  | Some (TyGeneric ({ node = "Result"; _ }, [ ok_ty; _err_ty ])) ->
+      let sig_ = Printf.sprintf "(%s, error)" (go_type env ok_ty) in
+      let env' = { env with ret_ty } in
+      (sig_, env')
+  | _ ->
+      let sig_ = match ret_ty with Some t -> go_type env t | None -> "any" in
+      (sig_, env)
+
 (* ---------- type inference for expressions (mirrors typecheck) ---------- *)
 
 let infer_lit_type (l : lit) : Ast.ty option =
@@ -2032,18 +2046,18 @@ and gen_if env buf indent ctx cond then_blk else_blk =
   | CtxExpr ->
       (* IIFE for if-expression *)
       let ret_ty = infer_block_type env then_blk in
-      let gt = match ret_ty with Some t -> go_type env t | None -> "any" in
-      Printf.bprintf buf "func() %s {\n" gt;
+      let go_sig, inner_env = result_iife_sig_and_env env ret_ty in
+      Printf.bprintf buf "func() %s {\n" go_sig;
       let ni = indent ^ "\t" in
       Printf.bprintf buf "%sif " ni;
       gen_expr env buf ni CtxExpr cond;
       Buffer.add_string buf " {\n";
-      gen_block_with_return env buf (ni ^ "\t") then_blk;
+      gen_block_with_return inner_env buf (ni ^ "\t") then_blk;
       Printf.bprintf buf "%s}" ni;
       (match else_blk with
       | Some eb ->
           Buffer.add_string buf " else {\n";
-          gen_block_with_return env buf (ni ^ "\t") eb;
+          gen_block_with_return inner_env buf (ni ^ "\t") eb;
           Printf.bprintf buf "%s}\n" ni
       | None -> Buffer.add_char buf '\n');
       Printf.bprintf buf "%s}()" indent
@@ -2095,17 +2109,16 @@ and gen_match env buf indent ctx scrutinee arms =
             | arm :: _ -> infer_expr_type env arm.arm_expr
             | [] -> None
           in
-          let gt =
-            match ret_ty with Some t -> go_type env t | None -> "any"
-          in
-          Printf.bprintf buf "func() %s {\n" gt;
+          let go_sig, inner_env = result_iife_sig_and_env env ret_ty in
+          Printf.bprintf buf "func() %s {\n" go_sig;
           let ni = indent ^ "\t" in
           Printf.bprintf buf "%sswitch __v := " ni;
           gen_expr env buf ni CtxExpr scrutinee;
           Buffer.add_string buf ".(type) {\n";
           List.iter
             (fun (arm : match_arm) ->
-              gen_match_arm_with_return env buf ni enum_name ~targs_suffix arm)
+              gen_match_arm_with_return inner_env buf ni enum_name ~targs_suffix
+                arm)
             arms;
           if not (has_wildcard_or_bind_arm arms) then begin
             Printf.bprintf buf "%sdefault:\n" ni;
@@ -2161,24 +2174,18 @@ and gen_match_arm_with_return env buf indent enum_name ?(targs_suffix = "")
   | PatWild ->
       Printf.bprintf buf "%sdefault:\n" indent;
       Printf.bprintf buf "%s_ = __v\n" ni;
-      Printf.bprintf buf "%sreturn " ni;
-      gen_expr env buf ni CtxExpr arm.arm_expr;
-      Buffer.add_char buf '\n'
+      gen_return_expr env buf ni arm.arm_expr
   | PatBind name ->
       Printf.bprintf buf "%sdefault:\n" indent;
       Printf.bprintf buf "%s%s := __v\n" ni (escape_ident name.node);
       Printf.bprintf buf "%s_ = %s\n" ni (escape_ident name.node);
-      Printf.bprintf buf "%sreturn " ni;
-      gen_expr env buf ni CtxExpr arm.arm_expr;
-      Buffer.add_char buf '\n'
+      gen_return_expr env buf ni arm.arm_expr
   | PatLit l ->
       Printf.bprintf buf "%scase " indent;
       gen_expr env buf indent CtxExpr (ExprLit l);
       Buffer.add_string buf ":\n";
       Printf.bprintf buf "%s_ = __v\n" ni;
-      Printf.bprintf buf "%sreturn " ni;
-      gen_expr env buf ni CtxExpr arm.arm_expr;
-      Buffer.add_char buf '\n'
+      gen_return_expr env buf ni arm.arm_expr
   | PatTuple (ename, vname, pats) ->
       let case_type =
         (match enum_name with Some en -> en | None -> ename.node)
@@ -2188,9 +2195,7 @@ and gen_match_arm_with_return env buf indent enum_name ?(targs_suffix = "")
       if pats = [] || List.for_all (fun p -> p = PatWild) pats then
         Printf.bprintf buf "%s_ = __v\n" ni
       else gen_tuple_bindings env buf ni pats;
-      Printf.bprintf buf "%sreturn " ni;
-      gen_expr env buf ni CtxExpr arm.arm_expr;
-      Buffer.add_char buf '\n'
+      gen_return_expr env buf ni arm.arm_expr
   | PatStruct (ename, vname, field_pats) ->
       let case_type =
         (match enum_name with Some en -> en | None -> ename.node)
@@ -2199,9 +2204,7 @@ and gen_match_arm_with_return env buf indent enum_name ?(targs_suffix = "")
       Printf.bprintf buf "%scase %s:\n" indent case_type;
       if field_pats = [] then Printf.bprintf buf "%s_ = __v\n" ni
       else gen_struct_bindings env buf ni field_pats;
-      Printf.bprintf buf "%sreturn " ni;
-      gen_expr env buf ni CtxExpr arm.arm_expr;
-      Buffer.add_char buf '\n'
+      gen_return_expr env buf ni arm.arm_expr
 
 and gen_tuple_bindings env buf indent pats =
   List.iteri
@@ -3138,20 +3141,93 @@ and gen_match_stmt_branch env buf indent arm default_arm bind_pattern =
           Printf.bprintf buf "%spanic(\"unreachable: non-exhaustive match\")\n"
             indent)
 
+(* Emit `return expr` for a match arm, handling Result constructors specially
+   when the enclosing function/IIFE returns a Go tuple for Result types. *)
+and gen_return_expr env buf indent (e : Ast.expr) =
+  let go () =
+    Buffer.add_string buf indent;
+    Buffer.add_string buf "return ";
+    gen_expr env buf indent CtxExpr e;
+    Buffer.add_char buf '\n'
+  in
+  match e with
+  | ExprCall (ExprIdent { node = "Ok"; _ }, [ arg ])
+  | ExprCast (ExprCall (ExprIdent { node = "Ok"; _ }, [ arg ]), _) -> (
+      match env.ret_ty with
+      | Some (TyGeneric ({ node = "Result"; _ }, _)) ->
+          Buffer.add_string buf indent;
+          Buffer.add_string buf "return ";
+          gen_expr env buf indent CtxExpr arg;
+          Buffer.add_string buf ", nil\n"
+      | _ -> go ())
+  | ExprCall (ExprIdent { node = "Err"; _ }, [ arg ])
+  | ExprCast (ExprCall (ExprIdent { node = "Err"; _ }, [ arg ]), _) -> (
+      match env.ret_ty with
+      | Some (TyGeneric ({ node = "Result"; _ }, [ ok_ty; _ ])) ->
+          env.shared.needs_errors <- true;
+          Buffer.add_string buf indent;
+          Printf.bprintf buf "return %s, errors.New(" (go_zero_value env ok_ty);
+          gen_expr env buf indent CtxExpr arg;
+          Buffer.add_string buf ")\n"
+      | _ -> go ())
+  | _ -> go ()
+
 and gen_match_return_branch env buf indent arm default_arm bind_pattern =
+  let emit_ok_return arg =
+    Buffer.add_string buf indent;
+    Buffer.add_string buf "return ";
+    gen_expr env buf indent CtxExpr arg;
+    Buffer.add_string buf ", nil\n"
+  in
+  let emit_err_return arg =
+    match env.ret_ty with
+    | Some (TyGeneric ({ node = "Result"; _ }, [ ok_ty; _ ])) ->
+        env.shared.needs_errors <- true;
+        Buffer.add_string buf indent;
+        Printf.bprintf buf "return %s, errors.New(" (go_zero_value env ok_ty);
+        gen_expr env buf indent CtxExpr arg;
+        Buffer.add_string buf ")\n"
+    | _ ->
+        Buffer.add_string buf indent;
+        Buffer.add_string buf "return ";
+        gen_expr env buf indent CtxExpr arg;
+        Buffer.add_char buf '\n'
+  in
+  let return_expr e =
+    match e with
+    | ExprCall (ExprIdent { node = "Ok"; _ }, [ arg ])
+    | ExprCast (ExprCall (ExprIdent { node = "Ok"; _ }, [ arg ]), _) -> (
+        match env.ret_ty with
+        | Some (TyGeneric ({ node = "Result"; _ }, _)) -> emit_ok_return arg
+        | _ ->
+            Buffer.add_string buf indent;
+            Buffer.add_string buf "return ";
+            gen_expr env buf indent CtxExpr e;
+            Buffer.add_char buf '\n')
+    | ExprCall (ExprIdent { node = "Err"; _ }, [ arg ])
+    | ExprCast (ExprCall (ExprIdent { node = "Err"; _ }, [ arg ]), _) -> (
+        match env.ret_ty with
+        | Some (TyGeneric ({ node = "Result"; _ }, _)) -> emit_err_return arg
+        | _ ->
+            Buffer.add_string buf indent;
+            Buffer.add_string buf "return ";
+            gen_expr env buf indent CtxExpr e;
+            Buffer.add_char buf '\n')
+    | _ ->
+        Buffer.add_string buf indent;
+        Buffer.add_string buf "return ";
+        gen_expr env buf indent CtxExpr e;
+        Buffer.add_char buf '\n'
+  in
   match arm with
   | Some arm ->
       bind_pattern arm;
-      Printf.bprintf buf "%sreturn " indent;
-      gen_expr env buf indent CtxExpr arm.arm_expr;
-      Buffer.add_char buf '\n'
+      return_expr arm.arm_expr
   | None -> (
       match default_arm with
       | Some arm ->
           bind_pattern arm;
-          Printf.bprintf buf "%sreturn " indent;
-          gen_expr env buf indent CtxExpr arm.arm_expr;
-          Buffer.add_char buf '\n'
+          return_expr arm.arm_expr
       | None ->
           Printf.bprintf buf "%spanic(\"unreachable: non-exhaustive match\")\n"
             indent)
@@ -3271,8 +3347,8 @@ and gen_result_match env buf indent ctx scrutinee arms _ok_ty _err_ty =
         | arm :: _ -> infer_expr_type env arm.arm_expr
         | [] -> None
       in
-      let gt = match ret_ty with Some t -> go_type env t | None -> "any" in
-      Printf.bprintf buf "func() %s {\n" gt;
+      let go_sig, inner_env = result_iife_sig_and_env env ret_ty in
+      Printf.bprintf buf "func() %s {\n" go_sig;
       let ni = indent ^ "\t" in
       (match (is_result_var, res_name) with
       | Some _, _ -> Printf.bprintf buf "%sif %s == nil {\n" ni err_name
@@ -3290,20 +3366,20 @@ and gen_result_match env buf indent ctx scrutinee arms _ok_ty _err_ty =
           Printf.bprintf buf "; %s == nil {\n" err_name);
       if has_nested_ok then
         let ok_arms = find_all_builtin_variant_arms "Ok" arms in
-        gen_nested_result_inner_match_expr env buf (ni ^ "\t") value_name
+        gen_nested_result_inner_match_expr inner_env buf (ni ^ "\t") value_name
           ok_arms _ok_ty CtxExpr default_arm
       else
-        gen_match_return_branch env buf (ni ^ "\t") ok_arm default_arm
-          (gen_result_pattern_binding buf (ni ^ "\t") value_name err_name true);
+        gen_result_match_return_branch inner_env buf (ni ^ "\t") ok_arm
+          default_arm value_name err_name true _ok_ty _err_ty;
       if has_nested_ok then Printf.bprintf buf "\n%s} else {\n" ni
       else Printf.bprintf buf "%s} else {\n" ni;
       if has_nested_err then
         let err_arms = find_all_builtin_variant_arms "Err" arms in
-        gen_nested_result_inner_match_expr env buf (ni ^ "\t") err_name err_arms
-          _err_ty CtxExpr default_arm
+        gen_nested_result_inner_match_expr inner_env buf (ni ^ "\t") err_name
+          err_arms _err_ty CtxExpr default_arm
       else
-        gen_match_return_branch env buf (ni ^ "\t") err_arm default_arm
-          (gen_result_pattern_binding buf (ni ^ "\t") value_name err_name false);
+        gen_result_match_return_branch inner_env buf (ni ^ "\t") err_arm
+          default_arm value_name err_name false _ok_ty _err_ty;
       Printf.bprintf buf "%s}\n" ni;
       Printf.bprintf buf "%s}()" indent
 
@@ -3665,9 +3741,9 @@ and gen_block_expr env buf indent ctx blk =
   | CtxStmt -> gen_block_stmts env buf indent blk
   | CtxExpr ->
       let ret_ty = infer_block_type env blk in
-      let gt = match ret_ty with Some t -> go_type env t | None -> "any" in
-      Printf.bprintf buf "func() %s {\n" gt;
-      gen_block_with_return env buf (indent ^ "\t") blk;
+      let go_sig, inner_env = result_iife_sig_and_env env ret_ty in
+      Printf.bprintf buf "func() %s {\n" go_sig;
+      gen_block_with_return inner_env buf (indent ^ "\t") blk;
       Printf.bprintf buf "%s}()" indent
 
 (* Check if an expression contains any nested ExprQuestion *)
@@ -4103,8 +4179,12 @@ and is_result_constructor_expr (e : Ast.expr) : bool =
 
 and init_is_result env (init : Ast.expr) : bool =
   match infer_expr_type env init with
-  | Some (TyGeneric ({ node = "Result"; _ }, _)) ->
-      not (is_result_constructor_expr init)
+  | Some (TyGeneric ({ node = "Result"; _ }, _)) -> (
+      match init with
+      | ExprCall (ExprIdent { node = "Ok" | "Err"; _ }, _) -> false
+      | ExprCast (inner, _) -> not (is_result_constructor_expr inner)
+      | ExprIdent { node = name; _ } -> SMap.mem name env.result_decomps
+      | _ -> true)
   | _ -> false
 
 and gen_result_let_binding env buf indent name init =
