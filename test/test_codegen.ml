@@ -1244,6 +1244,106 @@ fn main() {
   let _go = compile_and_check ~expected_output:"99\n" src in
   ()
 
+let test_nested_result_block_iife () =
+  let src =
+    {|
+fn outer() -> Result<i64, str> {
+    let inner = {
+        Ok(42)
+    };
+    match inner {
+        Result::Ok(v) => Ok(v),
+        Result::Err(e) => Err(e),
+    }
+}
+
+fn main() {
+    match outer() {
+        Result::Ok(v) => println(v),
+        Result::Err(e) => println(e),
+    }
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"42\n" src in
+  Alcotest.(check bool)
+    "nested block IIFE returns Result struct" true
+    (contains go "func() Result[int64, string] {");
+  Alcotest.(check bool)
+    "nested block IIFE Ok is struct literal" true
+    (contains go "Result[int64, string]{ok: true, value: 42}");
+  Alcotest.(check bool)
+    "nested block IIFE does not use tuple return" false
+    (contains go "return 42, nil")
+
+let test_nested_result_if_iife () =
+  let src =
+    {|
+fn outer() -> Result<i64, str> {
+    let inner = if true { Ok(7) } else { Err("fail") };
+    match inner {
+        Result::Ok(v) => Ok(v),
+        Result::Err(e) => Err(e),
+    }
+}
+
+fn main() {
+    match outer() {
+        Result::Ok(v) => println(v),
+        Result::Err(e) => println(e),
+    }
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"7\n" src in
+  Alcotest.(check bool)
+    "nested if IIFE returns Result struct" true
+    (contains go "func() Result[int64, string] {");
+  Alcotest.(check bool)
+    "nested if IIFE Ok is struct literal" true
+    (contains go "Result[int64, string]{ok: true, value: 7}");
+  Alcotest.(check bool)
+    "nested if IIFE does not use tuple return" false
+    (contains go "return 7, nil")
+
+let test_nested_result_match_iife () =
+  let src =
+    {|
+fn helper() -> Result<i64, str> {
+    Ok(1)
+}
+
+fn outer() -> Result<i64, str> {
+    let src = helper();
+    let inner = match src {
+        Result::Ok(_) => Ok(99),
+        Result::Err(_) => Err("nope"),
+    };
+    match inner {
+        Result::Ok(v) => Ok(v),
+        Result::Err(e) => Err(e),
+    }
+}
+
+fn main() {
+    match outer() {
+        Result::Ok(v) => println(v),
+        Result::Err(e) => println(e),
+    }
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"99\n" src in
+  Alcotest.(check bool)
+    "nested match IIFE returns Result struct" true
+    (contains go "func() Result[int64, string] {");
+  Alcotest.(check bool)
+    "nested match IIFE Ok is struct literal" true
+    (contains go "Result[int64, string]{ok: true, value: 99}");
+  Alcotest.(check bool)
+    "nested match IIFE does not use tuple return" false
+    (contains go "return 99, nil")
+
 let test_result_match_as_return_ok () =
   let src =
     {|
@@ -3935,6 +4035,12 @@ let () =
             test_result_constructor_if_let;
           Alcotest.test_case "result constructor match let" `Quick
             test_result_constructor_match_let;
+          Alcotest.test_case "nested result block iife" `Quick
+            test_nested_result_block_iife;
+          Alcotest.test_case "nested result if iife" `Quick
+            test_nested_result_if_iife;
+          Alcotest.test_case "nested result match iife" `Quick
+            test_nested_result_match_iife;
           Alcotest.test_case "result match as return Ok" `Quick
             test_result_match_as_return_ok;
           Alcotest.test_case "result match as return Err" `Quick

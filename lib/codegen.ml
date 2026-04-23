@@ -119,6 +119,9 @@ type cg_env = {
   loop_body_depths : int list;
   (* Result variable decompositions: variable name -> error variable name *)
   result_decomps : string SMap.t;
+  (* True when generating inside an expression-context IIFE, so flat-Result
+     tuple flattening is suppressed; IIFEs always return a single value. *)
+  in_iife : bool;
   (* Shared mutable state *)
   shared : cg_shared;
 }
@@ -324,6 +327,11 @@ let is_flat_result_ty (t : Ast.ty) : bool =
 let ret_ty_is_flat_result (ret_ty : Ast.ty option) : bool =
   match ret_ty with Some t -> is_flat_result_ty t | None -> false
 
+(* Flat-Result tuple returns are only emitted at actual function boundaries,
+   never inside expression-context IIFEs which always return a single value. *)
+let should_flatten_result_return (env : cg_env) : bool =
+  ret_ty_is_flat_result env.ret_ty && not env.in_iife
+
 (* Go return type for printing (with leading space or parens) *)
 let go_ret_sig env (ret : Ast.ty option) : string =
   match ret with
@@ -367,19 +375,24 @@ let rec go_zero_value env (t : Ast.ty) : string =
       if Interop.type_is_pointer pkg.node member.node then "nil" else "nil"
 
 (* For a Result-typed expression used in CtxExpr (IIFE) context, return the
-   Go function signature and an environment with ret_ty set so that
-   gen_final_expr_as_return / gen_result_match_return_branch emit tuple
-   returns compatible with a multi-value IIFE. *)
+   Go function signature and an environment with ret_ty preserved for
+   constructor type inference but in_iife set so that tuple flattening is
+   suppressed.  IIFEs always return a single value, never a Go multi-value tuple. *)
 let result_iife_sig_and_env env ret_ty : string * cg_env =
+  let env' =
+    match ret_ty with
+    | Some _ -> { env with ret_ty; in_iife = true }
+    | None -> { env with in_iife = true }
+  in
   match ret_ty with
-  | Some (TyGeneric ({ node = "Result"; _ }, [ ok_ty; _err_ty ]))
+  | Some (TyGeneric ({ node = "Result"; _ }, [ _; _ ]))
     when ret_ty_is_flat_result ret_ty ->
-      let sig_ = Printf.sprintf "(%s, error)" (go_type env ok_ty) in
-      let env' = { env with ret_ty } in
+      (* Flat Results inside IIFEs still return the struct type, not a tuple *)
+      let sig_ = go_type env (Option.get ret_ty) in
       (sig_, env')
   | _ ->
       let sig_ = match ret_ty with Some t -> go_type env t | None -> "any" in
-      (sig_, env)
+      (sig_, env')
 
 (* ---------- type inference for expressions (mirrors typecheck) ---------- *)
 
@@ -658,7 +671,24 @@ let rec infer_expr_type env (e : Ast.expr) : Ast.ty option =
   | ExprCall (_, _) -> None
 
 and infer_block_type env blk =
-  match blk.final_expr with Some e -> infer_expr_type env e | None -> None
+  match blk.final_expr with
+  | Some e -> infer_expr_type env e
+  | None -> (
+      match List.rev blk.stmts with
+      | StmtExpr e :: _ -> infer_expr_type env e
+      | _ -> None)
+
+(* Try to infer the type of an identifier bound inside a block by scanning
+   the block's statements for a matching let binding. *)
+and infer_local_binding_ty env blk name =
+  let rec scan stmts =
+    match stmts with
+    | [] -> None
+    | StmtLet { pat = PatBind n; ty; init; _ } :: _ when n.node = name -> (
+        match ty with Some t -> Some t | None -> infer_expr_type env init)
+    | _ :: rest -> scan rest
+  in
+  scan blk.stmts
 
 and infer_method_ret_type env recv method_name =
   match infer_expr_type env recv with
@@ -780,6 +810,7 @@ let collect_env (prog : Ast.program) : cg_env =
       scope_drops = [];
       loop_body_depths = [];
       result_decomps = SMap.empty;
+      in_iife = false;
       shared;
     }
   in
@@ -1194,7 +1225,7 @@ let rec gen_expr env buf indent (ctx : expr_ctx) (e : Ast.expr) : unit =
       Buffer.add_string buf indent;
       match env.ret_ty with
       | Some (TyGeneric ({ node = "Result"; _ }, _))
-        when ret_ty_is_flat_result env.ret_ty ->
+        when should_flatten_result_return env ->
           Buffer.add_string buf "return ";
           gen_expr env buf indent CtxExpr arg;
           Buffer.add_string buf ", nil"
@@ -1214,7 +1245,7 @@ let rec gen_expr env buf indent (ctx : expr_ctx) (e : Ast.expr) : unit =
       Buffer.add_string buf indent;
       match env.ret_ty with
       | Some (TyGeneric ({ node = "Result"; _ }, [ ok_ty; _ ]))
-        when ret_ty_is_flat_result env.ret_ty -> (
+        when should_flatten_result_return env -> (
           env.shared.needs_errors <- true;
           Buffer.add_string buf "return ";
           Buffer.add_string buf (go_zero_value env ok_ty);
@@ -2310,7 +2341,7 @@ and gen_final_expr_as_return env buf indent e =
       Buffer.add_string buf indent;
       match env.ret_ty with
       | Some (TyGeneric ({ node = "Result"; _ }, _))
-        when ret_ty_is_flat_result env.ret_ty ->
+        when should_flatten_result_return env ->
           Buffer.add_string buf "return ";
           gen_expr env buf indent CtxExpr arg;
           Buffer.add_string buf ", nil\n"
@@ -2331,7 +2362,7 @@ and gen_final_expr_as_return env buf indent e =
       Buffer.add_string buf indent;
       match env.ret_ty with
       | Some (TyGeneric ({ node = "Result"; _ }, [ ok_ty; _ ]))
-        when ret_ty_is_flat_result env.ret_ty ->
+        when should_flatten_result_return env ->
           env.shared.needs_errors <- true;
           Printf.bprintf buf "return %s, " (go_zero_value env ok_ty);
           (match arg with
@@ -3169,7 +3200,7 @@ and gen_return_expr env buf indent (e : Ast.expr) =
   | ExprCast (ExprCall (ExprIdent { node = "Ok"; _ }, [ arg ]), _) -> (
       match env.ret_ty with
       | Some (TyGeneric ({ node = "Result"; _ }, _))
-        when ret_ty_is_flat_result env.ret_ty ->
+        when should_flatten_result_return env ->
           Buffer.add_string buf indent;
           Buffer.add_string buf "return ";
           gen_expr env buf indent CtxExpr arg;
@@ -3179,7 +3210,7 @@ and gen_return_expr env buf indent (e : Ast.expr) =
   | ExprCast (ExprCall (ExprIdent { node = "Err"; _ }, [ arg ]), _) -> (
       match env.ret_ty with
       | Some (TyGeneric ({ node = "Result"; _ }, [ ok_ty; _ ]))
-        when ret_ty_is_flat_result env.ret_ty ->
+        when should_flatten_result_return env ->
           env.shared.needs_errors <- true;
           Buffer.add_string buf indent;
           Printf.bprintf buf "return %s, errors.New(" (go_zero_value env ok_ty);
@@ -3198,7 +3229,7 @@ and gen_match_return_branch env buf indent arm default_arm bind_pattern =
   let emit_err_return arg =
     match env.ret_ty with
     | Some (TyGeneric ({ node = "Result"; _ }, [ ok_ty; _ ]))
-      when ret_ty_is_flat_result env.ret_ty ->
+      when should_flatten_result_return env ->
         env.shared.needs_errors <- true;
         Buffer.add_string buf indent;
         Printf.bprintf buf "return %s, errors.New(" (go_zero_value env ok_ty);
@@ -3216,7 +3247,7 @@ and gen_match_return_branch env buf indent arm default_arm bind_pattern =
     | ExprCast (ExprCall (ExprIdent { node = "Ok"; _ }, [ arg ]), _) -> (
         match env.ret_ty with
         | Some (TyGeneric ({ node = "Result"; _ }, _))
-          when ret_ty_is_flat_result env.ret_ty ->
+          when should_flatten_result_return env ->
             emit_ok_return arg
         | _ ->
             Buffer.add_string buf indent;
@@ -3227,7 +3258,7 @@ and gen_match_return_branch env buf indent arm default_arm bind_pattern =
     | ExprCast (ExprCall (ExprIdent { node = "Err"; _ }, [ arg ]), _) -> (
         match env.ret_ty with
         | Some (TyGeneric ({ node = "Result"; _ }, _))
-          when ret_ty_is_flat_result env.ret_ty ->
+          when should_flatten_result_return env ->
             emit_err_return arg
         | _ ->
             Buffer.add_string buf indent;
@@ -3425,7 +3456,7 @@ and gen_result_match_return_branch env buf indent arm default_arm value_name
           | _ -> ());
           let _cleaned = emit_return_cleanup env buf indent arg in
           Buffer.add_string buf indent;
-          if ret_ty_is_flat_result env.ret_ty then begin
+          if should_flatten_result_return env then begin
             Buffer.add_string buf "return ";
             gen_expr env buf indent CtxExpr arg;
             Buffer.add_string buf ", nil\n"
@@ -3445,7 +3476,7 @@ and gen_result_match_return_branch env buf indent arm default_arm value_name
           | _ -> ());
           let _cleaned = emit_return_cleanup env buf indent arg in
           Buffer.add_string buf indent;
-          if ret_ty_is_flat_result env.ret_ty then begin
+          if should_flatten_result_return env then begin
             Buffer.add_string buf "return ";
             gen_expr env buf indent CtxExpr arg;
             Buffer.add_string buf ", nil\n"
@@ -3465,7 +3496,7 @@ and gen_result_match_return_branch env buf indent arm default_arm value_name
           | _ -> ());
           let _cleaned = emit_return_cleanup env buf indent arg in
           Buffer.add_string buf indent;
-          if ret_ty_is_flat_result env.ret_ty then begin
+          if should_flatten_result_return env then begin
             env.shared.needs_errors <- true;
             Printf.bprintf buf "return %s, errors.New("
               (go_zero_value env ok_ty);
@@ -3487,7 +3518,7 @@ and gen_result_match_return_branch env buf indent arm default_arm value_name
           | _ -> ());
           let _cleaned = emit_return_cleanup env buf indent arg in
           Buffer.add_string buf indent;
-          if ret_ty_is_flat_result env.ret_ty then begin
+          if should_flatten_result_return env then begin
             env.shared.needs_errors <- true;
             Printf.bprintf buf "return %s, errors.New("
               (go_zero_value env ok_ty);
@@ -3656,6 +3687,7 @@ and gen_option_match env buf indent ctx scrutinee arms inner_ty =
       in
       let gt = match ret_ty with Some t -> go_type env t | None -> "any" in
       Printf.bprintf buf "func() %s {\n" gt;
+      let iife_env = { env with ret_ty; in_iife = true } in
       let ni = indent ^ "\t" in
       Printf.bprintf buf "%sif %s := " ni opt_name;
       gen_expr env buf ni CtxExpr scrutinee;
@@ -3667,26 +3699,27 @@ and gen_option_match env buf indent ctx scrutinee arms inner_ty =
           | Some ty -> ty
           | None -> inner_ty
         in
-        gen_nested_option_match_expr env buf (ni ^ "\t") opt_name
-          (fresh_tmp env "inner_opt")
+        gen_nested_option_match_expr iife_env buf (ni ^ "\t") opt_name
+          (fresh_tmp iife_env "inner_opt")
           some_arms inner_ty nested_inner_ty CtxExpr default_arm
       else begin
         let some_env =
           match some_arm with
-          | Some arm -> env_with_option_binding env arm inner_ty
+          | Some arm -> env_with_option_binding iife_env arm inner_ty
           | None -> (
               match default_arm with
-              | Some arm -> env_with_option_binding env arm inner_ty
-              | None -> env)
+              | Some arm -> env_with_option_binding iife_env arm inner_ty
+              | None -> iife_env)
         in
         gen_match_return_branch some_env buf (ni ^ "\t") some_arm default_arm
           (fun arm ->
-            gen_option_pattern_binding env buf (ni ^ "\t") opt_name arm inner_ty)
+            gen_option_pattern_binding iife_env buf (ni ^ "\t") opt_name arm
+              inner_ty)
       end;
       if has_nested_builtin then Printf.bprintf buf "\n%s} else {\n" ni
       else Printf.bprintf buf "%s} else {\n" ni;
-      gen_match_return_branch env buf (ni ^ "\t") none_arm default_arm (fun _ ->
-          ());
+      gen_match_return_branch iife_env buf (ni ^ "\t") none_arm default_arm
+        (fun _ -> ());
       Printf.bprintf buf "%s}\n" ni;
       Printf.bprintf buf "%s}()" indent
 
@@ -3826,7 +3859,15 @@ and gen_block_expr env buf indent ctx blk =
   match ctx with
   | CtxStmt -> gen_block_stmts env buf indent blk
   | CtxExpr ->
-      let ret_ty = infer_block_type env blk in
+      let ret_ty =
+        match infer_block_type env blk with
+        | Some t -> Some t
+        | None -> (
+            match blk.final_expr with
+            | Some (ExprIdent { node = name; _ }) ->
+                infer_local_binding_ty env blk name
+            | _ -> None)
+      in
       let go_sig, inner_env = result_iife_sig_and_env env ret_ty in
       Printf.bprintf buf "func() %s {\n" go_sig;
       gen_block_with_return inner_env buf (indent ^ "\t") blk;
@@ -4271,6 +4312,7 @@ and init_is_result env (init : Ast.expr) : bool =
       | ExprCall (ExprIdent { node = "Ok" | "Err"; _ }, _) -> false
       | ExprCast (inner, _) -> not (is_result_constructor_expr inner)
       | ExprIdent { node = name; _ } -> SMap.mem name env.result_decomps
+      | ExprBlock _ | ExprIf _ | ExprMatch _ -> false
       | _ -> (
           match infer_expr_type env init with
           | Some t -> is_flat_result_ty t
@@ -4298,7 +4340,7 @@ and gen_question_let env buf indent name inner_e =
         emit_all_nested_cleanup env buf (indent ^ "\t");
         (match env.ret_ty with
         | Some (TyGeneric ({ node = "Result"; _ }, [ ret_ok_ty; _err_ty ]))
-          when ret_ty_is_flat_result env.ret_ty ->
+          when should_flatten_result_return env ->
             Printf.bprintf buf "%s\treturn %s, %s\n" indent
               (go_zero_value env ret_ok_ty)
               err_name
@@ -4320,7 +4362,7 @@ and gen_question_let env buf indent name inner_e =
         emit_all_nested_cleanup env buf (indent ^ "\t");
         (match env.ret_ty with
         | Some (TyGeneric ({ node = "Result"; _ }, [ ret_ok_ty; _err_ty ]))
-          when ret_ty_is_flat_result env.ret_ty ->
+          when should_flatten_result_return env ->
             Printf.bprintf buf "%s\treturn %s, %s\n" indent
               (go_zero_value env ret_ok_ty)
               (tmp_res ^ ".err")
@@ -4418,7 +4460,7 @@ and gen_question_stmt env buf indent e =
         emit_all_nested_cleanup env buf (indent ^ "\t");
         (match env.ret_ty with
         | Some (TyGeneric ({ node = "Result"; _ }, [ ok_ty; _err_ty ]))
-          when ret_ty_is_flat_result env.ret_ty ->
+          when should_flatten_result_return env ->
             Printf.bprintf buf "%s\treturn %s, %s\n" indent
               (go_zero_value env ok_ty) tmp_err
         | Some (TyGeneric ({ node = "Result"; _ }, [ ok_ty; err_ty ])) ->
@@ -4440,7 +4482,7 @@ and gen_question_stmt env buf indent e =
         emit_all_nested_cleanup env buf (indent ^ "\t");
         (match env.ret_ty with
         | Some (TyGeneric ({ node = "Result"; _ }, [ ok_ty; _err_ty ]))
-          when ret_ty_is_flat_result env.ret_ty ->
+          when should_flatten_result_return env ->
             Printf.bprintf buf "%s\treturn %s, %s\n" indent
               (go_zero_value env ok_ty) (tmp_res ^ ".err")
         | Some (TyGeneric ({ node = "Result"; _ }, [ ok_ty; err_ty ])) ->
