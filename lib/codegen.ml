@@ -3307,7 +3307,51 @@ and gen_result_match env buf indent ctx scrutinee arms _ok_ty _err_ty =
       Printf.bprintf buf "%s}\n" ni;
       Printf.bprintf buf "%s}()" indent
 
-and gen_result_match_as_return env buf indent scrutinee arms _ok_ty _err_ty =
+and gen_result_match_return_branch env buf indent arm default_arm value_name
+    err_name is_ok ok_ty _err_ty =
+  let arm_to_use = match arm with Some _ -> arm | None -> default_arm in
+  match arm_to_use with
+  | Some arm -> (
+      gen_result_pattern_binding buf indent value_name err_name is_ok arm;
+      match arm.arm_expr with
+      | ExprCall (ExprIdent { node = "Ok"; _ }, [ arg ]) ->
+          (* Ownership: suppress consumed Drop guards before cleanup *)
+          (match arg with
+          | ExprIdent { node = n; _ } -> (
+              match SMap.find_opt n env.drop_guards with
+              | Some guard -> Printf.bprintf buf "%s%s = false\n" indent guard
+              | None -> ())
+          | _ -> ());
+          let _cleaned = emit_return_cleanup env buf indent arg in
+          Buffer.add_string buf indent;
+          Buffer.add_string buf "return ";
+          gen_expr env buf indent CtxExpr arg;
+          Buffer.add_string buf ", nil\n"
+      | ExprCall (ExprIdent { node = "Err"; _ }, [ arg ]) ->
+          (* Ownership: suppress consumed Drop guards before cleanup *)
+          (match arg with
+          | ExprIdent { node = n; _ } -> (
+              match SMap.find_opt n env.drop_guards with
+              | Some guard -> Printf.bprintf buf "%s%s = false\n" indent guard
+              | None -> ())
+          | _ -> ());
+          let _cleaned = emit_return_cleanup env buf indent arg in
+          Buffer.add_string buf indent;
+          env.shared.needs_errors <- true;
+          Printf.bprintf buf "return %s, errors.New(" (go_zero_value env ok_ty);
+          gen_expr env buf indent CtxExpr arg;
+          Buffer.add_string buf ")\n"
+      | _ ->
+          let _cleaned = emit_return_cleanup env buf indent arm.arm_expr in
+          Buffer.add_string buf indent;
+          Buffer.add_string buf "return ";
+          gen_expr env buf indent CtxExpr arm.arm_expr;
+          Buffer.add_char buf '\n')
+  | None ->
+      Printf.bprintf buf "%spanic(\"unreachable: non-exhaustive match\")\n"
+        indent
+
+and gen_result_match_as_return env buf indent scrutinee arms ok_ty err_ty =
   let ok_arm = find_builtin_variant_arm "Ok" arms in
   let err_arm = find_builtin_variant_arm "Err" arms in
   let default_arm = find_builtin_default_arm arms in
@@ -3367,8 +3411,8 @@ and gen_result_match_as_return env buf indent scrutinee arms _ok_ty _err_ty =
       | _ ->
           Printf.bprintf buf "%s%s := " indent r;
           gen_expr env buf indent CtxExpr scrutinee;
-          Printf.bprintf buf "\n%s" indent);
-      Printf.bprintf buf "if %s.ok {\n" r
+          Printf.bprintf buf "\n");
+      Printf.bprintf buf "%sif %s.ok {\n" indent r
   | None, None ->
       Printf.bprintf buf "%sif %s, %s := " indent value_name err_name;
       gen_expr env buf indent CtxExpr scrutinee;
@@ -3376,14 +3420,14 @@ and gen_result_match_as_return env buf indent scrutinee arms _ok_ty _err_ty =
   if has_nested_ok then
     let ok_arms = find_all_builtin_variant_arms "Ok" arms in
     gen_nested_result_inner_match_expr env buf (indent ^ "\t") value_name
-      ok_arms _ok_ty CtxExpr default_arm
+      ok_arms ok_ty CtxExpr default_arm
   else
-    gen_match_return_branch env buf (indent ^ "\t") ok_arm default_arm
-      (gen_result_pattern_binding buf (indent ^ "\t") value_name err_name true);
+    gen_result_match_return_branch env buf (indent ^ "\t") ok_arm default_arm
+      value_name err_name true ok_ty err_ty;
   if has_nested_ok then Printf.bprintf buf "\n%s} else {\n" indent
   else Printf.bprintf buf "%s} else {\n" indent;
-  gen_match_return_branch env buf (indent ^ "\t") err_arm default_arm
-    (gen_result_pattern_binding buf (indent ^ "\t") value_name err_name false);
+  gen_result_match_return_branch env buf (indent ^ "\t") err_arm default_arm
+    value_name err_name false ok_ty err_ty;
   Printf.bprintf buf "%s}\n" indent
 
 and gen_option_match env buf indent ctx scrutinee arms inner_ty =

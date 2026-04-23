@@ -1158,6 +1158,93 @@ fn main() {
   Alcotest.(check bool)
     "no err decomposition for ascribed Err let" false (contains go "__err_")
 
+let test_result_match_as_return_ok () =
+  let src =
+    {|
+fn wrap(x: i64) -> Result<i64, str> {
+    match Ok(x) {
+        Result::Ok(v) => Ok(v + 1),
+        Result::Err(e) => Err(e),
+    }
+}
+
+fn main() {
+    let r = wrap(41);
+    match r {
+        Result::Ok(v) => println(v),
+        Result::Err(e) => println(e),
+    }
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"42\n" src in
+  Alcotest.(check bool)
+    "match-as-return Ok arm returns tuple" true
+    (contains go "return v + 1, nil");
+  Alcotest.(check bool)
+    "match-as-return Err arm returns tuple" true
+    (contains go "return 0, errors.New(e)")
+
+let test_result_match_as_return_err () =
+  let src =
+    {|
+fn wrap() -> Result<i64, str> {
+    match Err("bad") {
+        Result::Ok(v) => Ok(v),
+        Result::Err(e) => Err("wrapped: " + e),
+    }
+}
+
+fn main() {
+    let r = wrap();
+    match r {
+        Result::Ok(v) => println(v),
+        Result::Err(e) => println(e),
+    }
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"wrapped: bad\n" src in
+  Alcotest.(check bool)
+    "match-as-return Err scrutinee Ok arm returns tuple" true
+    (contains go "return v, nil");
+  Alcotest.(check bool)
+    "match-as-return Err scrutinee Err arm returns tuple" true
+    (contains go "return 0, errors.New(\"wrapped: \" + e)")
+
+let test_result_match_as_return_var () =
+  let src =
+    {|
+fn double(r: Result<i64, str>) -> Result<i64, str> {
+    match r {
+        Result::Ok(v) => Ok(v * 2),
+        Result::Err(e) => Err("var: " + e),
+    }
+}
+
+fn main() {
+    let a = double(Ok(5));
+    let b = double(Err("fail"));
+    match a {
+        Result::Ok(v) => println(v),
+        Result::Err(e) => println(e),
+    }
+    match b {
+        Result::Ok(v) => println(v),
+        Result::Err(e) => println(e),
+    }
+}
+|}
+  in
+  let go = compile_and_check ~expected_output:"10\nvar: fail\n" src in
+  Alcotest.(check bool)
+    "match-as-return var Ok arm returns tuple" true
+    (contains go "return v * 2, nil");
+  Alcotest.(check bool)
+    "match-as-return var Err arm returns tuple" true
+    (contains go "return 0, errors.New(\"var: \" + e)");
+  Alcotest.(check bool) "var match uses .ok check" true (contains go ".ok")
+
 let test_array_literal () =
   let src = {|
 fn main() {
@@ -3539,6 +3626,12 @@ let () =
             test_ascribed_err_constructor_match;
           Alcotest.test_case "ascribed result let and match combined" `Quick
             test_ascribed_result_let_and_match_combined;
+          Alcotest.test_case "result match as return Ok" `Quick
+            test_result_match_as_return_ok;
+          Alcotest.test_case "result match as return Err" `Quick
+            test_result_match_as_return_err;
+          Alcotest.test_case "result match as return var" `Quick
+            test_result_match_as_return_var;
         ] );
       ( "question-mark",
         [
