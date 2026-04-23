@@ -1,0 +1,15 @@
+{
+  "featureId": "misc-http-e2e-fixture-dependency-tracking",
+  "reviewedAt": "2026-04-23T01:06:14Z",
+  "commitId": "58721f9",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Reviewed the prior failed review at `/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/misc-http-followups/scrutiny/reviews/misc-http-e2e-use-tracked-fixture.json`, the feature metadata, both feature handoffs, both transcript skeletons, the `compiler-worker` skill, the shared-state docs, and commits `fd1f709` and `58721f9`. The original failure was that `test/e2e/test_e2e.ml` had been switched to read `.factory/runtime/interop-crud.rg` directly, but `test/e2e/dune` still did not declare that tracked fixture as a dependency, so ordinary `dune runtest` invalidation could miss fixture changes. Commit `58721f9` fixes that exact gap by adding `../../.factory/runtime/interop-crud.rg` to the `deps` stanza in `test/e2e/dune`, matching the runtime fixture path used at `test/e2e/test_e2e.ml:247`. This closes the invalidation hole identified in the earlier review while leaving the HTTP e2e behavior unchanged.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/misc-http-followups/scrutiny/reviews/misc-http-e2e-use-tracked-fixture.json",
+  "summary": "Pass. The rerun fix adequately addresses the prior failure by declaring `.factory/runtime/interop-crud.rg` as an explicit dependency of the `test/e2e` target, so dune can now invalidate and rerun the HTTP regression when the tracked fixture changes. No blocking issues found."
+}

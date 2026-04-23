@@ -1,7 +1,7 @@
 {
   "milestone": "misc-http-followups",
-  "round": 2,
-  "status": "fail",
+  "round": 3,
+  "status": "pass",
   "validatorsRun": {
     "test": {
       "passed": true,
@@ -20,39 +20,14 @@
     }
   },
   "reviewsSummary": {
-    "total": 2,
-    "passed": 0,
-    "failed": 2,
-    "failedFeatures": [
-      "misc-crud-validation-fixture-drift-coverage",
-      "misc-http-e2e-use-tracked-fixture"
-    ]
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "failedFeatures": []
   },
-  "blockingIssues": [
-    {
-      "featureId": "misc-crud-validation-fixture-drift-coverage",
-      "severity": "blocking",
-      "description": "This rerun fix only repoints VAL-CROSS-003 determinism coverage; it does not repair the original scrutiny failure because `test/e2e/test_e2e.ml` still compiles an inline duplicate CRUD program instead of the tracked `.factory/runtime/interop-crud.rg` fixture in the reviewed commit."
-    },
-    {
-      "featureId": "misc-http-e2e-use-tracked-fixture",
-      "severity": "blocking",
-      "description": "The e2e regression test now reads `.factory/runtime/interop-crud.rg`, but `test/e2e/dune` still does not declare that tracked fixture as a dependency, so ordinary `dune runtest -j 16` invalidation can skip re-running the regression when the fixture changes."
-    }
-  ],
-  "appliedUpdates": [
-    {
-      "target": "library",
-      "description": "Aligned `.factory/library/user-testing.md` so live HTTP validation and automation now both point at the tracked `.factory/runtime/interop-crud.rg` fixture instead of conflicting with `.factory/library/environment.md`.",
-      "sourceFeature": "misc-http-e2e-use-tracked-fixture"
-    }
-  ],
+  "blockingIssues": [],
+  "appliedUpdates": [],
   "suggestedGuidanceUpdates": [],
-  "rejectedObservations": [
-    {
-      "observation": "Document that dune ignores hidden top-level directories like `.factory` unless the repo opts them in with `(dirs :standard .factory)` and test stanzas add explicit fixture `deps`.",
-      "reason": "already-documented in `.factory/library/environment.md` during round 1"
-    }
-  ],
-  "previousRound": ".factory/validation/misc-http-followups/scrutiny/synthesis.round1.json"
+  "rejectedObservations": [],
+  "previousRound": ".factory/validation/misc-http-followups/scrutiny/synthesis.round2.json"
 }
