@@ -3138,6 +3138,35 @@ fn main() {
 }
 |}
 
+(* Typed non-void lambda with mixed return/value where value branch
+   consumes a non-Copy binding (positive typecheck). *)
+let typed_nonvoid_lambda_if_mixed_return_value_move_consume_positive =
+  {|
+trait Drop {
+    fn drop(&mut self);
+}
+struct Wrapper {
+    value: i32,
+}
+impl Drop for Wrapper {
+    fn drop(&mut self) {}
+}
+fn take(w: Wrapper) -> i32 {
+    w.value
+}
+fn main() {
+    let f = |a: i32| -> i32 {
+        let w = Wrapper { value: 42 };
+        if a > 0 {
+            return a;
+        } else {
+            take(w)
+        }
+    };
+    println(f(5));
+}
+|}
+
 (* VAL-CROSS-002: Mixed named handler + anonymous handler *)
 let callback_mixed_handlers_positive =
   {|
@@ -3207,6 +3236,9 @@ let callback_positive_tests =
     ( "anonymous handler reuse (VAL-CALLBACK-007)",
       `Quick,
       pass callback_anonymous_handler_reuse );
+    ( "typed non-void lambda mixed return/value move consume",
+      `Quick,
+      pass typed_nonvoid_lambda_if_mixed_return_value_move_consume_positive );
   ]
 
 let callback_negative_tests =

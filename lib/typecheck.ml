@@ -130,6 +130,14 @@ let empty_env =
 
 let push_scope env = { env with values = SMap.empty :: env.values }
 
+(* Snapshot and restore the moved set so semantic-value checks do not
+   replay move side effects. *)
+let with_moved_snapshot env f =
+  let saved = !(env.moved) in
+  let result = f () in
+  env.moved := saved;
+  result
+
 let add_value name ty ~is_mut env =
   match env.values with
   | scope :: rest ->
@@ -463,10 +471,14 @@ and expr_guarantees_value env = function
       let else_guarantees = block_guarantees_value env else_b in
       if then_guarantees && else_guarantees then true
       else if then_guarantees then
-        let else_ty = check_block env else_b in
+        let _, else_ty =
+          with_moved_snapshot env (fun () -> check_block env else_b)
+        in
         else_ty <> TVoid
       else if else_guarantees then
-        let then_ty = check_block env then_b in
+        let _, then_ty =
+          with_moved_snapshot env (fun () -> check_block env then_b)
+        in
         then_ty <> TVoid
       else false
   | ExprIf (_, _, None) -> false
@@ -525,7 +537,9 @@ and check_expr env (e : expr) : ty =
       check_struct_variant_literal env type_name variant_name fields
   | ExprIf (cond, then_blk, else_blk) -> check_if env cond then_blk else_blk
   | ExprMatch (scrutinee, arms) -> check_match env scrutinee arms
-  | ExprBlock blk -> check_block env blk
+  | ExprBlock blk ->
+      let _, ty = check_block env blk in
+      ty
   | ExprReturn e_opt -> check_return env e_opt
   | ExprBreak -> TVoid
   | ExprContinue -> TVoid
@@ -598,16 +612,18 @@ and check_expr env (e : expr) : ty =
             add_value p.p_name.node ty ~is_mut:p.p_mut e)
           lambda_env params
       in
-      let body_ty = check_block lambda_env body in
+      let saved_moved = !(lambda_env.moved) in
+      let body_env, body_ty = check_block lambda_env body in
+      lambda_env.moved := saved_moved;
       if ret_type <> TVoid then begin
         let has_guaranteed_value =
           body_ty <> TVoid
           ||
           match body.final_expr with
-          | Some e -> expr_guarantees_value lambda_env e
+          | Some e -> expr_guarantees_value body_env e
           | None -> (
               match List.rev body.stmts with
-              | StmtExpr e :: _ -> expr_guarantees_value lambda_env e
+              | StmtExpr e :: _ -> expr_guarantees_value body_env e
               | _ -> false)
         in
         if not has_guaranteed_value then
@@ -1479,10 +1495,10 @@ and check_struct_variant_literal env type_name variant_name fields =
 and check_if env cond then_blk else_blk =
   let ct = check_expr env cond in
   expect_type ~env ~span:(expr_span cond) ~expected:TBool ~actual:ct;
-  let then_ty = check_block env then_blk in
+  let _, then_ty = check_block env then_blk in
   match else_blk with
   | Some else_b ->
-      let else_ty = check_block env else_b in
+      let _, else_ty = check_block env else_b in
       (* If both branches produce a value, types must match *)
       if then_ty <> TVoid && else_ty <> TVoid then
         expect_type ~env ~span:dummy_span ~expected:then_ty ~actual:else_ty;
@@ -1675,7 +1691,9 @@ and check_block env blk =
         go rest env t
   in
   let inner, last_ty = go blk.stmts inner TVoid in
-  match blk.final_expr with Some e -> check_expr inner e | None -> last_ty
+  match blk.final_expr with
+  | Some e -> (inner, check_expr inner e)
+  | None -> (inner, last_ty)
 
 and check_stmt env (s : stmt) : env * ty =
   match s with
@@ -2233,7 +2251,7 @@ let check_fn_decl env (fd : fn_decl) =
   in
   let fn_env = { fn_env with ret_ty = Some (maybe_subst_self fn_env ret_ty) } in
   (* Check body *)
-  let body_ty = check_block fn_env fd.fn_body in
+  let _, body_ty = check_block fn_env fd.fn_body in
   (* Check that body type matches return type for functions with a return type *)
   let resolved_ret = maybe_subst_self fn_env ret_ty in
   if resolved_ret <> TVoid && body_ty <> TVoid then

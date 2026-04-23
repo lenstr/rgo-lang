@@ -3169,6 +3169,44 @@ fn main() {
   let go = compile_and_check ~expected_output:"5\n0\n" src in
   Alcotest.(check bool) "has return in else arm" true (contains go "return 0")
 
+(* Positive: typed non-void lambda with mixed return/value if branches
+   where the value branch consumes a non-Copy binding (regression for
+   move-replay in expr_guarantees_value). *)
+let test_typed_nonvoid_lambda_if_mixed_return_value_move_consume () =
+  let src =
+    {|
+trait Drop {
+    fn drop(&mut self);
+}
+
+struct Wrapper {
+    value: i32,
+}
+
+impl Drop for Wrapper {
+    fn drop(&mut self) {}
+}
+
+fn take(w: Wrapper) -> i32 {
+    w.value
+}
+
+fn main() {
+    let f = |a: i32| -> i32 {
+        let w = Wrapper { value: 42 };
+        if a > 0 {
+            return a;
+        } else {
+            take(w)
+        }
+    };
+    println(f(5));
+    println(f(-1));
+}
+|}
+  in
+  compile_and_check ~expected_output:"5\n42\n" src |> ignore
+
 (* Negative: typed non-void lambda with mixed return/void if branches *)
 let test_typed_nonvoid_lambda_if_mixed_return_void_rejected () =
   compile_expect_error ~expect:"must produce a value"
@@ -3836,6 +3874,9 @@ let () =
             `Quick test_typed_nonvoid_lambda_if_mixed_return_value;
           Alcotest.test_case "typed non-void lambda if mixed value/return"
             `Quick test_typed_nonvoid_lambda_if_mixed_value_return;
+          Alcotest.test_case
+            "typed non-void lambda if mixed return/value move consume" `Quick
+            test_typed_nonvoid_lambda_if_mixed_return_value_move_consume;
           Alcotest.test_case
             "typed non-void lambda if mixed return/void rejected" `Quick
             test_typed_nonvoid_lambda_if_mixed_return_void_rejected;
