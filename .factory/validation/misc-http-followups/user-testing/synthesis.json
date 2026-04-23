@@ -1,0 +1,29 @@
+{
+  "milestone": "misc-http-followups",
+  "round": 1,
+  "status": "pass",
+  "assertionsSummary": {
+    "total": 0,
+    "passed": 0,
+    "failed": 0,
+    "blocked": 0
+  },
+  "passedAssertions": [],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "appliedUpdates": [],
+  "previousRound": null,
+  "selectionSummary": {
+    "mode": "first_run",
+    "evaluatedAt": "2026-04-23T04:09:47+03:00",
+    "completedImplementationFeatures": [
+      "misc-http-crud-runtime-regression-coverage",
+      "misc-crud-validation-fixture-drift-coverage",
+      "misc-http-e2e-use-tracked-fixture",
+      "misc-http-e2e-fixture-dependency-tracking"
+    ],
+    "assertionsFromFulfills": [],
+    "pendingAssertions": [],
+    "note": "No completed implementation features in this milestone map to validation-contract assertions via `fulfills`, so there were no pending user-facing assertions to retest, no services to start, and no flow-validator subagents to spawn."
+  }
+}
