@@ -1,7 +1,7 @@
 {
   "milestone": "misc-callback-followups",
-  "round": 4,
-  "status": "fail",
+  "round": 5,
+  "status": "pass",
   "validatorsRun": {
     "test": {
       "passed": true,
@@ -21,29 +21,26 @@
   },
   "reviewsSummary": {
     "total": 1,
-    "passed": 0,
-    "failed": 1,
-    "failedFeatures": [
-      "misc-typed-lambda-mixed-return-value-if"
-    ]
+    "passed": 1,
+    "failed": 0,
+    "failedFeatures": []
   },
-  "blockingIssues": [
-    {
-      "featureId": "misc-typed-lambda-mixed-return-value-if",
-      "severity": "blocking",
-      "description": "The mixed return/value typed-lambda fix still re-runs semantic-value analysis through `check_block`, which replays move side effects and wrongly rejects semantically value-producing tails when the value branch consumes a non-Copy binding."
-    }
-  ],
+  "blockingIssues": [],
   "nonBlockingIssues": [],
   "appliedUpdates": [],
   "suggestedGuidanceUpdates": [
     {
       "target": "skill:.factory/skills/compiler-worker/SKILL.md",
-      "suggestion": "Clarify whether the \"Write tests first\" step is mandatory or aspirational, or require workers to mark a deviation when implementation edits precede tests.",
-      "evidence": "The reviewer for fix feature `misc-typed-lambda-mixed-return-value-if` observed that worker session `e4aeb5c5-b185-484b-a656-3ac0962b2d49` edited `lib/typecheck.ml` before `test/test_codegen.ml` and `test/test_typecheck.ml`, while the handoff still marked `skillFeedback.followedProcedure: true`.",
+      "suggestion": "Clarify whether compiler-worker startup reads for mission `AGENTS.md`, `.factory/services.yaml`, and relevant `.factory/library/*.md` may be satisfied by another required startup skill, or require transcript-visible reads / deviation reporting when they are omitted before code edits.",
+      "evidence": "The reviewer for fix feature `misc-typed-lambda-value-check-without-rechecking` observed that worker session `d52a477e-30b0-4fb5-b0f3-6349c9bf6418` edited `lib/typecheck.ml` after reading mission metadata but without transcript-visible reads of mission `AGENTS.md`, repo `.factory/services.yaml`, or `.factory/library/*.md`, even though `.factory/skills/compiler-worker/SKILL.md` currently requires those reads before code changes.",
       "isSystemic": false
     }
   ],
-  "rejectedObservations": [],
-  "previousRound": ".factory/validation/misc-callback-followups/scrutiny/synthesis.round3.json"
+  "rejectedObservations": [
+    {
+      "observation": "The reviewer repeated the compiler-worker tests-first sequencing concern for `misc-typed-lambda-value-check-without-rechecking`.",
+      "reason": "duplicate of the existing round-4 suggested guidance update about tests-first sequencing already recorded in synthesis.json before this rerun."
+    }
+  ],
+  "previousRound": ".factory/validation/misc-callback-followups/scrutiny/synthesis.round4.json"
 }

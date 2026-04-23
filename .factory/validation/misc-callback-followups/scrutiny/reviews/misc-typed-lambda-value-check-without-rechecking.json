@@ -1,0 +1,26 @@
+{
+  "featureId": "misc-typed-lambda-value-check-without-rechecking",
+  "reviewedAt": "2026-04-23T03:15:26+03:00",
+  "commitId": "2e94d7983258e5d20125f1bca4a60e31786f9a5f",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Reviewed the prior failed review at `/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/misc-callback-followups/scrutiny/reviews/misc-typed-lambda-mixed-return-value-if.json`, both relevant implementation diffs (`b13f9385291c75ec543e5b7198fa31f3aa0d07e2` and `2e94d7983258e5d20125f1bca4a60e31786f9a5f`), the fix handoff and transcript skeleton for worker session `d52a477e-30b0-4fb5-b0f3-6349c9bf6418`, and the current `lib/typecheck.ml` plus regression coverage. The fix adequately addresses the prior blocking issue by carrying the typed-lambda body's scoped environment into the semantic-value probe (`lib/typecheck.ml:616-624`), restoring move state before that probe (`lib/typecheck.ml:615-617`), and snapshotting move tracking around the fallback `check_block` rechecks used for mixed return/value `if` analysis (`lib/typecheck.ml:473-481`). The new move-consuming regression coverage in `test/test_codegen.ml:3175-3201` and `test/test_typecheck.ml:3143-3166` exercises the previously failing non-Copy branch shape and matches the feature requirements. No blocking or non-blocking code issues were found in scope.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The compiler-worker skill still requires tests-first sequencing, but this fix session edited `lib/typecheck.ml` before adding the new regression tests while the handoff still reported `skillFeedback.followedProcedure: true`. Either the skill should clarify that tests-first is guidance rather than a requirement, or reviews should treat this as a deviation.",
+      "evidence": ".factory/skills/compiler-worker/SKILL.md:22 and :28 require tests first and require deviations to be recorded. The transcript skeleton entry at `/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/worker-transcripts.jsonl:81` shows `Edit` operations on `lib/typecheck.ml` before the later `Edit` operations on `test/test_codegen.ml` and `test/test_typecheck.ml`, while the handoff JSON marks `skillFeedback.followedProcedure` true with no deviations."
+    },
+    {
+      "area": "skills",
+      "observation": "The compiler-worker procedure says to read mission `AGENTS.md`, `.factory/services.yaml`, and relevant `.factory/library/*.md` files before changing code, but this fix session's transcript skeleton does not show those reads before the first code edits. If another startup skill is meant to satisfy that requirement implicitly, the compiler-worker skill should say so explicitly.",
+      "evidence": ".factory/skills/compiler-worker/SKILL.md:20 requires those reads before changes. The transcript skeleton at `/home/lenstr/.factory/missions/0fca519c-8629-4615-81ce-b9d60fb3b0e7/worker-transcripts.jsonl:81` shows reads for `mission.md`, `validation-contract.md`, `validation-state.json`, and `features.json`, followed by code search and edits, but no corresponding `Read` entries for mission `AGENTS.md`, `.factory/services.yaml`, or `.factory/library/*.md`."
+    }
+  ],
+  "addressesFailureFrom": "/home/lenstr/workspace/personal/hack/rgo-lang/.factory/validation/misc-callback-followups/scrutiny/reviews/misc-typed-lambda-mixed-return-value-if.json",
+  "summary": "Pass. The new fix makes the typed-lambda semantic-value probe side-effect-free, preserves access to body-local bindings during that probe, and adds regression coverage for the exact move-consuming mixed return/value branch shape that the prior review said was still broken."
+}

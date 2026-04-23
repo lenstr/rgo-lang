@@ -1,0 +1,49 @@
+{
+  "milestone": "misc-callback-followups",
+  "round": 4,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "nix develop -c dune runtest -j 16",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "nix develop -c dune build -j 16",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "nix develop -c dune build @fmt",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "failedFeatures": [
+      "misc-typed-lambda-mixed-return-value-if"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "misc-typed-lambda-mixed-return-value-if",
+      "severity": "blocking",
+      "description": "The mixed return/value typed-lambda fix still re-runs semantic-value analysis through `check_block`, which replays move side effects and wrongly rejects semantically value-producing tails when the value branch consumes a non-Copy binding."
+    }
+  ],
+  "nonBlockingIssues": [],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "skill:.factory/skills/compiler-worker/SKILL.md",
+      "suggestion": "Clarify whether the \"Write tests first\" step is mandatory or aspirational, or require workers to mark a deviation when implementation edits precede tests.",
+      "evidence": "The reviewer for fix feature `misc-typed-lambda-mixed-return-value-if` observed that worker session `e4aeb5c5-b185-484b-a656-3ac0962b2d49` edited `lib/typecheck.ml` before `test/test_codegen.ml` and `test/test_typecheck.ml`, while the handoff still marked `skillFeedback.followedProcedure: true`.",
+      "isSystemic": false
+    }
+  ],
+  "rejectedObservations": [],
+  "previousRound": ".factory/validation/misc-callback-followups/scrutiny/synthesis.round3.json"
+}
