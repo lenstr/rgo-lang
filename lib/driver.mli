@@ -17,6 +17,12 @@ type compile_error =
   | Exhaust_error of { msg : string; line : int; col : int }
   | Codegen_error of string
 
+val emit_tokens_string :
+  ?filename:string -> string -> (string, compile_error) result
+(** [emit_tokens_string ?filename source] lexes rgo source and returns a
+    human-readable representation of the token stream. Useful for debugging the
+    lexer. Returns [Ok tokens_string] on success, [Error e] on failure. *)
+
 val emit_ast_string :
   ?filename:string -> string -> (string, compile_error) result
 (** [emit_ast_string ?filename source] parses rgo source and returns a

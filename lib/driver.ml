@@ -52,6 +52,16 @@ type compile_error =
   | Exhaust_error of { msg : string; line : int; col : int }
   | Codegen_error of string
 
+let emit_tokens_string ?(filename = "<input>") (source : string) :
+    (string, compile_error) result =
+  let _ = filename in
+  try
+    let tokens = Lexer.tokenize source in
+    let lines = List.map Token.show_located tokens in
+    Ok (String.concat "\n" lines)
+  with Lexer.Lexer_error { msg; pos } ->
+    Error (Lex_error { msg; line = pos.line; col = pos.col })
+
 let emit_ast_string ?(filename = "<input>") (source : string) :
     (string, compile_error) result =
   try

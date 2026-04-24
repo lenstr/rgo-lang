@@ -1,10 +1,13 @@
 let usage () =
   Printf.eprintf "Usage: rgoc <input.rg> -o <output.go>\n";
   Printf.eprintf "       rgoc --version\n";
+  Printf.eprintf "       rgoc <input.rg> --emit-tokens\n";
   Printf.eprintf "       rgoc <input.rg> --emit-ast\n";
   Printf.eprintf "\nOptions:\n";
   Printf.eprintf "  -o <file>       Write Go output to <file>\n";
   Printf.eprintf "  --no-gofmt      Skip gofmt formatting of output\n";
+  Printf.eprintf
+    "  --emit-tokens   Print token stream to stdout instead of compiling\n";
   Printf.eprintf
     "  --emit-ast      Print parsed AST to stdout instead of compiling\n";
   Printf.eprintf "  --version       Print version and exit\n";
@@ -59,6 +62,23 @@ let compile input_path output_path run_gofmt_flag =
       if Sys.file_exists output_path then Sys.remove output_path;
       error "%s" msg
 
+let emit_tokens input_path =
+  if not (Sys.file_exists input_path) then
+    error "input file not found: %s" input_path;
+  let source =
+    let ic = open_in input_path in
+    Fun.protect
+      ~finally:(fun () -> close_in ic)
+      (fun () ->
+        let n = in_channel_length ic in
+        really_input_string ic n)
+  in
+  match Rgo.Driver.emit_tokens_string ~filename:input_path source with
+  | Ok tokens_str -> print_endline tokens_str
+  | Error (Lex_error { msg; line; col }) ->
+      error "%s:%d:%d: %s" input_path line col msg
+  | Error _ -> error "unexpected error during token emission"
+
 let emit_ast input_path =
   if not (Sys.file_exists input_path) then
     error "input file not found: %s" input_path;
@@ -82,30 +102,40 @@ let () =
   let argv = Sys.argv in
   let argc = Array.length argv in
   (* Parse flags and positional arguments *)
-  let rec loop i input output gofmt emit_ast_flag =
-    if i >= argc then (input, output, gofmt, emit_ast_flag)
+  let rec loop i input output gofmt emit_tokens_flag emit_ast_flag =
+    if i >= argc then (input, output, gofmt, emit_tokens_flag, emit_ast_flag)
     else
       let arg = argv.(i) in
       if arg = "--version" then (
         print_endline Rgo.Version.version;
         exit 0)
       else if arg = "--no-gofmt" then
-        loop (i + 1) input output false emit_ast_flag
-      else if arg = "--emit-ast" then loop (i + 1) input output gofmt true
+        loop (i + 1) input output false emit_tokens_flag emit_ast_flag
+      else if arg = "--emit-tokens" then
+        loop (i + 1) input output gofmt true emit_ast_flag
+      else if arg = "--emit-ast" then
+        loop (i + 1) input output gofmt emit_tokens_flag true
       else if arg = "-o" then
         if i + 1 < argc then
-          loop (i + 2) input (Some argv.(i + 1)) gofmt emit_ast_flag
+          loop (i + 2) input
+            (Some argv.(i + 1))
+            gofmt emit_tokens_flag emit_ast_flag
         else error "-o requires an argument"
       else if String.length arg > 0 && arg.[0] = '-' then
         error "unknown flag: %s" arg
       else
         match input with
-        | None -> loop (i + 1) (Some arg) output gofmt emit_ast_flag
+        | None ->
+            loop (i + 1) (Some arg) output gofmt emit_tokens_flag emit_ast_flag
         | Some _ -> error "multiple input files specified"
   in
-  let input, output, gofmt, emit_ast_flag = loop 1 None None true false in
-  match (input, output, emit_ast_flag) with
-  | None, _, _ -> usage ()
-  | Some inp, _, true -> emit_ast inp
-  | Some inp, Some out, false -> compile inp out gofmt
-  | Some _, None, false -> error "no output file specified; use -o <file>"
+  let input, output, gofmt, emit_tokens_flag, emit_ast_flag =
+    loop 1 None None true false false
+  in
+  match (input, output, emit_tokens_flag, emit_ast_flag) with
+  | None, _, _, _ -> usage ()
+  | Some inp, _, true, _ -> emit_tokens inp
+  | Some inp, _, _, true -> emit_ast inp
+  | Some inp, Some out, false, false -> compile inp out gofmt
+  | Some _, None, false, false ->
+      error "no output file specified; use -o <file>"
