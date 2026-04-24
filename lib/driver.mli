@@ -17,6 +17,12 @@ type compile_error =
   | Exhaust_error of { msg : string; line : int; col : int }
   | Codegen_error of string
 
+val emit_ast_string :
+  ?filename:string -> string -> (string, compile_error) result
+(** [emit_ast_string ?filename source] parses rgo source and returns a
+    human-readable representation of the AST. Useful for debugging the parser.
+    Returns [Ok ast_string] on success, [Error e] on failure. *)
+
 val compile_string :
   ?filename:string -> string -> (string, compile_error) result
 (** [compile_string ?filename source] compiles rgo source to Go source. Returns

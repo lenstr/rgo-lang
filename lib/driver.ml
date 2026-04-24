@@ -52,6 +52,18 @@ type compile_error =
   | Exhaust_error of { msg : string; line : int; col : int }
   | Codegen_error of string
 
+let emit_ast_string ?(filename = "<input>") (source : string) :
+    (string, compile_error) result =
+  try
+    let ast = Parse_driver.parse_string ~filename source in
+    Ok (Ast.show_program ast)
+  with
+  | Lexer.Lexer_error { msg; pos } ->
+      Error (Lex_error { msg; line = pos.line; col = pos.col })
+  | Parse_driver.Parse_error { msg; line; col } ->
+      Error (Parse_error { msg; line; col })
+  | Failure msg -> Error (Codegen_error msg)
+
 let compile_string ?(filename = "<input>") (source : string) :
     (string, compile_error) result =
   try
