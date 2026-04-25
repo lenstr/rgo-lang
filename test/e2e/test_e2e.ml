@@ -49,6 +49,77 @@ let find_rgoc () =
   if Sys.file_exists path then path
   else Alcotest.fail ("cannot find rgoc binary at: " ^ path)
 
+let remove_file_if_exists path = try Sys.remove path with Sys_error _ -> ()
+
+let make_temp_dir prefix =
+  let base = Filename.get_temp_dir_name () in
+  let rec loop attempts =
+    if attempts = 0 then Alcotest.fail ("cannot create temp dir: " ^ prefix);
+    let dir =
+      Filename.concat base
+        (Printf.sprintf "%s%d_%08x" prefix (Unix.getpid ()) (Random.bits ()))
+    in
+    try
+      Unix.mkdir dir 0o700;
+      dir
+    with
+    | Unix.Unix_error (Unix.EEXIST, _, _) -> loop (attempts - 1)
+    | Unix.Unix_error (err, _, _) ->
+        Alcotest.fail
+          (Printf.sprintf "cannot create temp dir %s: %s" dir
+             (Unix.error_message err))
+  in
+  loop 100
+
+let make_fake_gofmt () =
+  let dir = make_temp_dir "rgo_fake_path_" in
+  let gofmt = dir ^ "/gofmt" in
+  write_file gofmt
+    {|
+#!/bin/sh
+case "$1" in
+  -d)
+    cat <<'EOF'
+diff --git a/generated.go b/generated.go
+--- a/generated.go
++++ b/generated.go
+@@ -1 +1 @@
+-package main
++package main
+EOF
+    exit 0
+    ;;
+  -w)
+    exit 0
+    ;;
+esac
+echo "unexpected gofmt args: $@" >&2
+exit 2
+|};
+  Unix.chmod gofmt 0o700;
+  dir
+
+let remove_fake_gofmt dir =
+  remove_file_if_exists (dir ^ "/gofmt");
+  try Unix.rmdir dir with Unix.Unix_error _ -> ()
+
+let with_cli_temp_files f =
+  let src = Filename.temp_file "rgo_cli_" ".rg" in
+  let out = Filename.temp_file "rgo_cli_" ".go" in
+  Fun.protect
+    ~finally:(fun () ->
+      remove_file_if_exists src;
+      remove_file_if_exists out)
+    (fun () ->
+      write_file src hello_source;
+      f src out)
+
+let with_fake_gofmt f =
+  let fake_path = make_fake_gofmt () in
+  Fun.protect
+    ~finally:(fun () -> remove_fake_gofmt fake_path)
+    (fun () -> f fake_path)
+
 (* ---- Tests ---- *)
 
 let test_hello_world_compiles () =
@@ -88,6 +159,53 @@ let test_hello_world_go_run () =
       Alcotest.(check int) "go run exit 0" 0 code;
       Alcotest.(check string) "prints Hello, world!" "Hello, world!\n" stdout;
       Sys.remove out
+
+let test_cli_output_matches_driver_without_reformatting () =
+  let rgoc = find_rgoc () in
+  with_cli_temp_files (fun src out ->
+      match Rgo.Driver.compile_string ~filename:src hello_source with
+      | Error _ -> Alcotest.fail "compilation should succeed"
+      | Ok expected ->
+          let code, _, stderr =
+            run_cmd
+              (Printf.sprintf "%s %s -o %s" (Filename.quote rgoc)
+                 (Filename.quote src) (Filename.quote out))
+          in
+          Alcotest.(check int) "rgoc exit 0" 0 code;
+          Alcotest.(check string) "stderr empty" "" stderr;
+          Alcotest.(check string)
+            "CLI does not rewrite codegen output" expected (read_file out))
+
+let test_cli_gofmt_diff_is_reported () =
+  let rgoc = find_rgoc () in
+  with_fake_gofmt (fun fake_path ->
+      with_cli_temp_files (fun src out ->
+          let code, _, stderr =
+            run_cmd
+              (Printf.sprintf "PATH=%s:$PATH %s %s -o %s"
+                 (Filename.quote fake_path) (Filename.quote rgoc)
+                 (Filename.quote src) (Filename.quote out))
+          in
+          Alcotest.(check bool) "exit code non-zero" true (code <> 0);
+          Alcotest.(check bool)
+            "explains codegen bug" true
+            (contains stderr "generated Go is not gofmt-clean");
+          Alcotest.(check bool)
+            "prints gofmt diff" true
+            (contains stderr "gofmt diff:" && contains stderr "+package main")))
+
+let test_cli_fix_format_uses_gofmt_write () =
+  let rgoc = find_rgoc () in
+  with_fake_gofmt (fun fake_path ->
+      with_cli_temp_files (fun src out ->
+          let code, _, stderr =
+            run_cmd
+              (Printf.sprintf "PATH=%s:$PATH %s %s -o %s --fix-format"
+                 (Filename.quote fake_path) (Filename.quote rgoc)
+                 (Filename.quote src) (Filename.quote out))
+          in
+          Alcotest.(check int) "rgoc exit 0" 0 code;
+          Alcotest.(check string) "stderr empty" "" stderr))
 
 let test_no_args_fails () =
   let rgoc = find_rgoc () in
@@ -389,6 +507,12 @@ let () =
           Alcotest.test_case "gofmt-clean" `Quick test_hello_world_gofmt_clean;
           Alcotest.test_case "go run prints Hello, world!" `Quick
             test_hello_world_go_run;
+          Alcotest.test_case "CLI output matches driver without reformatting"
+            `Quick test_cli_output_matches_driver_without_reformatting;
+          Alcotest.test_case "CLI reports gofmt diff" `Quick
+            test_cli_gofmt_diff_is_reported;
+          Alcotest.test_case "CLI --fix-format uses gofmt -w" `Quick
+            test_cli_fix_format_uses_gofmt_write;
         ] );
       ( "cli-negative",
         [

@@ -55,7 +55,14 @@ nix develop -c dune exec rgoc -- examples/hello.rg -o hello.go
 go run hello.go
 ```
 
-The compiler reads a single `.rg` source file, runs the full pipeline (lex → parse → resolve → typecheck → exhaustiveness → codegen), writes Go source, and applies `gofmt`.
+The compiler reads a single `.rg` source file, runs the full pipeline (lex → parse → resolve → typecheck → exhaustiveness → codegen), writes Go source, and verifies that the generated file is `gofmt`-clean.
+If `gofmt -d` reports a diff, `rgoc` exits non-zero and prints the diff as a codegen bug.
+
+For one-off local use, you can ask the CLI to rewrite the output with `gofmt -w`:
+
+```bash
+nix develop -c dune exec rgoc -- examples/hello.rg -o hello.go --fix-format
+```
 
 ## Example
 
@@ -196,7 +203,7 @@ The compiler processes `.rg` programs through these phases in order:
 3. **Name resolution** — resolve identifiers, detect undefined/duplicate symbols
 4. **Type checking** — infer and check types, validate trait bounds
 5. **Exhaustiveness** — reject non-exhaustive `match` expressions
-6. **Code generation** — emit idiomatic Go, apply `gofmt`
+6. **Code generation** — emit idiomatic, `gofmt`-clean Go
 
 If any phase fails, the compiler reports the error with file, line, and column information and exits non-zero.
 
@@ -215,7 +222,7 @@ The test suite also exercises the downstream generated-Go acceptance flow.
 For every codegen and e2e fixture the tests automatically run:
 
 ```bash
-gofmt -d output.go   # verify formatter stability
+gofmt -d output.go   # verify generated Go is already gofmt-clean
 go build output.go   # verify the generated code compiles
 go vet output.go     # verify idiomatic Go analysis passes
 go run output.go     # verify runtime behavior matches expected output

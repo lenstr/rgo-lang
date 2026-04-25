@@ -56,12 +56,13 @@ let compile_and_check ?expected_output source =
   | Ok go_src ->
       let out = Filename.temp_file "rgo_cg_" ".go" in
       write_file out go_src;
-      let code, diff, _ =
+      let code, diff, stderr =
         run_cmd (Printf.sprintf "gofmt -d %s" (Filename.quote out))
       in
       if code <> 0 then
         Alcotest.fail
-          (Printf.sprintf "gofmt exit %d\nGenerated Go:\n%s" code go_src);
+          (Printf.sprintf "gofmt exit %d\nstderr:\n%s\nGenerated Go:\n%s" code
+             stderr go_src);
       if diff <> "" then
         Alcotest.fail ("gofmt diff:\n" ^ diff ^ "\nGenerated Go:\n" ^ go_src);
       let code, _, stderr =
